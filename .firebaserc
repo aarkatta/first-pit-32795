@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "demo-first-pit-dev",
+    "development": "demo-first-pit-dev",
+    "test": "demo-first-pit-test"
+  }
+}
