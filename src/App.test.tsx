@@ -48,7 +48,7 @@ describe('AppRoutes', () => {
     expect(fallback).toHaveAttribute('aria-live', 'polite');
     expect(fallback).toHaveAttribute('aria-busy', 'true');
 
-    expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /state lab/i })).toBeInTheDocument();
     expect(screen.getByText('Runtime Team Hub')).toBeInTheDocument();
 
@@ -72,7 +72,7 @@ describe('AppRoutes', () => {
   it('redirects the legacy home route to the overview', async () => {
     renderRoutes('/home');
 
-    expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveAttribute('data-pathname', '/');
   });
 

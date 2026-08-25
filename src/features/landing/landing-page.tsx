@@ -592,7 +592,28 @@ export function LandingPage() {
           <span className="pointer-events-none absolute -left-16 -top-16 size-64 rounded-full border border-acid-ink/15" aria-hidden="true" />
           <span className="pointer-events-none absolute -bottom-24 -right-10 size-80 rounded-full border border-acid-ink/15" aria-hidden="true" />
           <Users className="size-10" />
-          <h2 className="m-0 max-w-[16ch] font-display text-[clamp(32px,4.4vw,60px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance">Bring your team in.</h2>
+          <h2 className="m-0 max-w-[16ch] font-display text-[clamp(32px,4.4vw,60px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance">
+            Bring your team in the{' '}
+            <strong className="relative inline-block font-bold">
+              pit
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 120 22"
+                preserveAspectRatio="none"
+                className="absolute -bottom-[0.18em] left-[-4%] h-[0.32em] w-[108%] text-acid-ink"
+              >
+                <path
+                  d="M3 14 C 14 6, 24 20, 36 12 S 58 6, 70 13 S 92 20, 104 10 S 114 8, 117 11"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="[stroke-dasharray:200] [stroke-dashoffset:200] motion-safe:animate-[squiggle_0.9s_var(--ease-out-expo)_0.4s_forwards] motion-reduce:[stroke-dashoffset:0]"
+                />
+              </svg>
+            </strong>
+          </h2>
           <p className="m-0 max-w-[36rem] text-lg leading-relaxed text-acid-ink/80">It is free for FLL teams during the pilot. Setting up takes about a minute, and then the whole team is in one place.</p>
           <div className="flex flex-wrap justify-center gap-3">
             <Button asChild variant="ink" size="xl">
