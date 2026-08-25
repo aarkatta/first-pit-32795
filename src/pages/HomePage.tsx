@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
+import { LandingPage } from '@/features/landing/landing-page';
 import { useAuth } from '@/lib/auth-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -88,82 +89,7 @@ export function HomePage() {
 
   if (authStatus !== 'authenticated' || !user) {
     return (
-      <main className="landing">
-        <header className="landing-nav">
-          <Link className="brand" to="/"><span className="brand-mark">FP</span><span>FIRST PIT</span></Link>
-          <nav className="landing-nav__links" aria-label="Product">
-            <a href="#features">Features</a>
-            <a href="#safety">Safety</a>
-            <Link to="/states">State lab</Link>
-          </nav>
-          <div className="landing-nav__actions">
-            <Link className="landing-link" to="/auth">Log in</Link>
-            <Link className="pill pill--outline" to="/auth">Join a team</Link>
-            <Link className="pill pill--solid" to="/auth">Get started <span aria-hidden="true">→</span></Link>
-          </div>
-        </header>
-
-        <section className="landing-hero">
-          <div className="landing-copy">
-            <h1>Students and coaches working as one team</h1>
-            <p className="landing-lead">The private workspace where FLL teams plan practice, track the innovation project, talk safely, and log every match score together.</p>
-            <ul className="landing-chips" aria-label="Who it is for">
-              <li className="chip chip--active">✓ Students</li>
-              <li className="chip">Coaches</li>
-              <li className="chip">Mentors</li>
-              <li className="chip">Parents</li>
-              <li className="chip">Scorers</li>
-            </ul>
-            <Link className="pill pill--solid pill--large" to="/auth">Get started <span aria-hidden="true">→</span></Link>
-            <p className="fine-print">No public profiles ✦ Invite-only teams ✦ Built for youth safety</p>
-          </div>
-
-          <div className="board-preview" aria-hidden="true">
-            <div className="board-preview__rail">
-              <span className="board-preview__logo">FP</span>
-              <i /><i /><i /><i /><i />
-            </div>
-            <div className="board-preview__body">
-              <div className="board-preview__head">
-                <strong>Robot practice · Week 6</strong>
-                <span>•••</span>
-              </div>
-              <div className="board-preview__tabs"><b>Main table</b><span>Calendar</span><span>Scores</span><span>+</span></div>
-
-              <div className="board-group board-group--acid">
-                <div className="board-group__title">This week</div>
-                <div className="board-row board-row--head"><span>Task</span><span>Owner</span><span>Status</span><span>Due</span><span>Type</span></div>
-                <div className="board-row"><span>Mission 04 attachment</span><span className="av av-1">AK</span><span className="status status--done">Done</span><span>Nov 02</span><span>Robot build</span></div>
-                <div className="board-row"><span>Run 3 timing test</span><span className="av av-2">JM</span><span className="status status--working">Working on it</span><span>Nov 04</span><span>Practice</span></div>
-                <div className="board-row"><span>Line-follow tuning</span><span className="av av-3">PR</span><span className="status status--stuck">Stuck</span><span>Nov 05</span><span>Code</span></div>
-                <div className="board-row"><span>Judging Q&amp;A rehearsal</span><span className="av av-4">SL</span><span className="status status--done">Done</span><span>Nov 06</span><span>Core values</span></div>
-                <div className="board-row"><span>Pit display poster</span><span className="av av-5">TN</span><span className="status status--working">Working on it</span><span>Nov 08</span><span>Outreach</span></div>
-              </div>
-
-              <div className="board-group board-group--orange">
-                <div className="board-group__title">Innovation project</div>
-                <div className="board-row board-row--head"><span>Task</span><span>Owner</span><span>Status</span><span>Due</span><span>Type</span></div>
-                <div className="board-row"><span>Expert interview</span><span className="av av-2">JM</span><span className="status status--done">Done</span><span>Oct 22</span><span>Research</span></div>
-                <div className="board-row"><span>Prototype v2</span><span className="av av-1">AK</span><span className="status status--working">Working on it</span><span>Oct 28</span><span>Build</span></div>
-                <div className="board-row"><span>Presentation script</span><span className="av av-4">SL</span><span className="status status--done">Done</span><span>Oct 30</span><span>Presentation</span></div>
-              </div>
-            </div>
-
-            <div className="board-toast">
-              <span className="av av-3">PR</span>
-              <span>Logged practice run · <b>315 pts</b></span>
-              <span className="status status--done">Done</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-strip" id="features">
-          <p>Everything a team needs in one private place</p>
-          <ul>
-            <li>Tracker</li><li>Calendar</li><li>Team chat</li><li>Files</li><li>Polls</li><li>Scorer</li><li>How-to videos</li>
-          </ul>
-        </section>
-      </main>
+      <LandingPage />
     );
   }
 

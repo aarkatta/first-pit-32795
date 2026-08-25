@@ -6,7 +6,7 @@ import './styles/global.css';
 import './styles/reference-ui.css';
 import './styles/monday.css';
 import './styles/polish.css';
-import './styles/landing.css';
+import './styles/tailwind.css';
 
 const rootElement = document.getElementById('root');
 
