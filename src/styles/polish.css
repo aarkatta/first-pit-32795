@@ -1,0 +1,767 @@
+/*
+ * Monday.com-style structure, depth and motion layer.
+ * Keeps the First Pit palette (paper / forest / acid) from reference-ui.css and
+ * changes only geometry, elevation and animation. No gradients anywhere.
+ */
+
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 120ms;
+  --t-base: 200ms;
+  --t-slow: 320ms;
+
+  /* Layered "3D" elevation — solid shadows only, no gradients. */
+  --elev-0: 0 1px 0 rgba(17, 24, 39, 0.04);
+  --elev-1: 0 1px 2px rgba(17, 24, 39, 0.06), 0 2px 6px rgba(17, 24, 39, 0.05);
+  --elev-2: 0 2px 4px rgba(17, 24, 39, 0.06), 0 10px 24px rgba(17, 24, 39, 0.1);
+  --elev-3: 0 8px 16px rgba(17, 24, 39, 0.1), 0 24px 48px rgba(17, 24, 39, 0.16);
+  --edge-3d: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -2px 0 rgba(17, 24, 39, 0.06);
+  --edge-3d-dark: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -3px 0 rgba(0, 0, 0, 0.35);
+  --edge-3d-acid: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(93, 120, 10, 0.35);
+
+  /* Monday geometry: tight radii, thin lines. */
+  --radius-xl: 12px;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+}
+
+/* ---------- Shell & navigation ---------- */
+
+.sidebar {
+  box-shadow: 2px 0 0 rgba(0, 0, 0, 0.18);
+}
+
+.sidebar .brand-mark {
+  transform: none;
+  box-shadow: var(--edge-3d-acid), var(--elev-1);
+  transition: transform var(--t-base) var(--ease-spring);
+}
+
+.sidebar .brand:hover .brand-mark {
+  transform: rotate(-6deg) scale(1.06);
+}
+
+.team-switcher--sidebar,
+.profile-button {
+  border-radius: var(--radius-md);
+  box-shadow: var(--edge-3d-dark);
+  transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+
+.team-switcher--sidebar:hover,
+.profile-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.team-badge {
+  box-shadow: var(--edge-3d-acid);
+}
+
+.sidebar-nav__link {
+  position: relative;
+  border-radius: var(--radius-sm);
+  transition:
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+}
+
+.sidebar-nav__link::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--acid);
+  transform: translateY(-50%);
+  transition: height var(--t-base) var(--ease-out);
+}
+
+.sidebar-nav__link:hover {
+  color: #f6faf7;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-nav__link:hover > span {
+  color: var(--acid);
+}
+
+.sidebar-nav__link.active {
+  color: #101b0c;
+  background: var(--acid);
+  box-shadow: var(--edge-3d-acid);
+}
+
+.sidebar-nav__link.active::before {
+  height: 60%;
+}
+
+.sidebar-nav__link:active {
+  transform: scale(0.98);
+}
+
+.topbar {
+  height: 72px;
+  padding: 12px 34px;
+  background: rgba(247, 248, 244, 0.92);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.topbar-title .eyebrow {
+  margin-bottom: 2px;
+}
+
+.topbar-title h1 {
+  font-size: clamp(18px, 1.8vw, 22px);
+}
+
+.top-action,
+.connection-status {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--edge-3d), var(--elev-0);
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+
+.top-action:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--edge-3d), var(--elev-1);
+}
+
+.top-action:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow: var(--elev-0);
+}
+
+.connection-status i {
+  animation: fp-pulse 2.4s ease-in-out infinite;
+}
+
+.connection-status--offline i {
+  animation: none;
+}
+
+.app-main {
+  gap: 18px;
+  padding: 24px 34px 48px;
+}
+
+/* ---------- Surfaces ---------- */
+
+.card,
+.state-panel,
+.chat-layout,
+.feed-list article,
+.member-grid article,
+.score-card,
+.mission-card,
+.team-hero,
+.search-hero,
+.calendar-shell,
+.feature-panel,
+.chip-panel {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--edge-3d), var(--elev-1);
+  transition:
+    transform var(--t-base) var(--ease-out),
+    box-shadow var(--t-base) var(--ease-out),
+    border-color var(--t-base) var(--ease-out);
+}
+
+.card,
+.state-panel {
+  padding: 20px 22px;
+}
+
+.card:hover,
+.feed-list article:hover,
+.member-grid article:hover,
+.score-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--edge-3d), var(--elev-2);
+  transform: translateY(-2px);
+}
+
+.mission-card,
+.team-hero,
+.search-hero,
+.calendar-shell {
+  box-shadow: var(--edge-3d-dark), var(--elev-2);
+}
+
+.mission-card::after {
+  animation: fp-orbit 40s linear infinite;
+}
+
+.card h2,
+.card h3,
+.state-panel h3,
+.section-heading h3,
+.feature-panel h3,
+.chip-panel h3 {
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Page entrance — staggered rise, monday "board load" feel. */
+.app-main > * {
+  animation: fp-rise var(--t-slow) var(--ease-out) both;
+}
+
+.app-main > :nth-child(1) { animation-delay: 0ms; }
+.app-main > :nth-child(2) { animation-delay: 40ms; }
+.app-main > :nth-child(3) { animation-delay: 80ms; }
+.app-main > :nth-child(4) { animation-delay: 120ms; }
+.app-main > :nth-child(5) { animation-delay: 160ms; }
+.app-main > :nth-child(n + 6) { animation-delay: 200ms; }
+
+.content-grid > *,
+.widget-grid > *,
+.feed-list > *,
+.member-grid > * {
+  animation: fp-rise var(--t-slow) var(--ease-out) both;
+}
+
+.content-grid > :nth-child(2),
+.widget-grid > :nth-child(2),
+.feed-list > :nth-child(2),
+.member-grid > :nth-child(2) { animation-delay: 60ms; }
+.content-grid > :nth-child(3),
+.widget-grid > :nth-child(3),
+.feed-list > :nth-child(3),
+.member-grid > :nth-child(3) { animation-delay: 120ms; }
+.content-grid > :nth-child(n + 4),
+.widget-grid > :nth-child(n + 4),
+.feed-list > :nth-child(n + 4),
+.member-grid > :nth-child(n + 4) { animation-delay: 180ms; }
+
+/* ---------- Buttons: pressable 3D ---------- */
+
+.button,
+.submit-button,
+.google-button,
+.filter-button,
+.team-hero .button,
+.team-hero button,
+.search-hero button,
+.feed-list button,
+.kanban-quick-add button {
+  position: relative;
+  border-radius: var(--radius-sm);
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+  will-change: transform;
+}
+
+.button {
+  box-shadow: var(--edge-3d-dark), 0 3px 0 #000000, var(--elev-1);
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--edge-3d-dark), 0 4px 0 #000000, var(--elev-2);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: var(--edge-3d-dark), 0 1px 0 #000000, var(--elev-0);
+}
+
+.button--ghost {
+  box-shadow: var(--edge-3d), 0 3px 0 var(--line), var(--elev-0);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: #fbfcfa;
+  border-color: var(--border-strong);
+  box-shadow: var(--edge-3d), 0 4px 0 var(--line), var(--elev-1);
+}
+
+.button--ghost:active:not(:disabled) {
+  box-shadow: var(--edge-3d), 0 1px 0 var(--line);
+}
+
+.button--danger {
+  box-shadow: var(--edge-3d), 0 3px 0 #ecc7c4;
+}
+
+.button--danger:hover:not(:disabled) {
+  box-shadow: var(--edge-3d), 0 4px 0 #ecc7c4, var(--elev-1);
+}
+
+.button--danger:active:not(:disabled) {
+  box-shadow: var(--edge-3d), 0 1px 0 #ecc7c4;
+}
+
+.submit-button,
+.team-hero .button,
+.team-hero button,
+.search-hero button,
+.kanban-quick-add button {
+  box-shadow: var(--edge-3d-acid), 0 3px 0 #8fb01c, var(--elev-1);
+}
+
+.submit-button:hover:not(:disabled),
+.team-hero .button:hover,
+.team-hero button:hover,
+.search-hero button:hover,
+.kanban-quick-add button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--edge-3d-acid), 0 4px 0 #8fb01c, var(--elev-2);
+}
+
+.submit-button:active:not(:disabled),
+.team-hero .button:active,
+.team-hero button:active,
+.search-hero button:active,
+.kanban-quick-add button:active {
+  transform: translateY(2px);
+  box-shadow: var(--edge-3d-acid), 0 1px 0 #8fb01c;
+}
+
+.google-button,
+.filter-button,
+.feed-list button {
+  box-shadow: var(--edge-3d), 0 2px 0 var(--line);
+}
+
+.google-button:hover:not(:disabled),
+.filter-button:hover,
+.feed-list button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--edge-3d), 0 3px 0 var(--line), var(--elev-1);
+}
+
+.google-button:active:not(:disabled),
+.filter-button:active,
+.feed-list button:active {
+  transform: translateY(1px);
+  box-shadow: var(--edge-3d), 0 1px 0 var(--line);
+}
+
+.button:disabled,
+.submit-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.text-button {
+  position: relative;
+  transition: color var(--t-fast) var(--ease-out);
+}
+
+.text-button::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t-base) var(--ease-out);
+}
+
+.text-button:hover::after,
+.text-button:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.text-button:hover,
+.text-button:focus-visible {
+  text-decoration: none;
+}
+
+/* ---------- Inputs ---------- */
+
+.team-switcher select,
+input,
+select,
+textarea,
+.onboarding-content input,
+.search-hero input,
+.search-hero select {
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 2px rgba(17, 24, 39, 0.05);
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.onboarding-content input:focus,
+.google-button:focus-visible {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(49, 87, 245, 0.18), inset 0 1px 2px rgba(17, 24, 39, 0.05);
+}
+
+.checkbox-row input,
+.checkbox-label input {
+  box-shadow: none;
+}
+
+/* ---------- Tables & rows: monday board feel ---------- */
+
+table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--elev-0);
+}
+
+th {
+  padding: 10px 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+td {
+  padding: 11px 12px;
+  transition: background var(--t-fast) var(--ease-out);
+}
+
+tbody tr {
+  position: relative;
+  transition: background var(--t-fast) var(--ease-out);
+}
+
+tbody tr:hover td {
+  background: #f8faf6;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.list-row {
+  padding: 12px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+
+.list-row:hover {
+  background: #f8faf6;
+}
+
+.message {
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-0);
+  animation: fp-rise var(--t-base) var(--ease-out) both;
+}
+
+.announcement,
+.announcement-strip {
+  border-radius: var(--radius-md);
+  box-shadow: var(--edge-3d), var(--elev-1);
+}
+
+/* ---------- Status panels ---------- */
+
+.state-panel--loading {
+  position: relative;
+}
+
+.state-panel--loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30%;
+  height: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--acid);
+  animation: fp-scan 1.4s var(--ease-out) infinite;
+}
+
+.state-panel--error,
+.state-panel--permission,
+.state-panel--offline {
+  animation: fp-rise var(--t-slow) var(--ease-out) both, fp-nudge 480ms var(--ease-out) 120ms 1;
+}
+
+.empty-inline {
+  border-radius: var(--radius-md);
+}
+
+/* ---------- Avatars, badges, chips ---------- */
+
+.big-avatar,
+.profile-avatar,
+.choice-icon,
+.mini-bot {
+  box-shadow: var(--edge-3d), var(--elev-1);
+  transition: transform var(--t-base) var(--ease-spring);
+}
+
+.member-grid article:hover .big-avatar,
+.choice-card:hover .choice-icon {
+  transform: translateY(-2px) scale(1.05);
+}
+
+.mini-bot {
+  animation: fp-bob 3.2s ease-in-out infinite;
+}
+
+.ring {
+  box-shadow: var(--edge-3d), var(--elev-1);
+  animation: fp-pop var(--t-slow) var(--ease-spring) both;
+}
+
+.choice-card {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--edge-3d), var(--elev-1);
+  transition:
+    transform var(--t-base) var(--ease-out),
+    box-shadow var(--t-base) var(--ease-out),
+    border-color var(--t-base) var(--ease-out);
+}
+
+.choice-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--edge-3d), var(--elev-2);
+}
+
+.choice-card:active {
+  transform: translateY(0);
+  box-shadow: var(--edge-3d), var(--elev-0);
+}
+
+.choice-card.primary-choice {
+  box-shadow: var(--edge-3d-dark), var(--elev-2);
+}
+
+/* ---------- Onboarding art: gentle 3D motion ---------- */
+
+.onboarding-panel {
+  border-radius: 0;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.25);
+}
+
+.bot {
+  box-shadow: var(--edge-3d-acid), 0 35px 90px rgba(0, 0, 0, 0.35);
+  animation: fp-hover 5s ease-in-out infinite;
+}
+
+.orbit {
+  animation: fp-orbit 60s linear infinite;
+}
+
+.orbit-two {
+  animation-duration: 90s;
+  animation-direction: reverse;
+}
+
+.float-shape {
+  animation: fp-bob 4s ease-in-out infinite;
+}
+
+.shape-two {
+  animation-delay: -1.3s;
+}
+
+.shape-three {
+  animation-delay: -2.6s;
+}
+
+/* ---------- Kanban / modal ---------- */
+
+.kanban-column {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-0);
+}
+
+.kanban-modal-backdrop {
+  animation: fp-fade var(--t-base) var(--ease-out) both;
+}
+
+.kanban-modal-backdrop > * {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--edge-3d), var(--elev-3);
+  animation: fp-pop var(--t-slow) var(--ease-spring) both;
+}
+
+/* Mobile nav */
+.bottom-nav {
+  box-shadow: 0 -1px 0 var(--line), 0 -8px 24px rgba(17, 24, 39, 0.06);
+}
+
+.bottom-nav__link {
+  transition: color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+
+.bottom-nav__link:active {
+  transform: scale(0.94);
+}
+
+.bottom-nav__link.active span {
+  animation: fp-pop var(--t-slow) var(--ease-spring) both;
+}
+
+.mobile-secondary-nav__panel {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--edge-3d), var(--elev-3);
+  animation: fp-pop var(--t-base) var(--ease-spring) both;
+}
+
+/* ---------- Keyframes ---------- */
+
+@keyframes fp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fp-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fp-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fp-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(81, 164, 71, 0.45); }
+  60% { box-shadow: 0 0 0 6px rgba(81, 164, 71, 0); }
+}
+
+@keyframes fp-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+
+@keyframes fp-nudge {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+@keyframes fp-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes fp-hover {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-4deg); }
+  50% { transform: translate(-50%, -56%) rotate(-1deg); }
+}
+
+@keyframes fp-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .app-main > *,
+  .content-grid > *,
+  .widget-grid > *,
+  .feed-list > *,
+  .member-grid > *,
+  .message,
+  .ring,
+  .state-panel--error,
+  .state-panel--permission,
+  .state-panel--offline,
+  .kanban-modal-backdrop,
+  .kanban-modal-backdrop > *,
+  .mobile-secondary-nav__panel,
+  .bottom-nav__link.active span {
+    animation: none;
+  }
+
+  .mini-bot,
+  .bot,
+  .orbit,
+  .float-shape,
+  .mission-card::after,
+  .connection-status i,
+  .state-panel--loading::before {
+    animation: none;
+  }
+
+  .card:hover,
+  .choice-card:hover,
+  .button:hover:not(:disabled),
+  .top-action:hover {
+    transform: none;
+  }
+}
+
+[data-reduced-motion='true'] .mini-bot,
+[data-reduced-motion='true'] .bot,
+[data-reduced-motion='true'] .orbit,
+[data-reduced-motion='true'] .float-shape,
+[data-reduced-motion='true'] .mission-card::after,
+[data-reduced-motion='true'] .connection-status i,
+[data-reduced-motion='true'] .state-panel--loading::before {
+  animation: none;
+}
+
+@media (max-width: 960px) {
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: auto;
+    min-height: 64px;
+    padding: 10px 16px;
+  }
+
+  .top-actions {
+    flex-shrink: 0;
+  }
+
+  .app-main {
+    padding: 18px 14px 34px;
+  }
+
+  .card:hover,
+  .feed-list article:hover,
+  .member-grid article:hover,
+  .score-card:hover {
+    transform: none;
+  }
+}
