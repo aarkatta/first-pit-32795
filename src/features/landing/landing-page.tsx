@@ -7,7 +7,6 @@ import {
   KanbanSquare,
   MessageSquareLock,
   ShieldCheck,
-  Sparkles,
   Trophy,
   Users,
   Vote,
@@ -53,7 +52,7 @@ const AUDIENCES: Audience[] = [
     id: 'students',
     label: 'Students',
     headline: 'Students and coaches working as one team',
-    sub: 'The private workspace where FLL teams plan practice, track the innovation project, talk safely, and log every match score together.',
+    sub: 'One private place for your FLL team to plan practice, keep the innovation project moving, talk to each other, and keep track of every score.',
     boardTitle: 'Robot practice · Week 6',
     groups: [
       {
@@ -82,8 +81,8 @@ const AUDIENCES: Audience[] = [
   {
     id: 'coaches',
     label: 'Coaches',
-    headline: 'Run the whole season from one board',
-    sub: 'Assign work, approve members, post announcements, and see who needs help — without juggling group chats and spreadsheets.',
+    headline: 'Run the whole season from one place',
+    sub: 'Hand out tasks, approve new members, post announcements, and spot who is stuck. No more juggling group chats and spreadsheets.',
     boardTitle: 'Season plan · Regional qualifier',
     groups: [
       {
@@ -110,8 +109,8 @@ const AUDIENCES: Audience[] = [
   {
     id: 'mentors',
     label: 'Mentors',
-    headline: 'Share know-how, not your phone number',
-    sub: 'Answer questions, post how-to videos, and review builds inside a moderated, team-scoped space designed for working with minors.',
+    headline: 'Help the team without handing out your number',
+    sub: 'Answer questions, post quick how-to videos, and look over builds in a space the coach moderates. Everything stays inside the team.',
     boardTitle: 'Knowledge base · Robot game',
     groups: [
       {
@@ -137,8 +136,8 @@ const AUDIENCES: Audience[] = [
   {
     id: 'parents',
     label: 'Parents',
-    headline: 'See the schedule. Skip the group chat.',
-    sub: 'Parents get exactly what the team policy allows — calendar, announcements, and polls — with no access to student conversations.',
+    headline: 'Know what is happening, skip the group chat',
+    sub: 'You see the calendar, announcements, and polls the coach shares with families. Student conversations stay private.',
     boardTitle: 'Family view · Upcoming',
     groups: [
       {
@@ -164,8 +163,8 @@ const AUDIENCES: Audience[] = [
   {
     id: 'scorers',
     label: 'Scorers',
-    headline: 'Score every run. Watch the curve climb.',
-    sub: 'A rubric-accurate robot game scorer with per-mission breakdowns and a full practice history for the whole season.',
+    headline: 'Score every run and watch the team improve',
+    sub: 'A robot game scorer that follows the official rubric, breaks scores down mission by mission, and keeps every practice run from the whole season.',
     boardTitle: 'Match history · Season',
     groups: [
       {
@@ -293,35 +292,35 @@ function BoardPreview({ audience }: { audience: Audience }) {
 }
 
 const FEATURES = [
-  { icon: KanbanSquare, title: 'Tracker', copy: 'Board and list views for practice, build, and project work with owners, status, and due dates.', tone: 'text-blue bg-blue/10' },
-  { icon: CalendarDays, title: 'Calendar', copy: 'Practices, tournaments, and deadlines in one place, with reminders that respect team policy.', tone: 'text-orange bg-orange/12' },
-  { icon: MessageSquareLock, title: 'Team chat', copy: 'Channels and announcements that coaches can moderate. No DMs unless the team turns them on.', tone: 'text-purple bg-purple/12' },
-  { icon: FolderLock, title: 'Storage area', copy: 'Files and photos scoped to the team, validated on upload, and shared only where policy allows.', tone: 'text-[#377229] bg-[#dcf1d0]' },
-  { icon: Video, title: 'How-to videos', copy: 'Mentors record it once; every student can rewatch the build, the code, or the strategy.', tone: 'text-blue bg-blue/10' },
-  { icon: Vote, title: 'Polls & questions', copy: 'Decide fast with team polls and keep a searchable Q&A that outlives the season.', tone: 'text-orange bg-orange/12' },
-  { icon: Trophy, title: 'Scorer', copy: 'Rubric-accurate robot game scoring with per-mission detail and a full practice history.', tone: 'text-[#886417] bg-[#ffeebd]' },
-  { icon: BarChart3, title: 'Dashboard', copy: 'Today at a glance: assigned work, upcoming events, unread messages, and the score trend.', tone: 'text-purple bg-purple/12' }
+  { icon: KanbanSquare, title: 'Tracker', copy: 'Who is doing what, by when. Practice, build, and project work on one board.', tone: 'text-blue bg-blue/10' },
+  { icon: CalendarDays, title: 'Calendar', copy: 'Practices, tournaments, and deadlines in one calendar everyone can actually find.', tone: 'text-orange bg-orange/12' },
+  { icon: MessageSquareLock, title: 'Team chat', copy: 'Team channels and announcements the coach can moderate. Private messages stay off unless the team turns them on.', tone: 'text-purple bg-purple/12' },
+  { icon: FolderLock, title: 'Storage area', copy: 'Files and photos that stay with the team, checked on upload, and shared only with the people who should see them.', tone: 'text-[#377229] bg-[#dcf1d0]' },
+  { icon: Video, title: 'How-to videos', copy: 'A mentor explains it once on video, and every student can watch it again whenever they need to.', tone: 'text-blue bg-blue/10' },
+  { icon: Vote, title: 'Polls & questions', copy: 'Make quick decisions with a poll, and keep the answers to good questions around for next season.', tone: 'text-orange bg-orange/12' },
+  { icon: Trophy, title: 'Scorer', copy: 'Score runs the way judges do, see which missions earned points, and look back at every practice.', tone: 'text-[#886417] bg-[#ffeebd]' },
+  { icon: BarChart3, title: 'Dashboard', copy: 'Your day at a glance: what is assigned to you, what is coming up, and how the scores are trending.', tone: 'text-purple bg-purple/12' }
 ];
 
 const STEPS = [
-  { n: '01', title: 'Create your team', copy: 'A coach creates the private workspace and sets the team policy: who can see what, who can message whom.' },
-  { n: '02', title: 'Invite by role', copy: 'Students, mentors, and parents join by invitation only. Every role change and approval is audited.' },
-  { n: '03', title: 'Run the season', copy: 'Plan, practice, score, and communicate in one place — from kickoff to the championship.' }
+  { n: '01', title: 'Create your team', copy: 'A coach sets up the team and decides the basics: who can see what, and who can message whom.' },
+  { n: '02', title: 'Invite by role', copy: 'Students, mentors, and parents join only when they are invited. Every approval and role change is recorded.' },
+  { n: '03', title: 'Run the season', copy: 'Plan, practice, score, and talk in one place, from kickoff to the last tournament.' }
 ];
 
 const STATS = [
-  { value: 315, suffix: '', label: 'Season-best score, tracked run by run' },
-  { value: 100, suffix: '%', label: 'Of writes go through server-side authorization' },
-  { value: 0, suffix: '', label: 'Public profiles. Ever.' },
-  { value: 5, suffix: '', label: 'Roles with least-privilege defaults' }
+  { value: 315, suffix: '', label: 'Best score of the season, tracked run by run' },
+  { value: 100, suffix: '%', label: 'Of changes are checked on the server before they are saved' },
+  { value: 0, suffix: '', label: 'Public profiles. There are none.' },
+  { value: 5, suffix: '', label: 'Roles, each starting with only the access it needs' }
 ];
 
 const FAQ = [
-  { q: 'Is First Pit safe for students under 13?', a: 'Yes. Teams are invite-only, there is no public discovery, direct messaging is off by default, and every sensitive change (invitations, role changes, moderation) is written to an immutable audit log. Coaches control what parents and students can see.' },
-  { q: 'Can parents see the chat?', a: 'Only if the team policy allows it. By default parents see the calendar, announcements, and polls, and never student conversations.' },
-  { q: 'Does it work on phones?', a: 'First Pit is a responsive web app first and ships as an iOS app through Capacitor, so the same workspace works at the pit table and at home.' },
-  { q: 'What does it cost?', a: 'The pilot is free for FLL teams. There is no credit card, no ads, and no selling of team data.' },
-  { q: 'Where is our data stored?', a: 'In Google Firebase (Cloud Firestore and Storage), scoped per team with deny-by-default security rules. Uploads are validated for type, size, and access scope before they are visible.' }
+  { q: 'Is First Pit safe for students under 13?', a: 'Yes. Teams are invite-only, nobody can search for your team, and private messages are off unless the coach turns them on. Invitations, role changes, and moderation are all logged and cannot be edited. Coaches decide what parents and students can see.' },
+  { q: 'Can parents see the chat?', a: 'Only if the coach allows it. By default, parents see the calendar, announcements, and polls, and never student conversations.' },
+  { q: 'Does it work on phones?', a: 'Yes. First Pit works in any phone browser, and there is an iOS app too, so it works at the pit table and at home.' },
+  { q: 'What does it cost?', a: 'Nothing during the pilot. No credit card, no ads, and we never sell your team\'s data.' },
+  { q: 'Where is our data stored?', a: 'On Google Firebase. Each team\'s data is walled off from every other team, and uploads are checked for type and size before anyone can see them.' }
 ];
 
 function useCountUp(target: number, active: boolean, duration = 1200) {
@@ -431,9 +430,6 @@ export function LandingPage() {
         ) : null}
         <div className="relative mx-auto grid w-full max-w-[1360px] grid-cols-1 items-center gap-12 px-5 pb-20 pt-16 md:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:pt-24">
           <div className="animate-rise">
-            <Badge variant="forest" className="mb-6">
-              <Sparkles /> Built for FIRST LEGO League
-            </Badge>
             <h1 key={audience.id} className="m-0 mb-6 max-w-[12ch] font-display text-[clamp(42px,5.4vw,76px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance animate-rise">
               {audience.headline}
             </h1>
@@ -471,7 +467,7 @@ export function LandingPage() {
                 <a href="#how">See how it works</a>
               </Button>
             </div>
-            <p className="mt-5 text-[15px] text-muted">No public profiles ✦ Invite-only teams ✦ Built for youth safety</p>
+            <p className="mt-5 text-[15px] text-muted">No public profiles. Invite-only. Made with young teams in mind.</p>
           </div>
 
           <div className="relative flex justify-center lg:justify-end">
@@ -482,7 +478,7 @@ export function LandingPage() {
 
       {/* ---------- Marquee ---------- */}
       <section className="border-y border-line bg-paper py-6">
-        <p className="m-0 mb-4 text-center text-lg font-medium md:text-xl">Everything a team needs in one private place</p>
+        <p className="m-0 mb-4 text-center text-lg font-medium md:text-xl">Everything your team uses, all in one place</p>
         <div className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
           <ul className="m-0 flex w-max list-none gap-12 p-0 font-display text-2xl font-bold tracking-[-0.02em] text-ink/80 animate-marquee motion-reduce:animate-none md:text-3xl">
             {[...FEATURES, ...FEATURES].map((f, i) => (
@@ -498,8 +494,8 @@ export function LandingPage() {
       <section id="features" className="mx-auto w-full max-w-[1360px] px-5 py-24 md:px-8">
         <div className="mb-12 max-w-[42rem]" data-reveal>
           <Badge variant="blue" className="mb-4">Features</Badge>
-          <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">One workspace. Every part of the season.</h2>
-          <p className="m-0 text-lg leading-relaxed text-ink-soft">Modules that share one data model, one permission system, and one audit trail — so the team never has to leave.</p>
+          <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Everything the team needs, in one place.</h2>
+          <p className="m-0 text-lg leading-relaxed text-ink-soft">The tracker, calendar, chat, files, polls, and scorer all know about each other, so nobody has to copy things between apps.</p>
         </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature, index) => (
@@ -521,8 +517,8 @@ export function LandingPage() {
         <div className="mx-auto grid w-full max-w-[1360px] grid-cols-1 gap-12 px-5 py-24 md:px-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <div data-reveal>
             <Badge variant="orange" className="mb-4">How it works</Badge>
-            <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Up and running before the next practice.</h2>
-            <p className="m-0 mb-8 text-lg leading-relaxed text-ink-soft">No setup wizard, no imports. Create the team, invite people by role, and start planning.</p>
+            <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Ready before your next practice.</h2>
+            <p className="m-0 mb-8 text-lg leading-relaxed text-ink-soft">There is nothing to import and no long setup. Create the team, invite people, and start planning.</p>
             <Button asChild variant="ink" size="lg">
               <Link to="/auth">
                 Create a team <ArrowRight />
@@ -552,10 +548,10 @@ export function LandingPage() {
             <Badge className="mb-4">
               <ShieldCheck /> Youth safety
             </Badge>
-            <h2 className="m-0 mb-5 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance text-white">Private by design. Audited by default.</h2>
-            <p className="m-0 mb-8 max-w-[34rem] text-lg leading-relaxed text-[#b9c7bf]">Hiding a button is not authorization. Every write goes through server-side checks and deny-by-default security rules, and every sensitive change is written to an immutable audit log.</p>
+            <h2 className="m-0 mb-5 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance text-white">Built to keep students safe.</h2>
+            <p className="m-0 mb-8 max-w-[34rem] text-lg leading-relaxed text-[#b9c7bf]">Kids use this app, so we do not cut corners. Every change is checked on the server before it is saved, nothing is shared unless the coach allows it, and anything sensitive is written to a log that cannot be edited.</p>
             <ul className="m-0 grid list-none gap-3 p-0 text-[15px]">
-              {['Invite-only teams — no public discovery', 'Direct messaging off unless the coach turns it on', 'Parent visibility controlled by explicit team policy', 'Files validated for type, size, and scope before sharing', 'No precise location, no unnecessary child data'].map((item) => (
+              {['Teams are invite-only, and nobody can search for them', 'Private messages are off unless the coach turns them on', 'The coach decides what parents can see', 'Files are checked before anyone can open them', 'We do not collect location or anything else we do not need'].map((item) => (
                 <li key={item} className="flex items-start gap-3">
                   <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-acid text-acid-ink">
                     <Check className="size-3.5" />
@@ -577,8 +573,8 @@ export function LandingPage() {
       <section className="mx-auto grid w-full max-w-[1360px] grid-cols-1 gap-12 px-5 py-24 md:px-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
         <div data-reveal>
           <Badge variant="secondary" className="mb-4">FAQ</Badge>
-          <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,48px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Questions coaches ask first.</h2>
-          <p className="m-0 text-lg leading-relaxed text-ink-soft">Still unsure? Open the <Link to="/emulator" className="text-blue underline-offset-4 hover:underline">local setup guide</Link> or try the state lab.</p>
+          <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,48px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Questions we hear a lot.</h2>
+          <p className="m-0 text-lg leading-relaxed text-ink-soft">Have a different question? Check the <Link to="/emulator" className="text-blue underline-offset-4 hover:underline">setup guide</Link> or just get in touch with your coach.</p>
         </div>
         <Accordion type="single" collapsible defaultValue="item-0" className="rounded-2xl border border-line bg-white px-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(17,24,39,0.06)]" data-reveal>
           {FAQ.map((item, index) => (
@@ -596,8 +592,8 @@ export function LandingPage() {
           <span className="pointer-events-none absolute -left-16 -top-16 size-64 rounded-full border border-acid-ink/15" aria-hidden="true" />
           <span className="pointer-events-none absolute -bottom-24 -right-10 size-80 rounded-full border border-acid-ink/15" aria-hidden="true" />
           <Users className="size-10" />
-          <h2 className="m-0 max-w-[16ch] font-display text-[clamp(32px,4.4vw,60px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance">Bring your team into the pit.</h2>
-          <p className="m-0 max-w-[36rem] text-lg leading-relaxed text-acid-ink/80">Free for FLL teams during the pilot. Create the workspace in a minute, invite by role, and run the season together.</p>
+          <h2 className="m-0 max-w-[16ch] font-display text-[clamp(32px,4.4vw,60px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance">Bring your team in.</h2>
+          <p className="m-0 max-w-[36rem] text-lg leading-relaxed text-acid-ink/80">It is free for FLL teams during the pilot. Setting up takes about a minute, and then the whole team is in one place.</p>
           <div className="flex flex-wrap justify-center gap-3">
             <Button asChild variant="ink" size="xl">
               <Link to="/auth">
@@ -618,7 +614,7 @@ export function LandingPage() {
             <span className="grid size-7 place-items-center rounded-md bg-acid text-[10px] font-extrabold text-acid-ink">FP</span>
             First Pit
           </span>
-          <span>Private team workspace for FIRST LEGO League. Not affiliated with FIRST or the LEGO Group.</span>
+          <span>Made for FIRST LEGO League teams. Not affiliated with FIRST or the LEGO Group.</span>
           <span className="flex gap-5">
             <a href="#safety" className="hover:text-ink">Safety</a>
             <Link to="/states" className="hover:text-ink">Status</Link>
