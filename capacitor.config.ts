@@ -4,7 +4,9 @@ const config: CapacitorConfig = {
   appId: 'com.firstpit.app',
   appName: 'First Pit',
   webDir: 'dist',
-  bundledWebRuntime: false
+  ios: {
+    contentInset: 'automatic'
+  }
 };
 
 export default config;

@@ -10,7 +10,11 @@ export default tseslint.config(
       'dist',
       'coverage',
       'functions/lib',
-      'node_modules'
+      'node_modules',
+      'ios/App/App/public',
+      // Files staged for deletion this session can't be removed remotely; drop
+      // this entry and the .gitignore one once you delete the folder.
+      '_to_delete'
     ]
   },
   js.configs.recommended,
@@ -45,6 +49,15 @@ export default tseslint.config(
   },
   {
     files: ['functions/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.es2024
+      }
+    }
+  },
+  {
+    files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -2,6 +2,7 @@
   "projects": {
     "default": "demo-first-pit-dev",
     "development": "demo-first-pit-dev",
-    "test": "demo-first-pit-test"
+    "test": "demo-first-pit-test",
+    "production": "first-pit-32795"
   }
 }

@@ -30,10 +30,9 @@ Firebase Realtime Database is not the default MVP datastore.
 
 ## Implementation Order
 
-Implement the project in dependency order. Read `FIRST_PIT_PHASE_PLAN.md` and
-the requested phase file before starting work. Complete one phase at a time and
-do not implement later-phase features early unless a small, documented
-foundation change is required by the current phase.
+The MVP and Release 1.1 are implemented. Read `docs/architecture.md` before
+starting work. The table below records the order the modules were built in and
+their dependencies; it is history, not a queue.
 
 | Phase | Scope |
 |---|---|

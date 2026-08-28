@@ -1,13 +1,24 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import { parseClientEnv } from './env';
 
 let emulatorsConnected = false;
 
 function readClientEnv() {
-  return parseClientEnv(import.meta.env as Record<string, string | undefined>);
+  const rawEnv = import.meta.env as Record<string, string | undefined>;
+
+  return parseClientEnv(rawEnv, {
+    isProduction: import.meta.env.PROD
+  });
+}
+
+function getEmulatorUrl(host: string, port: number) {
+  const formattedHost = host.includes(':') ? `[${host}]` : host;
+
+  return `http://${formattedHost}:${port}`;
 }
 
 export function getFirebaseApp() {
@@ -17,17 +28,23 @@ export function getFirebaseApp() {
   if (!emulatorsConnected && env.useFirebaseEmulators) {
     const auth = getAuth(app);
     const firestore = getFirestore(app);
+    const functions = getFunctions(app);
     const storage = getStorage(app);
 
     connectAuthEmulator(
       auth,
-      `http://${env.emulatorHosts.auth.host}:${env.emulatorHosts.auth.port}`,
+      getEmulatorUrl(env.emulatorHosts.auth.host, env.emulatorHosts.auth.port),
       { disableWarnings: true }
     );
     connectFirestoreEmulator(
       firestore,
       env.emulatorHosts.firestore.host,
       env.emulatorHosts.firestore.port
+    );
+    connectFunctionsEmulator(
+      functions,
+      env.emulatorHosts.functions.host,
+      env.emulatorHosts.functions.port
     );
     connectStorageEmulator(
       storage,
@@ -48,6 +65,7 @@ export function getFirebaseServices() {
     app,
     auth: getAuth(app),
     firestore: getFirestore(app),
-    storage: getStorage(app)
+    storage: getStorage(app),
+    functions: getFunctions(app)
   };
 }

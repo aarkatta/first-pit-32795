@@ -1,14 +1,105 @@
+# --- Dependencies ---
 node_modules
-dist
-coverage
-.firebase
-functions/lib
 functions/node_modules
-firestore-debug.log
-firebase-debug.log
-.DS_Store
-.env
-.env.local
-.env.*.local
-!/.env.example
+.pnp
+.pnp.js
+
+# --- Build output ---
+dist
+dist-ssr
+build
+functions/lib
+coverage
+*.tsbuildinfo
 vite.config.ts.timestamp-*
+
+# --- Environment / secrets (NEVER commit real values) ---
+# Only *.example templates are tracked; every real env file is ignored.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.env
+env.local
+env.production
+
+# Credentials, keys, service accounts
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.cer
+*.der
+*.jks
+*.keystore
+*.mobileprovision
+*-service-account*.json
+*serviceAccount*.json
+*service-account*.json
+service-account-key.json
+gcp-credentials.json
+google-application-credentials.json
+*firebase-adminsdk*.json
+*adminsdk*.json
+*-firebase-*.json
+secrets.json
+secrets/
+credentials/
+.secrets
+
+# Platform config that embeds project keys
+google-services.json
+GoogleService-Info.plist
+
+# --- Firebase ---
+.firebase
+.runtimeconfig.json
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+ui-debug.log
+storage-debug.log
+*-debug.log
+
+# --- Vercel ---
+.vercel
+
+# --- Capacitor / iOS ---
+ios/App/Pods
+ios/App/App/public
+ios/App/build
+ios/capacitor-cordova-ios-plugins
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# --- Logs / temp ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cache
+.tmp
+tmp/
+
+# --- Editors / OS ---
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# --- Local agent/workflow state ---
+.project/runs/
+
+# --- Transfer archives ---
+*.tgz
+
+# --- Staging folder for files pending deletion ---
+_to_delete/
