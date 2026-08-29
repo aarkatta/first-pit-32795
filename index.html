@@ -5,8 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#13213a" />
-    <title>First Pit</title>
+    <meta name="apple-mobile-web-app-title" content="First Pit" />
+    <meta name="theme-color" content="#12211a" />
+
+    <title>First Pit — team management for FIRST LEGO League teams</title>
+    <meta
+      name="description"
+      content="First Pit is a private team-management app for FIRST LEGO League teams: practice, tasks, calendar, chat, files, polls, and scoring in one place."
+    />
+
+    <!-- Icons. favicon.svg is the master mark; the .ico covers browsers without SVG icon support. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      Social preview. The site-URL token below is replaced at build time by the
+      siteUrl plugin in vite.config.ts (VITE_SITE_URL, or Vercel's production URL,
+      which Vercel sets automatically). When neither is set it collapses to an
+      empty string, leaving root-relative paths — fine locally, but a real deploy
+      wants the absolute URL because most scrapers will not resolve a relative one.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="First Pit" />
+    <meta property="og:title" content="First Pit — team management for FIRST LEGO League teams" />
+    <meta
+      property="og:description"
+      content="A private team-management app for FIRST LEGO League teams: practice, tasks, calendar, chat, files, polls, and scoring in one place."
+    />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="First Pit — private team management for FIRST LEGO League teams." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="First Pit — team management for FIRST LEGO League teams" />
+    <meta
+      name="twitter:description"
+      content="A private team-management app for FIRST LEGO League teams: practice, tasks, calendar, chat, files, polls, and scoring in one place."
+    />
+    <meta name="twitter:image" content="%SITE_URL%/og-image.png" />
   </head>
   <body>
     <div id="root"></div>

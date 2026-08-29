@@ -5,6 +5,7 @@ import { parseClientEnv, type ClientEnv } from '@/lib/env';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { AuthProvider } from '@/lib/auth-context';
 import { TeamProvider } from '@/lib/team-context';
+import { PreferencesProvider } from '@/lib/preferences-context';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 
@@ -13,6 +14,7 @@ const ChatPage = lazy(() => import('@/pages/ChatPage').then((module) => ({ defau
 const CoordinationPage = lazy(() => import('@/pages/CoordinationPage').then((module) => ({ default: module.CoordinationPage })));
 const CreateTeamPage = lazy(() => import('@/pages/CreateTeamPage').then((module) => ({ default: module.CreateTeamPage })));
 const EmulatorPage = lazy(() => import('@/pages/EmulatorPage').then((module) => ({ default: module.EmulatorPage })));
+const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage').then((module) => ({ default: module.JoinTeamPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })));
 const KnowledgePage = lazy(() => import('@/pages/KnowledgePage').then((module) => ({ default: module.KnowledgePage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
@@ -26,6 +28,13 @@ const TeamHubPage = lazy(() => import('@/pages/TeamHubPage').then((module) => ({
 type AppRoutesProps = {
   clientEnv?: ClientEnv;
 };
+
+/**
+ * `/states` is a QA catalogue of every UI state and `/emulators` documents the
+ * local Firebase setup. Neither is product surface, so they only exist in a
+ * development build — a production visitor gets the normal not-found page.
+ */
+const devToolsEnabled = import.meta.env.DEV;
 
 function CoordinationAlias() {
   const location = useLocation();
@@ -67,8 +76,12 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
             <Route path="/tracker" element={<CoordinationAlias />} />
             <Route path="/calendar" element={<CoordinationAlias />} />
             <Route path="/teams/new" element={<ProtectedRoute><CreateTeamPage /></ProtectedRoute>} />
-            <Route path="/states" element={<StatusLabPage />} />
-            <Route path="/emulators" element={<EmulatorPage clientEnv={runtimeEnv} />} />
+            {/* Invitation acceptance, reached from an emailed `/join?invite=<id>` link.
+                ProtectedRoute round-trips the full deep link through `/auth?next=…`,
+                so a signed-out invitee keeps the invitation id across sign-in. */}
+            <Route path="/join" element={<ProtectedRoute><JoinTeamPage /></ProtectedRoute>} />
+            {devToolsEnabled ? <Route path="/states" element={<StatusLabPage />} /> : null}
+            {devToolsEnabled ? <Route path="/emulators" element={<EmulatorPage clientEnv={runtimeEnv} />} /> : null}
             <Route path="/home" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
@@ -81,11 +94,13 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
 export default function App() {
   return (
     <AuthProvider>
-      <TeamProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </TeamProvider>
+      <PreferencesProvider>
+        <TeamProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </TeamProvider>
+      </PreferencesProvider>
     </AuthProvider>
   );
 }

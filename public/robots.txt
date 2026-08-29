@@ -1,0 +1,5 @@
+# First Pit. Every authenticated route is guarded by Firebase Auth and renders
+# nothing without a session, so crawling is allowed: link-preview scrapers
+# (Slack, X, LinkedIn, Facebook) must be able to read / and /og-image.png.
+User-agent: *
+Allow: /

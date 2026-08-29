@@ -173,6 +173,24 @@ service cloud.firestore {
       return isTeamAdmin(teamId);
     }
 
+    // Mirrors parentsCanReadTeamContent in functions/src/phase4.ts. The client
+    // reads channels and messages straight from Firestore, so enforcing this
+    // only in the callables would leave the read path wide open: a missing or
+    // malformed policy keeps parents out, matching DEFAULT_TEAM_POLICY.
+    function parentsCanReadTeamContent(teamId) {
+      return exists(/databases/$(database)/documents/teamPolicies/$(teamId))
+        && get(/databases/$(database)/documents/teamPolicies/$(teamId)).data.parentVisibility == 'teamMembers';
+    }
+
+    function isTeamParent(teamId) {
+      return isActiveMember(teamId)
+        && get(membershipPath(teamId, request.auth.uid)).data.role == 'parent';
+    }
+
+    function canReadTeamVisibleContent(teamId) {
+      return isTeamParent(teamId) ? parentsCanReadTeamContent(teamId) : true;
+    }
+
     function directMessagingEnabled(teamId) {
       return exists(/databases/$(database)/documents/teamPolicies/$(teamId))
         && get(/databases/$(database)/documents/teamPolicies/$(teamId)).data.directMessaging == 'coachesOnly';
@@ -182,7 +200,7 @@ service cloud.firestore {
       return data.teamId is string
         && data.archived == false
         && isActiveMember(data.teamId)
-        && (data.visibility == 'team'
+        && ((data.visibility == 'team' && canReadTeamVisibleContent(data.teamId))
           || (data.visibility == 'coaches' && isCoach(data.teamId))
           || (data.visibility == 'direct'
             && directMessagingEnabled(data.teamId)
@@ -195,7 +213,7 @@ service cloud.firestore {
         && data.channelId is string
         && get(/databases/$(database)/documents/channels/$(data.channelId)).data.archived == false
         && isActiveMember(data.teamId)
-        && (data.visibility == 'team'
+        && ((data.visibility == 'team' && canReadTeamVisibleContent(data.teamId))
           || (data.visibility == 'coaches' && isCoach(data.teamId))
           || (data.visibility == 'direct'
             && directMessagingEnabled(data.teamId)
@@ -204,7 +222,7 @@ service cloud.firestore {
     }
 
     match /channels/{channelId} {
-      allow get, list: if canReadChannel(resource.data) && resource.data.archived == false;
+      allow get, list: if canReadChannel(resource.data);
       allow create, update, delete: if false;
     }
 
@@ -215,6 +233,7 @@ service cloud.firestore {
 
     match /announcements/{announcementId} {
       allow get, list: if isActiveMember(resource.data.teamId)
+        && exists(/databases/$(database)/documents/channels/$(resource.data.channelId))
         && get(/databases/$(database)/documents/channels/$(resource.data.channelId)).data.teamId == resource.data.teamId
         && canReadChannel(get(/databases/$(database)/documents/channels/$(resource.data.channelId)).data);
       allow create, update, delete: if false;
@@ -262,13 +281,9 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow get, list: if signedIn() && resource.data.recipientUserId == request.auth.uid && resource.data.teamId is string && isActiveMember(resource.data.teamId);
-      allow update: if signedIn()
-        && resource.data.recipientUserId == request.auth.uid
-        && resource.data.teamId is string
-        && isActiveMember(resource.data.teamId)
-        && request.resource.data.recipientUserId == resource.data.recipientUserId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']);
-      allow create, delete: if false;
+      // Read receipts go through the markNotificationRead callable, so the
+      // client keeps no write path here.
+      allow create, update, delete: if false;
     }
 
     function canReadQuestion(data) {
@@ -293,16 +308,6 @@ service cloud.firestore {
           && (data.publicationStatus == 'published'
             || data.createdBy == request.auth.uid
             || isTeamAdmin(data.teamId)));
-    }
-
-    function canReadPoll(data) {
-      return signedIn()
-        && data.visibility == 'community'
-        && data.teamId == null
-        && data.status != 'removed'
-        || data.visibility == 'team'
-          && data.teamId is string
-          && isActiveMember(data.teamId);
     }
 
     match /questions/{questionId} {

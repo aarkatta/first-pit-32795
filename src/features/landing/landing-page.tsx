@@ -12,7 +12,7 @@ import {
   Vote,
   Video
 } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
@@ -20,20 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useReveal } from './use-reveal';
-
-const HeroScene = lazy(() => import('./hero-scene'));
-
-function canUseWebGL() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (navigator.userAgent.includes('jsdom')) return false;
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
-  try {
-    const canvas = document.createElement('canvas');
-    return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
-  } catch {
-    return false;
-  }
-}
 
 type Status = 'done' | 'working' | 'stuck';
 type Row = { task: string; owner: string; status: Status; due: string; type: string };
@@ -164,7 +150,7 @@ const AUDIENCES: Audience[] = [
     id: 'scorers',
     label: 'Scorers',
     headline: 'Score every run and watch the team improve',
-    sub: 'A robot game scorer that follows the official rubric, breaks scores down mission by mission, and keeps every practice run from the whole season.',
+    sub: 'A robot game scorer you set up with this season\'s missions, breaking every run down mission by mission and keeping the whole season of practice in one place.',
     boardTitle: 'Match history · Season',
     groups: [
       {
@@ -298,7 +284,7 @@ const FEATURES = [
   { icon: FolderLock, title: 'Storage area', copy: 'Files and photos that stay with the team, checked on upload, and shared only with the people who should see them.', tone: 'text-[#377229] bg-[#dcf1d0]' },
   { icon: Video, title: 'How-to videos', copy: 'A mentor explains it once on video, and every student can watch it again whenever they need to.', tone: 'text-blue bg-blue/10' },
   { icon: Vote, title: 'Polls & questions', copy: 'Make quick decisions with a poll, and keep the answers to good questions around for next season.', tone: 'text-orange bg-orange/12' },
-  { icon: Trophy, title: 'Scorer', copy: 'Score runs the way judges do, see which missions earned points, and look back at every practice.', tone: 'text-[#886417] bg-[#ffeebd]' },
+  { icon: Trophy, title: 'Scorer', copy: 'Score each run mission by mission, see exactly where the points came from, and look back at every practice.', tone: 'text-[#886417] bg-[#ffeebd]' },
   { icon: BarChart3, title: 'Dashboard', copy: 'Your day at a glance: what is assigned to you, what is coming up, and how the scores are trending.', tone: 'text-purple bg-purple/12' }
 ];
 
@@ -318,7 +304,7 @@ const STATS = [
 const FAQ = [
   { q: 'Is First Pit safe for students under 13?', a: 'Yes. Teams are invite-only, nobody can search for your team, and private messages are off unless the coach turns them on. Invitations, role changes, and moderation are all logged and cannot be edited. Coaches decide what parents and students can see.' },
   { q: 'Can parents see the chat?', a: 'Only if the coach allows it. By default, parents see the calendar, announcements, and polls, and never student conversations.' },
-  { q: 'Does it work on phones?', a: 'Yes. First Pit works in any phone browser, and there is an iOS app too, so it works at the pit table and at home.' },
+  { q: 'Does it work on phones?', a: 'Yes. First Pit works in any phone browser, so it is just as usable at the pit table as it is at home. A native iOS app is on the way.' },
   { q: 'What does it cost?', a: 'Nothing during the pilot. No credit card, no ads, and we never sell your team\'s data.' },
   { q: 'Where is our data stored?', a: 'On Google Firebase. Each team\'s data is walled off from every other team, and uploads are checked for type and size before anyone can see them.' }
 ];
@@ -361,7 +347,6 @@ function Stat({ value, suffix, label, active }: { value: number; suffix: string;
 export function LandingPage() {
   const [audienceId, setAudienceId] = useState(AUDIENCES[0].id);
   const audience = useMemo(() => AUDIENCES.find((item) => item.id === audienceId) ?? AUDIENCES[0], [audienceId]);
-  const [webgl] = useState(canUseWebGL);
   const rootRef = useRef<HTMLElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const [statsActive, setStatsActive] = useState(false);
@@ -399,7 +384,6 @@ export function LandingPage() {
             <a href="#features" className="transition-colors hover:text-blue">Features</a>
             <a href="#how" className="transition-colors hover:text-blue">How it works</a>
             <a href="#safety" className="transition-colors hover:text-blue">Safety</a>
-            <Link to="/states" className="transition-colors hover:text-blue">State lab</Link>
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <Button asChild variant="ghost" className="hidden md:inline-flex">
@@ -419,15 +403,6 @@ export function LandingPage() {
 
       {/* ---------- Hero ---------- */}
       <section className="relative overflow-hidden">
-        {webgl ? (
-          <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
-            <div className="absolute inset-y-0 right-0 w-[54%]">
-              <Suspense fallback={null}>
-                <HeroScene />
-              </Suspense>
-            </div>
-          </div>
-        ) : null}
         <div className="relative mx-auto grid w-full max-w-[1360px] grid-cols-1 items-center gap-12 px-5 pb-20 pt-16 md:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:pt-24">
           <div className="animate-rise">
             <h1 key={audience.id} className="m-0 mb-6 max-w-[12ch] font-display text-[clamp(42px,5.4vw,76px)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance animate-rise">
@@ -436,15 +411,20 @@ export function LandingPage() {
             <p key={`sub-${audience.id}`} className="m-0 mb-7 max-w-[34rem] text-[clamp(17px,1.5vw,22px)] leading-relaxed text-ink-soft animate-rise" style={{ animationDelay: '60ms' }}>
               {audience.sub}
             </p>
-            <div role="tablist" aria-label="Who it is for" className="mb-9 flex flex-wrap gap-2.5">
+            {/*
+              These are toggle buttons, not tabs: the region they change is the
+              decorative board preview, which is aria-hidden. Announcing a tab
+              set whose panels do not exist misleads screen-reader users, so
+              this is a plain group of pressed/unpressed buttons.
+            */}
+            <div role="group" aria-label="Who it is for" className="mb-9 flex flex-wrap gap-2.5">
               {AUDIENCES.map((item) => {
                 const active = item.id === audience.id;
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    role="tab"
-                    aria-selected={active}
+                    aria-pressed={active}
                     onClick={() => setAudienceId(item.id)}
                     className={cn(
                       'inline-flex min-h-[42px] cursor-pointer items-center gap-2 rounded-full border-0 px-[18px] text-base font-medium transition-all duration-150 ease-out-expo hover:-translate-y-px',
@@ -574,7 +554,7 @@ export function LandingPage() {
         <div data-reveal>
           <Badge variant="secondary" className="mb-4">FAQ</Badge>
           <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,48px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Questions we hear a lot.</h2>
-          <p className="m-0 text-lg leading-relaxed text-ink-soft">Have a different question? Check the <Link to="/emulator" className="text-blue underline-offset-4 hover:underline">setup guide</Link> or just get in touch with your coach.</p>
+          <p className="m-0 text-lg leading-relaxed text-ink-soft">Have a different question? Ask your coach, or get in touch and we will help you get the team set up.</p>
         </div>
         <Accordion type="single" collapsible defaultValue="item-0" className="rounded-2xl border border-line bg-white px-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(17,24,39,0.06)]" data-reveal>
           {FAQ.map((item, index) => (
@@ -638,7 +618,6 @@ export function LandingPage() {
           <span>Made for FIRST LEGO League teams. Not affiliated with FIRST or the LEGO Group.</span>
           <span className="flex gap-5">
             <a href="#safety" className="hover:text-ink">Safety</a>
-            <Link to="/states" className="hover:text-ink">Status</Link>
             <Link to="/auth" className="hover:text-ink">Log in</Link>
           </span>
         </div>

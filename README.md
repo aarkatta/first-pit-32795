@@ -26,13 +26,17 @@ and the release runbook.
 - Node.js Cloud Functions scaffold
 - Team-scoped Firestore and Storage rules with deny-by-default feature writes
 - Multi-project Kanban boards with configurable workflows, accessible card movement, conflict detection, and role-scoped controls
-- CI workflow for lint, type-check, test, and build
+- CI workflow: `verify:static` on every push and pull request, plus the full emulator and rules suites on `main`
 
 ## Local development prerequisites
 
 - Node.js 24, matching the Functions runtime declared by the repository
 - npm 11.4.2, matching the `packageManager` field
 - Firebase CLI available as `firebase`
+- A Java runtime (JDK 11 or newer) on `PATH`. The Firestore and Storage emulators
+  are Java processes, so `npm run emulators` and every `test:*-emulator` /
+  `test:rules*` script fail without it. On macOS: `brew install --cask temurin`,
+  then confirm with `java -version`.
 
 The browser shell requires a local environment file because Firebase client
 configuration is validated during application startup. Do not commit `.env.local`.
@@ -46,7 +50,11 @@ production values belong in the Vercel project settings, never in the repo.
 ## Local development
 
 1. Copy `.env.example` to `.env.local`.
-2. Fill in Firebase config values or keep emulator placeholders for local-only work. Keep `VITE_USE_FIREBASE_EMULATORS=true` when using the local emulators.
+2. Keep the emulator placeholders — a `demo-*` project id and
+   `VITE_USE_FIREBASE_EMULATORS=true`. Pointing `VITE_FIREBASE_PROJECT_ID` at the
+   production project (`first-pit-32795`, see `.firebaserc`) with emulators off makes
+   `npm run dev` and any Vite-loaded test read and write live Firestore, Auth, and
+   Storage. Production values belong in Vercel, not in `.env.local`.
 3. Install dependencies with `npm install`.
 4. Start the emulators in a second terminal with `npm run emulators`.
 5. Run the app with `npm run dev`.
@@ -58,20 +66,67 @@ configured local emulators. `AuthProvider` then owns the session listener and
 
 ## Verification
 
-- `npm run lint`
-- `npm run typecheck`
-- `npm test`
-- `npm run build`
-- `npm run functions:build`
-- `npm run test:release`
-- `npm run test:rules`
-- `npx firebase emulators:exec --project demo-first-pit-ci --config firebase.json --only auth,functions,firestore,storage "node tests/emulator-verification.mjs"`
+Two aggregate gates cover everything; prefer them over running the pieces by hand.
+
+- `npm run verify:static` — lint, type-check, coverage, functions build, web build,
+  and the release check. No emulators, so this is the fast loop, and it is what CI
+  runs on every push and pull request.
+- `npm run verify` — the complete gate: `verify:static` plus `npm run test:firebase`
+  (every rules and emulator suite). CI runs this on `main` and on demand, because
+  it starts the emulators thirteen times. Needs the Firebase CLI and a Java
+  runtime; takes several minutes. Run it before a release.
+
+The individual scripts behind them, for iterating on one thing:
+
+- `npm run lint` — ESLint, `--max-warnings 0`
+- `npm run typecheck` — the app, node, and functions tsconfigs
+- `npm test` / `npm run test:coverage` — Vitest (coverage thresholds are in `vite.config.ts`)
+- `npm run build` — type-checks, then builds to `dist/`
+- `npm run functions:build` — compiles `functions/` to `functions/lib/`
+- `npm run test:release` — static release gate (Capacitor metadata, Vercel routing,
+  brand and social metadata, the production emulator guard, secret scan)
+- `npm run test:firebase` — every rules and emulator suite; individual suites such as
+  `npm run test:rules:phase4` or `npm run test:phase4-emulator` run on their own
 
 ## Route strategy
 
 - The app uses `BrowserRouter`.
-- Vercel rewrites all client routes to `index.html`.
+- `vercel.json` rewrites client routes to `index.html`, excluding `/assets/*` and the
+  files served from `public/`, so a stale asset URL returns a 404 instead of HTML.
 - The same shell remains compatible with a future Capacitor iOS build.
+
+## Brand and social assets
+
+`public/` holds the assets referenced from `index.html`: `favicon.svg` (the master FP
+mark), `favicon.ico` (16/32/48), `apple-touch-icon.png` (180×180), and `og-image.png`
+(1200×630) for link previews. `npm run test:release` asserts the tags and the files
+stay in place and that the PNGs keep their required dimensions.
+
+Open Graph wants absolute URLs. `index.html` carries a `%SITE_URL%` token that
+`vite.config.ts` replaces at build time from `VITE_SITE_URL`, falling back to Vercel's
+`VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`. Set `VITE_SITE_URL` once the production
+domain is final; with none set the tags stay root-relative.
+
+## Deploy to Vercel
+
+The project builds with the settings already in `vercel.json` (framework `vite`,
+`npm run build`, output `dist`), so the only setup is environment variables. Set the
+keys listed in `.env.production.example` for the Production and Preview environments
+(Vercel → Settings → Environment Variables, or `vercel env add <NAME> production`):
+
+- `VITE_APP_NAME`, `VITE_APP_TAGLINE`
+- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
+  `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`,
+  `VITE_FIREBASE_APP_ID`, and optionally `VITE_FIREBASE_MEASUREMENT_ID`
+- `VITE_USE_FIREBASE_EMULATORS=false` — `src/lib/env.ts` hard-fails a production build
+  when this is `true`
+- `VITE_SITE_URL` (optional) — the canonical origin, e.g. `https://firstpit.example`,
+  used for the absolute Open Graph and Twitter card URLs
+
+Every `VITE_*` value is inlined into the browser bundle and is therefore public. Server
+secrets and service-account credentials belong in Cloud Functions configuration, never
+in a `VITE_*` variable. Deploy Firestore rules, Storage rules, indexes, and Functions
+with the Firebase CLI separately — Vercel only hosts the web client.
 
 ## Documentation
 

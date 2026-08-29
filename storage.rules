@@ -34,7 +34,11 @@ service firebase.storage {
         && filesEnabled(teamId)
         && matchingFileMetadata(teamId, fileId, fileName)
         && firestore.get(fileMetadataPath(fileId)).data.status == 'ready'
-        && firestore.get(fileMetadataPath(fileId)).data.scanStatus in ['clean', 'notConfigured'];
+        // 'notConfigured' used to be accepted here, but createFileMetadata wrote
+        // that value once and nothing ever changed it, so the scan gate enforced
+        // nothing. completeFileUpload now promotes 'pending' -> 'clean', which
+        // makes this a real check.
+        && firestore.get(fileMetadataPath(fileId)).data.scanStatus == 'clean';
       allow create: if isActiveMember(teamId)
         && filesEnabled(teamId)
         && matchingFileMetadata(teamId, fileId, fileName)

@@ -2,6 +2,8 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, onRequest, type CallableRequest, type Request } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { logger } from 'firebase-functions';
 import type { Response } from 'express';
 import {
   assertTeamMemberInTransaction,
@@ -19,6 +21,7 @@ import {
   requireTeamMember,
   validatePolicy,
   validateReportInput,
+  assertNotLastCoach,
   auditRecord
 } from './phase2.js';
 import {
@@ -54,6 +57,7 @@ import {
   exportTeamMessages as exportTeamMessagesCommand,
   markChannelRead as markChannelReadCommand,
   purgeExpiredMessages as purgeExpiredMessagesCommand,
+  purgeExpiredMessagesForTeam,
   searchMessages as searchMessagesCommand,
   sendMessage as sendMessageCommand,
   toggleChannelMute as toggleChannelMuteCommand,
@@ -163,6 +167,7 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
   const teamRef = db.collection('teams').doc();
   const membershipRef = db.collection('memberships').doc(`${teamRef.id}_${uid}`);
   const auditRef = db.collection('auditEvents').doc();
+  const generalChannelRef = db.collection('channels').doc();
   const userRef = db.doc(`users/${uid}`);
   const notificationPreferencesRef = db.doc(`notificationPreferences/${uid}`);
   const privacySettingsRef = db.doc(`privacySettings/${uid}`);
@@ -223,6 +228,21 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
         updatedAt: now
       });
     }
+    // A team with no channel lands the coach on an empty Chat page where the
+    // announcement form does not render at all, so the first channel ships with
+    // the team rather than being a manual setup step.
+    transaction.set(generalChannelRef, {
+      id: generalChannelRef.id,
+      teamId: teamRef.id,
+      name: 'General',
+      description: 'Team-wide updates, questions, and announcements.',
+      visibility: 'team',
+      participantUserIds: [],
+      archived: false,
+      createdBy: uid,
+      createdAt: now,
+      updatedAt: now
+    });
     transaction.set(auditRef, auditRecord({
       type: 'team.created',
       actorUserId: uid,
@@ -232,13 +252,38 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
     }));
   });
 
-  return { teamId: teamRef.id, auditEventId: auditRef.id };
+  return { teamId: teamRef.id, auditEventId: auditRef.id, channelId: generalChannelRef.id };
 });
 
 type Phase2Request = CallableRequest<Record<string, unknown>>;
 
 function phase2Data(request: Phase2Request) {
   return request.data ?? {};
+}
+
+/**
+ * Phase 2 idempotency receipts.
+ *
+ * Invitations, role changes, membership lifecycle, and leadership transfer are
+ * exactly the mutations that write an immutable `auditEvents` record. Without a
+ * receipt a retried call writes a SECOND audit event for the same action, which
+ * corrupts the moderation trail the audit log exists to provide. The receipt is
+ * written inside the same transaction as the change, so replay and commit can
+ * never disagree.
+ */
+function phase2OperationRef(request: Phase2Request, teamId: string, kind: string) {
+  const operationId = requireString(getInput(request, 'operationId'), 'Operation ID', 120);
+  return getFirestore().doc(`phase2Operations/${teamId}_${kind}_${operationId}`);
+}
+
+export function phase2OperationReceipt(
+  receipt: Record<string, unknown>,
+  expected: { teamId: string; actorUserId: string; kind: string }
+): Record<string, unknown> {
+  if (receipt.teamId !== expected.teamId || receipt.createdBy !== expected.actorUserId || receipt.kind !== expected.kind) {
+    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+  }
+  return receipt;
 }
 
 async function requireTeamDocument(teamId: string) {
@@ -266,19 +311,14 @@ async function activeCoachCount(transaction: FirebaseFirestore.Transaction, team
   return snapshot.size;
 }
 
-function assertNotLastCoach(count: number, currentRole: string, currentStatus: string, nextRole: string, nextStatus: string) {
-  // Only a currently ACTIVE coach counts toward coverage; removing an already
-  // suspended coach must not be blocked by the last-coach rule.
-  const losesCoachAccess = currentStatus === 'active' && ['coach', 'teamLeader'].includes(currentRole) && (!['coach', 'teamLeader'].includes(nextRole) || nextStatus !== 'active');
-  if (losesCoachAccess && count <= 1) {
-    throw new HttpsError('failed-precondition', 'A team must keep at least one active coach. Transfer leadership before leaving or changing this role.');
-  }
-}
-
 export const createInvitation = onCall(async (request: Phase2Request) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);
-  await requireTeamDocument(teamId);
+  const team = await requireTeamDocument(teamId);
+  // An invitee has no membership yet, so `teams/{teamId}` is unreadable to them
+  // (firestore.rules) while the invitation document is. Denormalizing the name
+  // is what lets the acceptance screen say which team invited them.
+  const teamName = requireString(team.data()?.name ?? 'Your team', 'Team name', 80);
   const email = requireEmail(getInput(request, 'email'));
   const role = requireAssignableRole(getInput(request, 'role') ?? 'student');
   const db = getFirestore();
@@ -291,10 +331,18 @@ export const createInvitation = onCall(async (request: Phase2Request) => {
     if ((error as { code?: string }).code !== 'auth/user-not-found') throw new HttpsError('internal', 'The invitation could not be verified.');
   }
   const targetMembershipRef = targetUserId ? db.doc(`memberships/${teamId}_${targetUserId}`) : null;
+  const operationRef = phase2OperationRef(request, teamId, 'invitation.create');
   const now = FieldValue.serverTimestamp();
 
-  await db.runTransaction(async (transaction) => {
+  const committedInvitationId = await db.runTransaction(async (transaction) => {
     await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
+    // The receipt is checked before the duplicate-invitation guard: a retry of a
+    // SUCCESSFUL invite would otherwise fail as `already-exists`.
+    const operation = await transaction.get(operationRef);
+    if (operation.exists) {
+      const receipt = phase2OperationReceipt(operation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: 'invitation.create' });
+      return requireString(receipt.invitationId, 'Stored invitation ID');
+    }
     const existingInvitation = await transaction.get(invitationRef);
     const existing = existingInvitation.data();
     if (existingInvitation.exists && existing?.status === 'pending') {
@@ -308,6 +356,7 @@ export const createInvitation = onCall(async (request: Phase2Request) => {
     }
     transaction.set(invitationRef, {
       teamId,
+      teamName,
       email,
       ...(targetUserId ? { targetUserId } : {}),
       role,
@@ -321,9 +370,11 @@ export const createInvitation = onCall(async (request: Phase2Request) => {
       type: 'invitation.created', actorUserId: admin.uid, teamId,
       targetResource: `invitations/${invitationId}`, metadata: { role }
     }));
+    transaction.set(operationRef, { teamId, createdBy: admin.uid, kind: 'invitation.create', invitationId, createdAt: now });
+    return invitationId;
   });
 
-  return { invitationId };
+  return { invitationId: committedInvitationId };
 });
 
 export const revokeInvitation = onCall(async (request: Phase2Request) => {
@@ -395,6 +446,7 @@ export const requestToJoinTeam = onCall(async (request: Phase2Request) => {
   const requestRef = db.doc(`joinRequests/${requestId}`);
   const membershipRef = db.doc(`memberships/${requestId}`);
   const policyRef = db.doc(`teamPolicies/${teamId}`);
+  const profileRef = db.doc(`users/${auth.uid}`);
   await db.runTransaction(async (transaction) => {
     const policySnapshot = await transaction.get(policyRef);
     if (policySnapshot.data()?.membershipApproval !== 'coachApproval') {
@@ -408,8 +460,15 @@ export const requestToJoinTeam = onCall(async (request: Phase2Request) => {
     if (existingRequest.exists && existingRequest.data()?.status === 'pending') {
       throw new HttpsError('already-exists', 'A join request is already pending.');
     }
+    // A requester has no membership doc yet, so the coach's approval queue cannot
+    // resolve their name through listTeamMembers. Denormalizing the display name
+    // is what keeps the queue from reading "New applicant · abc123…".
+    const profile = await transaction.get(profileRef);
+    const profileName = typeof profile.data()?.displayName === 'string' ? String(profile.data()?.displayName).trim() : '';
+    const tokenName = typeof request.auth?.token.name === 'string' ? request.auth.token.name.trim() : '';
+    const displayName = (profileName || tokenName || 'New applicant').slice(0, 80);
     const now = FieldValue.serverTimestamp();
-    transaction.set(requestRef, { teamId, userId: auth.uid, requestedRole: 'student', status: 'pending', createdAt: existingRequest.data()?.createdAt ?? now, updatedAt: now });
+    transaction.set(requestRef, { teamId, userId: auth.uid, displayName, requestedRole: 'student', status: 'pending', createdAt: existingRequest.data()?.createdAt ?? now, updatedAt: now });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({
       type: 'membership.changed', actorUserId: auth.uid, teamId, targetUserId: auth.uid, metadata: { status: 'pending' }
     }));
@@ -463,16 +522,25 @@ export const assignTeamRole = onCall(async (request: Phase2Request) => {
   const userId = requireString(getInput(request, 'userId'), 'User ID');
   const role = requireAssignableRole(getInput(request, 'role'));
   const db = getFirestore();
+  const operationRef = phase2OperationRef(request, teamId, 'role.assign');
   await db.runTransaction(async (transaction) => {
     await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
+    const operation = await transaction.get(operationRef);
+    if (operation.exists) {
+      const receipt = phase2OperationReceipt(operation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: 'role.assign' });
+      if (receipt.targetUserId !== userId) throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+      return;
+    }
     const membershipRef = db.doc(`memberships/${teamId}_${userId}`);
     const membership = await transaction.get(membershipRef);
     const current = membership.data();
     if (!membership.exists || current?.teamId !== teamId || current.status !== 'active') throw new HttpsError('not-found', 'Active membership not found.');
     const count = await activeCoachCount(transaction, teamId);
     assertNotLastCoach(count, String(current.role), String(current.status), role, 'active');
+    const now = FieldValue.serverTimestamp();
+    transaction.set(operationRef, { teamId, createdBy: admin.uid, kind: 'role.assign', targetUserId: userId, role, createdAt: now });
     if (current.role === role) return;
-    transaction.update(membershipRef, { role, updatedAt: FieldValue.serverTimestamp() });
+    transaction.update(membershipRef, { role, updatedAt: now });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'role.changed', actorUserId: admin.uid, teamId, targetUserId: userId, metadata: { previousRole: String(current.role), role } }));
   });
   return { teamId, userId, role };
@@ -484,16 +552,25 @@ export const updateMembershipStatus = onCall(async (request: Phase2Request) => {
   const userId = requireString(getInput(request, 'userId'), 'User ID');
   const status = requireMembershipStatus(getInput(request, 'status'));
   const db = getFirestore();
+  const operationRef = phase2OperationRef(request, teamId, 'membership.status');
   await db.runTransaction(async (transaction) => {
     await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
+    const operation = await transaction.get(operationRef);
+    if (operation.exists) {
+      const receipt = phase2OperationReceipt(operation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: 'membership.status' });
+      if (receipt.targetUserId !== userId) throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+      return;
+    }
     const membershipRef = db.doc(`memberships/${teamId}_${userId}`);
     const membership = await transaction.get(membershipRef);
     const current = membership.data();
     if (!membership.exists || current?.teamId !== teamId) throw new HttpsError('not-found', 'Membership not found.');
     const count = await activeCoachCount(transaction, teamId);
     assertNotLastCoach(count, String(current.role), String(current.status), String(current.role), status);
+    const now = FieldValue.serverTimestamp();
+    transaction.set(operationRef, { teamId, createdBy: admin.uid, kind: 'membership.status', targetUserId: userId, status, createdAt: now });
     if (current.status === status) return;
-    transaction.update(membershipRef, { status, updatedAt: FieldValue.serverTimestamp() });
+    transaction.update(membershipRef, { status, updatedAt: now });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'membership.changed', actorUserId: admin.uid, teamId, targetUserId: userId, metadata: { previousStatus: String(current.status), status } }));
   });
   return { teamId, userId, status };
@@ -521,8 +598,15 @@ export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
   const admin = await requireTeamAdmin(request, teamId);
   const targetUserId = requireString(getInput(request, 'targetUserId'), 'Target user ID');
   const db = getFirestore();
+  const operationRef = phase2OperationRef(request, teamId, 'leadership.transfer');
   await db.runTransaction(async (transaction) => {
     await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
+    const operation = await transaction.get(operationRef);
+    if (operation.exists) {
+      const receipt = phase2OperationReceipt(operation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: 'leadership.transfer' });
+      if (receipt.targetUserId !== targetUserId) throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+      return;
+    }
     const targetRef = db.doc(`memberships/${teamId}_${targetUserId}`);
     const target = await transaction.get(targetRef);
     if (!target.exists || target.data()?.status !== 'active') throw new HttpsError('failed-precondition', 'Leadership can only transfer to an active member.');
@@ -534,6 +618,7 @@ export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
     }
     transaction.update(targetRef, { role: 'teamLeader', updatedAt: now });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'role.changed', actorUserId: admin.uid, teamId, targetUserId, metadata: { role: 'teamLeader', action: 'transfer-leadership' } }));
+    transaction.set(operationRef, { teamId, createdBy: admin.uid, kind: 'leadership.transfer', targetUserId, createdAt: now });
   });
   return { teamId, targetUserId, role: 'teamLeader' as const };
 });
@@ -562,7 +647,20 @@ export const updatePrivacySettings = onCall(async (request: Phase2Request) => {
   const isMinor = getInput(request, 'isMinor');
   if (isMinor !== undefined && typeof isMinor !== 'boolean') throw new HttpsError('invalid-argument', 'Minor status must be boolean.');
   const db = getFirestore();
-  await db.doc(`privacySettings/${auth.uid}`).set({ userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(isMinor === undefined ? {} : { isMinor }), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  const privacyRef = db.doc(`privacySettings/${auth.uid}`);
+  // `isMinor` drives youth-safety defaults across the product, so the write and
+  // its audit trail have to land together or not at all.
+  await db.runTransaction(async (transaction) => {
+    await transaction.get(privacyRef);
+    const now = FieldValue.serverTimestamp();
+    transaction.set(privacyRef, { userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(isMinor === undefined ? {} : { isMinor }), updatedAt: now }, { merge: true });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({
+      type: 'sensitive.updated',
+      actorUserId: auth.uid,
+      targetResource: `privacySettings/${auth.uid}`,
+      metadata: { action: 'privacy.updated' }
+    }));
+  });
   return { userId: auth.uid, profileVisibility: 'teamOnly' as const, searchable: false as const };
 });
 
@@ -598,11 +696,25 @@ export const requestAccountDeletion = onCall(async (request: Phase2Request) => {
   return { status: 'pending' as const, auditEventId };
 });
 
+/**
+ * Replay guard for the safety-report receipt. A retried report must return the
+ * first report/case pair rather than opening a duplicate moderation case, and a
+ * receipt that belongs to a different reporter or team is never replayed.
+ */
+export function reportOperationResult(receipt: Record<string, unknown>, expected: { teamId: string; actorUserId: string }) {
+  phase2OperationReceipt(receipt, { ...expected, kind: 'report.create' });
+  return {
+    reportId: requireString(receipt.reportId, 'Stored report ID'),
+    moderationCaseId: requireString(receipt.moderationCaseId, 'Stored moderation case ID')
+  };
+}
+
 export const createReport = onCall(async (request: Phase2Request) => {
   const auth = await requireTeamMember(request, requireTeamId(request));
   const teamId = requireTeamId(request);
   const parsed = validateReportInput(phase2Data(request));
   const db = getFirestore();
+  const operationRef = phase2OperationRef(request, teamId, 'report');
   const reportRef = db.collection('reports').doc();
   const caseRef = db.collection('moderationCases').doc();
   const reportFields = {
@@ -613,14 +725,26 @@ export const createReport = onCall(async (request: Phase2Request) => {
     ...(parsed.targetResource === undefined ? {} : { targetResource: parsed.targetResource })
   };
   const now = FieldValue.serverTimestamp();
-  await db.runTransaction(async (transaction) => {
+  const committed = await db.runTransaction(async (transaction) => {
     await assertTeamMemberInTransaction(transaction, teamId, auth.uid);
+    const operation = await transaction.get(operationRef);
+    if (operation.exists) return reportOperationResult(operation.data() ?? {}, { teamId, actorUserId: auth.uid });
     transaction.set(reportRef, { id: reportRef.id, teamId, reporterUserId: auth.uid, ...reportFields, createdAt: now });
-    transaction.set(caseRef, { id: caseRef.id, teamId, reportId: reportRef.id, reporterUserId: auth.uid, ...reportFields, severity: 'medium', status: 'open', assignedTo: null, evidenceRef: parsed.targetResource ?? null, action: 'none', escalated: false, createdAt: now, updatedAt: now });
+    transaction.set(caseRef, { id: caseRef.id, teamId, reportId: reportRef.id, reporterUserId: auth.uid, ...reportFields, severity: 'medium', status: 'open', assignedTo: null, evidenceRef: parsed.targetResource ?? null, action: 'none', escalated: false, version: 1, createdAt: now, updatedAt: now });
+    transaction.set(operationRef, { teamId, createdBy: auth.uid, kind: 'report.create', reportId: reportRef.id, moderationCaseId: caseRef.id, createdAt: now });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'report.created', actorUserId: auth.uid, teamId, targetResource: `moderationCases/${caseRef.id}`, metadata: { reasonCode: parsed.reasonCode, severity: 'medium' } }));
+    return { reportId: reportRef.id, moderationCaseId: caseRef.id };
   });
-  return { reportId: reportRef.id, moderationCaseId: caseRef.id };
+  return committed;
 });
+
+export function moderationCaseVersion(value: unknown, label: string): number {
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 1 || version > 1_000_000) {
+    throw new HttpsError('invalid-argument', `${label} must be a positive integer.`);
+  }
+  return version;
+}
 
 export const updateModerationCase = onCall(async (request: Phase2Request) => {
   const teamId = requireTeamId(request);
@@ -638,13 +762,19 @@ export const updateModerationCase = onCall(async (request: Phase2Request) => {
   for (const key of ['severity', 'status', 'action'] as const) if (updates[key] !== undefined && !allowed[key].includes(updates[key] as never)) throw new HttpsError('invalid-argument', `Moderation ${key} is invalid.`);
   if (updates.assignedTo !== undefined && updates.assignedTo !== null) updates.assignedTo = requireString(updates.assignedTo, 'Assignee ID');
   if (updates.escalated !== undefined && typeof updates.escalated !== 'boolean') throw new HttpsError('invalid-argument', 'Escalation must be boolean.');
+  // A moderation case is the most safety-sensitive record in the product; two
+  // coaches triaging it at once must not silently overwrite each other.
+  const expectedVersion = moderationCaseVersion(getInput(request, 'expectedVersion'), 'Expected version');
   const db = getFirestore();
-  await db.runTransaction(async (transaction) => {
+  const nextVersion = await db.runTransaction(async (transaction) => {
     await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
     const caseRef = db.doc(`moderationCases/${caseId}`);
     const caseSnapshot = await transaction.get(caseRef);
     const current = caseSnapshot.data();
     if (!caseSnapshot.exists || current?.teamId !== teamId) throw new HttpsError('not-found', 'Moderation case not found.');
+    // Cases created before the version field existed default to 1.
+    const currentVersion = moderationCaseVersion(current.version ?? 1, 'Stored moderation case version');
+    if (currentVersion !== expectedVersion) throw new HttpsError('aborted', 'This moderation case changed while you were reviewing it. Reload the case before saving.');
     if (updates.action === 'remove-content' && typeof current.targetResource === 'string') {
       const [collectionName, contentId] = current.targetResource.split('/');
       const contentReference = current.targetResource.split('/');
@@ -656,11 +786,116 @@ export const updateModerationCase = onCall(async (request: Phase2Request) => {
       if (!contentSnapshot.exists || contentSnapshot.data()?.teamId !== teamId) throw new HttpsError('not-found', 'Reported content not found in this team.');
       transaction.update(contentRef, collectionName === 'videos' ? { publicationStatus: 'removed', updatedAt: FieldValue.serverTimestamp() } : { moderationStatus: 'removed', updatedAt: FieldValue.serverTimestamp() });
     }
-    transaction.update(caseRef, { ...updates, updatedAt: FieldValue.serverTimestamp() });
+    transaction.update(caseRef, { ...updates, version: currentVersion + 1, updatedAt: FieldValue.serverTimestamp() });
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'moderation.updated', actorUserId: admin.uid, teamId, targetResource: `moderationCases/${caseId}`, ...(current.targetUserId ? { targetUserId: String(current.targetUserId) } : {}), metadata: { action: String(updates.action ?? 'case.updated'), caseStatus: String(updates.status ?? current.status), severity: String(updates.severity ?? current.severity) } }));
+    return currentVersion + 1;
   });
-  return { caseId, ...updates };
+  return { caseId, ...updates, version: nextVersion };
 });
+
+/**
+ * Team roster with display names.
+ *
+ * `users/{uid}` is readable only by its owner (firestore.rules), which is the
+ * right default for a product used by minors — but it means the client cannot
+ * turn a membership's userId into a name. Without this callable every screen
+ * has to render raw Firebase UIDs. The Admin SDK does the join here and
+ * returns only what a teammate is allowed to see: name, avatar, role, status.
+ * Email and every other profile field stay private.
+ */
+const ROSTER_LIMIT = 200;
+
+export const listTeamMembers = onCall(async (request) => {
+  const typedRequest = request as CallableRequest<Record<string, unknown>>;
+  const teamId = requireTeamId(typedRequest);
+  const actor = await requireTeamMember(typedRequest, teamId);
+  const db = getFirestore();
+  const memberships = await db
+    .collection('memberships')
+    .where('teamId', '==', teamId)
+    .limit(ROSTER_LIMIT)
+    .get();
+
+  // Only admins need to see people who are not active yet; everyone else sees
+  // the active roster so they can assign work and read author names.
+  const isAdmin = actor.platformAdmin === true || ['coach', 'teamLeader'].includes(String(actor.role));
+  const rows = memberships.docs
+    .map((doc) => doc.data())
+    .filter((membership) => isAdmin || membership.status === 'active');
+  if (rows.length === 0) return { members: [], truncated: false };
+
+  const userRefs = rows.map((membership) => db.doc(`users/${String(membership.userId)}`));
+  const users = await db.getAll(...userRefs);
+  const profiles = new Map(users.map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
+
+  const members = rows.map((membership) => {
+    const userId = String(membership.userId);
+    const profile = profiles.get(userId) ?? {};
+    const displayName = typeof profile.displayName === 'string' && profile.displayName.trim()
+      ? profile.displayName.trim()
+      : 'Team member';
+    return {
+      userId,
+      role: String(membership.role ?? 'student'),
+      status: String(membership.status ?? 'active'),
+      displayName,
+      photoURL: typeof profile.photoURL === 'string' && profile.photoURL.startsWith('https://') ? profile.photoURL : null,
+      initials: displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()
+    };
+  }).sort((left, right) => left.displayName.localeCompare(right.displayName));
+
+  return { members, truncated: memberships.size === ROSTER_LIMIT };
+});
+
+/**
+ * Nightly enforcement of every team's `messageRetentionDays` policy.
+ *
+ * The policy is a promise to families about how long student chat is kept, so
+ * it cannot depend on a coach remembering to open team settings. This walks
+ * every team policy and purges one page per team per run; a team with a large
+ * backlog drains over consecutive nights rather than in one long transaction.
+ *
+ * One team's failure must not stop the rest, so each is caught and logged. No
+ * message body is ever logged.
+ */
+const RETENTION_TEAM_PAGE_SIZE = 200;
+
+export const enforceMessageRetention = onSchedule(
+  { schedule: 'every 24 hours', timeZone: 'Etc/UTC', retryCount: 1 },
+  async () => {
+    const db = getFirestore();
+    const policies = await db.collection('teamPolicies').limit(RETENTION_TEAM_PAGE_SIZE).get();
+    let teamsProcessed = 0;
+    let messagesPurged = 0;
+    let teamsWithBacklog = 0;
+    let failures = 0;
+
+    for (const policy of policies.docs) {
+      const teamId = typeof policy.data().teamId === 'string' ? String(policy.data().teamId) : policy.id;
+      try {
+        const result = await purgeExpiredMessagesForTeam(teamId, 'system');
+        teamsProcessed += 1;
+        messagesPurged += result.deletedCount;
+        if (result.hasMore) teamsWithBacklog += 1;
+      } catch (error) {
+        failures += 1;
+        logger.error('Scheduled retention failed for a team.', {
+          teamId,
+          reason: error instanceof Error ? error.message : 'unknown'
+        });
+      }
+    }
+
+    logger.info('Scheduled message retention complete.', {
+      teamsProcessed,
+      messagesPurged,
+      teamsWithBacklog,
+      failures,
+      teamsScanned: policies.size,
+      truncated: policies.size === RETENTION_TEAM_PAGE_SIZE
+    });
+  }
+);
 
 export const createTask = onCall(async (request) => createTaskCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateTask = onCall(async (request) => updateTaskCommand(request as CallableRequest<Record<string, unknown>>));

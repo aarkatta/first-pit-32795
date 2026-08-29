@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export type StateVariant = 'loading' | 'empty' | 'error' | 'permission' | 'offline';
+export type StateVariant = 'loading' | 'empty' | 'success' | 'error' | 'permission' | 'offline';
 
 type StatePanelProps = {
   variant: StateVariant;
@@ -14,6 +14,7 @@ type StatePanelProps = {
 const variantLabels: Record<StateVariant, string> = {
   loading: 'Loading',
   empty: 'Empty',
+  success: 'Done',
   error: 'Error',
   permission: 'Permission denied',
   offline: 'Offline'

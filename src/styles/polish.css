@@ -196,10 +196,6 @@
   box-shadow: var(--edge-3d-dark), var(--elev-2);
 }
 
-.mission-card::after {
-  animation: fp-orbit 40s linear infinite;
-}
-
 .card h2,
 .card h3,
 .state-panel h3,
@@ -526,10 +522,6 @@ tbody tr:last-child td {
   transform: translateY(-2px) scale(1.05);
 }
 
-.mini-bot {
-  animation: fp-bob 3.2s ease-in-out infinite;
-}
-
 .ring {
   box-shadow: var(--edge-3d), var(--elev-1);
   animation: fp-pop var(--t-slow) var(--ease-spring) both;
@@ -558,37 +550,11 @@ tbody tr:last-child td {
   box-shadow: var(--edge-3d-dark), var(--elev-2);
 }
 
-/* ---------- Onboarding art: gentle 3D motion ---------- */
+/* ---------- Onboarding art ---------- */
 
 .onboarding-panel {
   border-radius: 0;
   box-shadow: -12px 0 40px rgba(0, 0, 0, 0.25);
-}
-
-.bot {
-  box-shadow: var(--edge-3d-acid), 0 35px 90px rgba(0, 0, 0, 0.35);
-  animation: fp-hover 5s ease-in-out infinite;
-}
-
-.orbit {
-  animation: fp-orbit 60s linear infinite;
-}
-
-.orbit-two {
-  animation-duration: 90s;
-  animation-direction: reverse;
-}
-
-.float-shape {
-  animation: fp-bob 4s ease-in-out infinite;
-}
-
-.shape-two {
-  animation-delay: -1.3s;
-}
-
-.shape-three {
-  animation-delay: -2.6s;
 }
 
 /* ---------- Kanban / modal ---------- */
@@ -678,21 +644,6 @@ tbody tr:last-child td {
   80% { transform: translateX(2px); }
 }
 
-@keyframes fp-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-@keyframes fp-hover {
-  0%, 100% { transform: translate(-50%, -50%) rotate(-4deg); }
-  50% { transform: translate(-50%, -56%) rotate(-1deg); }
-}
-
-@keyframes fp-orbit {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -714,10 +665,6 @@ tbody tr:last-child td {
   }
 
   .mini-bot,
-  .bot,
-  .orbit,
-  .float-shape,
-  .mission-card::after,
   .connection-status i,
   .state-panel--loading::before {
     animation: none;
@@ -732,10 +679,6 @@ tbody tr:last-child td {
 }
 
 [data-reduced-motion='true'] .mini-bot,
-[data-reduced-motion='true'] .bot,
-[data-reduced-motion='true'] .orbit,
-[data-reduced-motion='true'] .float-shape,
-[data-reduced-motion='true'] .mission-card::after,
 [data-reduced-motion='true'] .connection-status i,
 [data-reduced-motion='true'] .state-panel--loading::before {
   animation: none;

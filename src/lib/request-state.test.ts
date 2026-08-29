@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+import { getRequestState } from './request-state';
+
+describe('request state mapping', () => {
+  it('maps connectivity failures to a retryable offline state', () => {
+    expect(getRequestState({ code: 'functions/unavailable' }, true)).toMatchObject({ variant: 'offline' });
+    expect(getRequestState(new Error('request failed'), false)).toMatchObject({ variant: 'offline' });
+  });
+
+  it('maps authorization failures to a plain-language permission state', () => {
+    expect(getRequestState({ code: 'permission-denied' }, true)).toMatchObject({ variant: 'permission' });
+  });
+
+  it('preserves useful messages for unknown failures', () => {
+    expect(getRequestState(new Error('The server is unavailable.'), true)).toMatchObject({
+      variant: 'error',
+      message: 'The server is unavailable.'
+    });
+  });
+});

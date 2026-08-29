@@ -13,7 +13,7 @@ const localEmulatorHostSchema = z
 
 const clientEnvSchema = z.object({
   VITE_APP_NAME: z.string().min(1).default('First Pit'),
-  VITE_APP_TAGLINE: z.string().min(1).default('Phase 1 foundation'),
+  VITE_APP_TAGLINE: z.string().min(1).default('FLL team management'),
   VITE_FIREBASE_API_KEY: z.string().min(1),
   VITE_FIREBASE_AUTH_DOMAIN: z.string().min(1),
   VITE_FIREBASE_PROJECT_ID: z.string().min(1),

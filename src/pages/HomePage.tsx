@@ -9,7 +9,9 @@ import { useTeamContext } from '@/lib/team-context';
 import { getDashboard, type DashboardResult } from '@/lib/phase7-service';
 import { markNotificationRead } from '@/lib/phase3-service';
 import { safeInternalRoute } from '@/lib/notification-route';
-import { toDate } from '@/lib/dates';
+import { formatDateLabel, toDate } from '@/lib/dates';
+import { dueTone } from '@/lib/board-view';
+import { initialsOf, listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 
 function roleLabel(role: string | undefined) {
   return role === 'teamLeader' ? 'Team leader' : role ? role[0].toUpperCase() + role.slice(1) : 'Member';
@@ -43,7 +45,9 @@ export function HomePage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
+  const [members, setMembers] = useState<Map<string, TeamMember>>(() => new Map());
   const dashboardRequest = useRef(0);
+  const rosterRequest = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!user || !activeTeam?.teamId) return;
@@ -85,6 +89,25 @@ export function HomePage() {
     return () => { current = false; };
   }, [activeTeam?.teamId, user]);
 
+  // `users/{uid}` is owner-readable, so assignees only become names through the
+  // roster callable. Without it every task row printed a raw Firebase UID.
+  useEffect(() => {
+    let current = true;
+    const requestId = ++rosterRequest.current;
+    if (!user || !activeTeam?.teamId) {
+      setMembers(new Map());
+      return () => { current = false; };
+    }
+    void listTeamMembers(activeTeam.teamId).then((roster) => {
+      if (current && requestId === rosterRequest.current) setMembers(memberMap(roster.members));
+    }).catch((rosterError: unknown) => {
+      if (!current || requestId !== rosterRequest.current) return;
+      setMembers(new Map());
+      setRequestState(getRequestState(rosterError, navigator.onLine));
+    });
+    return () => { current = false; };
+  }, [activeTeam?.teamId, user]);
+
   if (authStatus === 'loading' || teamStatus === 'loading') return <StatePanel variant="loading" title="Loading your dashboard" message="First Pit is checking your secure session and active team memberships." />;
 
   if (authStatus !== 'authenticated' || !user) {
@@ -109,7 +132,7 @@ export function HomePage() {
 
   function openDeepLink(deepLink: string, teamId: string, notificationId: string, unread: boolean) {
     if (teams.some((team) => team.teamId === teamId)) setActiveTeamId(teamId);
-    if (unread) void markNotificationRead(teamId, notificationId).catch(() => undefined);
+    if (unread) void markNotificationRead(teamId, notificationId).catch((readError: unknown) => setRequestState(getRequestState(readError, online)));
     navigate(safeInternalRoute(deepLink));
   }
 
@@ -129,22 +152,29 @@ export function HomePage() {
 
       <section className="hero-grid">
         <article className="mission-card">
-          <div><span className="eyebrow light">{nextEvent ? `NEXT UP · ${displayDate(nextEvent.startsAt)}` : 'TEAM DASHBOARD'}</span><h3>{nextEvent ? String(nextEvent.title ?? 'Team event') : dashboard.team.name}</h3><p>{nextEvent ? `Your next ${String(nextEvent.eventType ?? 'team event')} is ready in the calendar.` : 'Create the first task or event so everyone has a clear next step.'}</p><Link to="/coordination">Open project board →</Link></div>
+          <div><span className="eyebrow light">{nextEvent ? `NEXT UP · ${displayDate(nextEvent.startsAt)}` : 'TEAM DASHBOARD'}</span><h3>{nextEvent ? nextEvent.title || 'Team event' : dashboard.team.name}</h3><p>{nextEvent ? `Your next ${nextEvent.eventType ?? 'team event'} is ready in the calendar.` : 'Create the first task or event so everyone has a clear next step.'}</p><Link to="/coordination">Open project board →</Link></div>
           <div className="mission-visual"><span>{String(summary.upcomingEventCount).padStart(2, '0')}</span><small>EVENTS</small><div className="mini-bot">▣</div></div>
         </article>
-        <article className="score-card"><span className="eyebrow">TASK COMPLETION</span><div className="ring" style={{ '--value': `${readiness * 3.6}deg` } as CSSProperties}><strong>{readiness}%</strong></div><p><b>{summary.completedTaskCount} complete.</b> {summary.taskCount} team tasks tracked.</p></article>
+        <article className="score-card"><span className="eyebrow">TASK COMPLETION</span><div className="ring" role="img" aria-label={`${readiness}% of team tasks complete`} style={{ '--value': String(readiness) } as CSSProperties}><strong>{readiness}%</strong></div><p><b>{summary.completedTaskCount} complete.</b> {summary.taskCount} team tasks tracked.</p></article>
       </section>
 
       <section className="section-heading"><div><span className="eyebrow">DASHBOARD</span><h3>Today’s command center</h3></div><Link to="/coordination">Open calendar <span>→</span></Link></section>
       <div className="widget-grid">{widgets.map(([title, detail]) => <article key={title}><strong>{title}</strong><small>{detail}</small></article>)}</div>
 
       <section className="section-heading"><div><span className="eyebrow">FOCUS</span><h3>Assigned tasks</h3></div><Link to="/coordination">View full board <span>→</span></Link></section>
-      {dashboard.tasks.length ? <div className="task-list">{dashboard.tasks.slice(0, 5).map((task) => { const taskState = taskStatus(task.status); const project = task.projectId ? `project=${encodeURIComponent(String(task.projectId))}&` : ''; return <Link to={`/coordination?${project}task=${encodeURIComponent(String(task.id))}`} key={String(task.id)}><article><span className={`status-dot ${taskState.className}`} /><div className="task-copy"><strong>{String(task.title ?? 'Task')}</strong><small>{task.assignedTo ? `Assigned to ${String(task.assignedTo)}` : 'Unassigned'}</small></div><span className={`status-pill ${taskState.className}`}>{taskState.label}</span><span className="avatar">FP</span><span className="due">Open</span></article></Link>; })}</div> : <div className="board-tip"><span>START</span><p>{emptyCopy.message}</p><Link to={emptyCopy.action}>{emptyCopy.label}</Link></div>}
+      {dashboard.tasks.length ? <div className="task-list">{dashboard.tasks.slice(0, 5).map((task) => {
+        const taskState = taskStatus(task.status);
+        const project = task.projectId ? `project=${encodeURIComponent(task.projectId)}&` : '';
+        const assignedTo = task.assignedTo ?? null;
+        const assigneeName = nameOf(members, assignedTo);
+        const dueDate = toDate(task.dueAt);
+        return <Link to={`/coordination?${project}task=${encodeURIComponent(task.id)}`} key={task.id}><article><span className={`status-dot ${taskState.className}`} /><div className="task-copy"><strong>{task.title || 'Task'}</strong><small>{assignedTo ? `Assigned to ${assigneeName}` : 'Unassigned'}</small></div><span className={`status-pill ${taskState.className}`}>{taskState.label}</span><span className="avatar" title={assigneeName} aria-hidden="true">{initialsOf(members, assignedTo)}</span><span className={`due due--${dueTone(dueDate, new Date())}`}>{formatDateLabel(task.dueAt, 'No due date')}</span></article></Link>;
+      })}</div> : <div className="board-tip"><span>START</span><p>{emptyCopy.message}</p><Link to={emptyCopy.action}>{emptyCopy.label}</Link></div>}
 
       <section className="section-heading"><div><span className="eyebrow">ROLE INTERFACE</span><h3>{roleLabel(dashboard.role)} dashboard</h3></div><Link to="/profile">Manage profile <span>→</span></Link></section>
-      <div className="role-interface-grid"><article className="active"><strong>{emptyCopy.title}</strong><p>{emptyCopy.message}</p></article><article><strong>Goal progress</strong><p>{summary.goalCount} team goal{summary.goalCount === 1 ? '' : 's'}; showing up to 20 recently updated.</p></article><article><strong>Recent scoring</strong><p>{dashboard.scores.length ? `${Number(dashboard.scores[0].totalPoints ?? 0)} points in the latest session.` : 'No score recorded yet.'}</p></article><article><strong>Team privacy</strong><p>Only authorized active team members can see this dashboard.</p></article></div>
+      <div className="role-interface-grid"><article className="active"><strong>{emptyCopy.title}</strong><p>{emptyCopy.message}</p></article><article><strong>Goal progress</strong><p>{summary.goalCount} team goal{summary.goalCount === 1 ? '' : 's'}; showing up to 20 recently updated.</p></article><article><strong>Recent scoring</strong><p>{dashboard.scores.length ? `${dashboard.scores[0].totalPoints ?? 0} points in the latest session.` : 'No score recorded yet.'}</p></article><article><strong>Team privacy</strong><p>Only authorized active team members can see this dashboard.</p></article></div>
 
-      <section className="chip-panel"><div><span className="eyebrow">NOTIFICATIONS</span><h3>Notifications</h3></div><div>{dashboard.notifications.length ? dashboard.notifications.slice(0, 8).map((notification) => <button key={String(notification.id)} type="button" onClick={() => openDeepLink(String(notification.deepLink ?? '/coordination'), String(notification.teamId ?? activeTeam.teamId), String(notification.id), notification.readAt == null)}>{String(notification.title ?? 'Notification')}{notification.readAt ? '' : ' · New'}</button>) : <span>Nothing needs your attention</span>}</div></section>
+      <section className="chip-panel"><div><span className="eyebrow">NOTIFICATIONS</span><h3>Notifications</h3></div><div>{dashboard.notifications.length ? dashboard.notifications.slice(0, 8).map((notification) => <button key={notification.id} type="button" onClick={() => openDeepLink(notification.deepLink ?? '/coordination', notification.teamId || activeTeam.teamId, notification.id, notification.readAt == null)}>{notification.title || 'Notification'}{notification.readAt ? '' : ' · New'}</button>) : <span>Nothing needs your attention</span>}</div></section>
     </div>
   );
 }
