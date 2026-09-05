@@ -20,16 +20,18 @@ const EXPECTED_CALLABLES = [
   'correctScoreSession', 'createAnnouncement', 'createAnswer', 'createChannel', 'createEvent',
   'createFileMetadata', 'createGoal', 'createInvitation', 'createKanbanTask', 'createPoll',
   'createProject', 'createQuestion', 'createQuestionComment', 'createReport', 'createScoreDefinition',
-  'createScoreSession', 'createTask', 'createTeam', 'createVideo', 'deleteMessage',
-  'ensureDefaultProject', 'exportScoreReport', 'exportTeamMessages', 'getDashboard', 'getPollResults',
-  'globalSearch', 'leaveTeam', 'linkFileToTask', 'listPolls', 'listScoreDefinitions',
-  'listScoreSessions', 'listTeamMembers', 'markChannelRead', 'markNotificationRead', 'moveTaskCard',
-  'purgeExpiredMessages', 'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn', 'reorderProjectColumns',
-  'requestAccountDeletion', 'requestToJoinTeam', 'revokeInvitation', 'searchMessages', 'searchQuestions',
-  'searchVideos', 'sendMessage', 'toggleChannelMute', 'toggleReaction', 'toggleSavedQuestion',
-  'toggleVideoFavorite', 'transferTeamLeadership', 'updateGoal', 'updateMembershipStatus', 'updateModerationCase',
-  'updatePrivacySettings', 'updateProfileSettings', 'updateProject', 'updateProjectColumn', 'updateTask',
-  'updateTeamPolicy', 'updateVideoPublication', 'votePoll', 'voteQuestion'
+  'createScoreSession', 'createTask', 'createTeam', 'createVideo', 'deleteEvent',
+  'deleteMessage', 'disconnectGoogle', 'ensureDefaultProject', 'exportScoreReport', 'exportTeamMessages',
+  'getDashboard', 'getGoogleConnection', 'getPollResults', 'getTeamCalendarSync', 'globalSearch',
+  'leaveTeam', 'linkFileToTask', 'listGoogleCalendars', 'listMyGoogleEvents', 'listPolls',
+  'listScoreDefinitions', 'listScoreSessions', 'listTeamMembers', 'markChannelRead', 'markNotificationRead',
+  'moveTaskCard', 'purgeExpiredMessages', 'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn',
+  'reorderProjectColumns', 'requestAccountDeletion', 'requestToJoinTeam', 'revokeInvitation', 'searchMessages',
+  'searchQuestions', 'searchVideos', 'sendMessage', 'setTeamCalendarSync', 'setTeamChatLink',
+  'startGoogleOAuth', 'syncTeamCalendar', 'toggleChannelMute', 'toggleReaction', 'toggleSavedQuestion',
+  'toggleVideoFavorite', 'transferTeamLeadership', 'updateEvent', 'updateGoal', 'updateMembershipStatus',
+  'updateModerationCase', 'updatePrivacySettings', 'updateProfileSettings', 'updateProject', 'updateProjectColumn',
+  'updateTask', 'updateTeamPolicy', 'updateVideoPublication', 'votePoll', 'voteQuestion'
 ] as const;
 
 /**
@@ -37,7 +39,7 @@ const EXPECTED_CALLABLES = [
  * the nightly retention schedule (Cloud Scheduler invokes it, no client can),
  * and pure helpers exported for tests.
  */
-const EXPECTED_NON_CALLABLES = ['api', 'enforceMessageRetention', 'handleApiRequest', 'moderationCaseVersion', 'phase2OperationReceipt', 'reportOperationResult'] as const;
+const EXPECTED_NON_CALLABLES = ['api', 'enforceMessageRetention', 'handleApiRequest', 'handleGoogleOAuthCallback', 'handleRequestWithIntegrations', 'moderationCaseVersion', 'phase2OperationReceipt', 'reportOperationResult', 'syncGoogleCalendars'] as const;
 
 /**
  * A client callable, specifically. Scheduled and HTTP functions also expose

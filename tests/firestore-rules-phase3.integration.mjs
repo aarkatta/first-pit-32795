@@ -49,8 +49,18 @@ try {
   await assertFails(setDoc(doc(student, 'projects/project-1'), { teamId, name: 'forged' }));
   await assertFails(setDoc(doc(coach, 'tasks/task-1'), { teamId, title: 'forged' }));
   await assertSucceeds(getDoc(doc(platformAdmin, 'tasks/task-1')));
+
+  // Google integration state holds live OAuth refresh tokens and the CSRF state
+  // that guards the consent callback. No client role reads or writes it — not a
+  // coach, not a platform admin. Status reaches the UI only through callables.
+  for (const [label, db] of [['student', student], ['coach', coach], ['parent', parent], ['platformAdmin', platformAdmin]]) {
+    for (const path of ['googleIntegrations/student-1', 'googleOAuthStates/state-1', `googleCalendarSync/${teamId}`]) {
+      await assertFails(getDoc(doc(db, path)), `${label} must not read ${path}`);
+      await assertFails(setDoc(doc(db, path), { teamId, forged: true }), `${label} must not write ${path}`);
+    }
+  }
 } finally {
   await env.cleanup();
 }
 
-globalThis.console.log('Phase 3 Firestore role matrix passed for Student, Coach, Mentor, Parent, and Platform Admin.');
+globalThis.console.log('Phase 3 Firestore role matrix passed for Student, Coach, Mentor, Parent, and Platform Admin, including deny-all on the Google integration collections.');

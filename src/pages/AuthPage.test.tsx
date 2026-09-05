@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   signInWithEmail: vi.fn(),
   signUpWithEmail: vi.fn(),
   signInWithGoogle: vi.fn(),
+  completeGoogleRedirect: vi.fn(),
   isDismissedPopup: vi.fn(),
   resendVerificationEmail: vi.fn(),
   sendPasswordRecovery: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/lib/auth', () => ({
   signInWithEmail: mocks.signInWithEmail,
   signUpWithEmail: mocks.signUpWithEmail,
   signInWithGoogle: mocks.signInWithGoogle,
+  completeGoogleRedirect: mocks.completeGoogleRedirect,
   isDismissedPopup: mocks.isDismissedPopup,
   resendVerificationEmail: mocks.resendVerificationEmail,
   VerificationEmailDeliveryError: mocks.VerificationEmailDeliveryError,
@@ -48,6 +50,8 @@ beforeEach(() => {
   mocks.resendVerificationEmail.mockResolvedValue(undefined);
   mocks.bootstrapUserProfile.mockResolvedValue(undefined);
   mocks.signInWithGoogle.mockResolvedValue({ user: { uid: 'google-user' } });
+  // No redirect in flight on a normal page load.
+  mocks.completeGoogleRedirect.mockResolvedValue(null);
   mocks.isDismissedPopup.mockReturnValue(false);
 });
 

@@ -239,6 +239,11 @@ export function deleteMessage(teamId: string, messageId: string) {
   return call<{ teamId: string; messageId: string }, { messageId: string; deleted: true }>('deleteMessage', { teamId, messageId });
 }
 
+/** Applies the team's retention policy immediately instead of waiting for the nightly schedule. */
+export function purgeExpiredMessages(teamId: string) {
+  return call<{ teamId: string }, { teamId: string; purged: number; hasMore: boolean }>('purgeExpiredMessages', { teamId });
+}
+
 export function exportTeamMessages(teamId: string, channelId?: string) {
   return call<{ teamId: string; channelId?: string }, { teamId: string; channelId: string | null; messages: ChatMessage[]; truncated: boolean }>('exportTeamMessages', { teamId, ...(channelId ? { channelId } : {}) });
 }

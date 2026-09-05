@@ -424,6 +424,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Google integration state is Admin SDK only, with no client path at all.
+    // A refresh token is a live credential for a person's calendar and the
+    // OAuth state document is the CSRF defence for the callback, so neither is
+    // ever readable by a signed-in client. Connection status and the team sync
+    // settings reach the UI through callables, which can redact.
+    match /googleIntegrations/{userId} {
+      allow read, write: if false;
+    }
+
+    match /googleOAuthStates/{state} {
+      allow read, write: if false;
+    }
+
+    match /googleCalendarSync/{teamId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

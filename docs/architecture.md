@@ -19,6 +19,8 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Knowledge and polls](#knowledge-and-polls)
 - [Scorer and practice history](#scorer-and-practice-history)
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
+- [Authentication hardening](#authentication-hardening)
+- [Google Calendar and Google Chat integration](#google-calendar-and-google-chat-integration)
 - [v1 launch hardening (2026-08-29)](#v1-launch-hardening-2026-08-29)
 - [Hardening and pilot release runbook](#hardening-and-pilot-release-runbook)
 
@@ -516,6 +518,163 @@ legacy `/tracker` and `/calendar` links to the current coordination route.
 Profile settings persist display name, picture URL, theme, accessibility
 preferences, notification preferences, and the privacy-safe minor flag. Safety
 notifications are always written as enabled.
+
+---
+
+## Authentication hardening
+
+### Sign-in transports
+
+`signInWithPopup` was the only Google path, and it cannot work in the Capacitor
+iOS shell: at a `capacitor://` origin a popup has no opener to post back to.
+`signInWithGoogle` now picks its transport:
+
+| Environment | Transport |
+| --- | --- |
+| Desktop / mobile web | `signInWithPopup` |
+| Capacitor shell (`Capacitor.isNativePlatform()`) | `signInWithRedirect` |
+| Web where the popup is blocked or storage is unusable | falls back to `signInWithRedirect` |
+
+It resolves to `null` when a redirect has started, because the page is
+navigating away and there is no credential yet. `completeGoogleRedirect`
+(`getRedirectResult`) collects it on the next load from an effect in `AuthPage`;
+`AuthProvider` still creates the private profile from its own session listener,
+so the redirect path only has to route the user and surface failures. A genuine
+popup failure is rethrown rather than silently converted to a redirect.
+
+**Known limit, not yet closed.** The redirect transport is what makes native
+sign-in possible, but a production iOS build also needs the redirect to return
+to the app — an `authDomain` the WebView can reach plus the matching URL scheme
+in Xcode. Where that proves unreliable, the supported answer is the
+`@capacitor-firebase/authentication` plugin, which uses the native Google SDK.
+That is a native-packaging task and cannot be rehearsed in the emulator, so it
+stays open; this change removes the transport that could never have worked.
+
+### Session persistence
+
+`configureAuthPersistence` sets `indexedDBLocalPersistence` and falls back to
+`browserLocalPersistence`. `browserLocalPersistence` alone loses the session in
+a WKWebView whose local storage the OS evicts, and throws outright in Safari
+private mode — where the fallback is what keeps sign-in working at all. The
+listener is still registered only after persistence resolves, so a sign-in
+observed in between cannot be stored under the wrong persistence.
+
+### Email verification is enforced, not suggested
+
+`requiresEmailVerification` is true only for an account carrying a `password`
+provider with `emailVerified === false`. Google has already proved the address,
+so a federated-only account is never gated.
+
+`ProtectedRoute` renders `EmailVerificationGate` in front of every protected
+route for such a user. This is a gate rather than a banner because an unverified
+address is exactly how an emailed invitation could be accepted by someone who
+does not control it — and here that invitation grants access to a team of
+minors. The only exits are verifying or signing out, and sign-out stays enabled
+offline so nobody is stranded.
+
+`user.reload()` mutates the existing `User` and fires no auth-state change, so
+the gate reloads the page once verification succeeds rather than pretending
+React would re-render.
+
+**This changes behavior for existing accounts:** anyone already signed in with
+an unverified password account meets the gate on their next protected
+navigation.
+
+### Provider configuration this depends on
+
+Email/Password and Google must both be enabled in the project's Authentication
+providers, and every origin serving the app — the Vercel production domain, any
+preview domain, and `localhost` — must be listed under Authorized domains.
+`AuthPage` already maps `auth/operation-not-allowed`,
+`auth/configuration-not-found` and `auth/unauthorized-domain` to plain-language
+messages, so a missing provider surfaces as guidance rather than a stack trace.
+This is console configuration; it cannot be asserted from the repository.
+
+---
+
+## Google Calendar and Google Chat integration
+
+### Why the two halves are not symmetric
+
+The product ask was "show Google Chat and Google Calendar inside First Pit".
+Calendar supports that; Chat does not, for two independent reasons:
+
+- `chat.google.com` and `mail.google.com/chat` both serve
+  `X-Frame-Options: SAMEORIGIN`, so no embed is possible.
+- The Google Chat API requires a **Business or Enterprise Google Workspace
+  account** (`developers.google.com/workspace/chat/get-members`). FLL students,
+  parents and coaches are overwhelmingly on consumer `@gmail.com` accounts,
+  which cannot use it at all.
+
+`calendar.google.com/calendar/embed` sets no framing restriction and the
+Calendar API works for consumer accounts, so Calendar is a real integration and
+Chat is a hand-off link. First Pit's own chat therefore remains the messaging
+surface, which also keeps coach moderation, retention and parent visibility
+applicable — none of which survive a move to Google Chat.
+
+### Calendar: authorization model
+
+`functions/src/google-calendar.ts` owns the whole integration. It uses no Google
+SDK; token exchange and the Calendar REST API are plain `fetch` calls, which
+keeps cold start small and the validators unit-testable.
+
+Three collections, all `allow read, write: if false` — no client path at all:
+
+| Collection | Contents |
+| --- | --- |
+| `googleIntegrations/{userId}` | refresh token, cached access token, granted scopes, Google email |
+| `googleOAuthStates/{state}` | single-use CSRF state binding a consent redirect to the user who began it |
+| `googleCalendarSync/{teamId}` | which calendar mirrors the team, whose account drives it, the sync cursor |
+
+Refresh tokens are AES-256-GCM encrypted with `GOOGLE_TOKEN_ENCRYPTION_KEY`
+before they reach Firestore, so a database export is not a set of live Google
+credentials. Connection status reaches the UI through callables, never a direct
+read.
+
+The `/google/oauth/callback` route on the existing `api` function is
+unauthenticated by necessity — Google redirects a browser to it — and runs
+before `applyCors`, since a top-level navigation carries no `Origin` header. All
+trust rests on the single-use state document, which is consumed before the token
+exchange so a replayed callback cannot mint a second credential.
+
+### Calendar: two-way sync
+
+Correlation is by `extendedProperties.private.firstPitEventId` on the Google
+event plus `googleEventId` on the First Pit event. Conflict resolution is
+last-writer-wins on Google's own `updated` stamp, compared against the
+`googleSyncedAt` already applied.
+
+That comparison is what prevents the echo loop: a push records the `updated`
+value Google returns, so the same change coming back on the next pull is not
+strictly newer and is ignored. `googlePushPending` is the outbound work queue —
+`createEvent` and `updateEvent` set it, a successful push clears it — so an
+interrupted run resumes rather than re-pushing the calendar.
+
+Pull uses Google's `syncToken`; a `410` means the cursor aged out and is
+documented as "discard and full-sync", so it is handled rather than surfaced.
+Runs are bounded (`MAX_SYNC_EVENTS_PER_RUN`, `MAX_TEAMS_PER_SCHEDULED_RUN`).
+`syncGoogleCalendars` polls every 30 minutes; Google's push channels need a
+verified public HTTPS endpoint, which is a deployment concern the emulator
+cannot rehearse.
+
+A cancelled remote event deletes the local mirror only when `source === 'google'`.
+An event that originated in First Pit is kept and merely unlinked — the team owns
+its own record.
+
+### Configuration
+
+Server-side only; none of these may become `VITE_*` variables:
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+`GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `APP_BASE_URL`.
+See `.env.production.example`. With none of them set the integration reports
+`failed-precondition` and the rest of the app is unaffected.
+
+### Event lifecycle gap this closed
+
+Events previously had `createEvent` and nothing else — no edit, no delete. Both
+now exist (`updateEvent`, `deleteEvent`) with the repo's optimistic-concurrency
+contract (`expectedVersion`) and idempotency receipts, because two-way sync is
+meaningless if an event can never change.
 
 ---
 

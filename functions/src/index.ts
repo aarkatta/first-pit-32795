@@ -32,9 +32,24 @@ import {
   createTask as createTaskCommand,
   linkFileToTask as linkFileToTaskCommand,
   markNotificationRead as markNotificationReadCommand,
+  deleteEvent as deleteEventCommand,
+  updateEvent as updateEventCommand,
   updateGoal as updateGoalCommand,
   updateTask as updateTaskCommand
 } from './phase3.js';
+import {
+  completeGoogleOAuth,
+  disconnectGoogle as disconnectGoogleCommand,
+  getGoogleConnection as getGoogleConnectionCommand,
+  getTeamCalendarSync as getTeamCalendarSyncCommand,
+  listGoogleCalendars as listGoogleCalendarsCommand,
+  listMyGoogleEvents as listMyGoogleEventsCommand,
+  setTeamCalendarSync as setTeamCalendarSyncCommand,
+  setTeamChatLink as setTeamChatLinkCommand,
+  startGoogleOAuth as startGoogleOAuthCommand,
+  syncAllTeamCalendars,
+  syncTeamCalendar as syncTeamCalendarCommand
+} from './google-calendar.js';
 import {
   addProjectColumn as addProjectColumnCommand,
   archiveProject as archiveProjectCommand,
@@ -902,6 +917,17 @@ export const updateTask = onCall(async (request) => updateTaskCommand(request as
 export const createGoal = onCall(async (request) => createGoalCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateGoal = onCall(async (request) => updateGoalCommand(request as CallableRequest<Record<string, unknown>>));
 export const createEvent = onCall(async (request) => createEventCommand(request as CallableRequest<Record<string, unknown>>));
+export const updateEvent = onCall(async (request) => updateEventCommand(request as CallableRequest<Record<string, unknown>>));
+export const deleteEvent = onCall(async (request) => deleteEventCommand(request as CallableRequest<Record<string, unknown>>));
+export const startGoogleOAuth = onCall(async (request) => startGoogleOAuthCommand(request as CallableRequest<Record<string, unknown>>));
+export const getGoogleConnection = onCall(async (request) => getGoogleConnectionCommand(request as CallableRequest<Record<string, unknown>>));
+export const disconnectGoogle = onCall(async (request) => disconnectGoogleCommand(request as CallableRequest<Record<string, unknown>>));
+export const listGoogleCalendars = onCall(async (request) => listGoogleCalendarsCommand(request as CallableRequest<Record<string, unknown>>));
+export const listMyGoogleEvents = onCall(async (request) => listMyGoogleEventsCommand(request as CallableRequest<Record<string, unknown>>));
+export const setTeamCalendarSync = onCall(async (request) => setTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
+export const getTeamCalendarSync = onCall(async (request) => getTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
+export const syncTeamCalendar = onCall(async (request) => syncTeamCalendarCommand(request as CallableRequest<Record<string, unknown>>));
+export const setTeamChatLink = onCall(async (request) => setTeamChatLinkCommand(request as CallableRequest<Record<string, unknown>>));
 export const markNotificationRead = onCall(async (request) => markNotificationReadCommand(request as CallableRequest<Record<string, unknown>>));
 export const createFileMetadata = onCall(async (request) => createFileMetadataCommand(request as CallableRequest<Record<string, unknown>>));
 export const completeFileUpload = onCall(async (request) => completeFileUploadCommand(request as CallableRequest<Record<string, unknown>>));
@@ -989,4 +1015,59 @@ export function handleApiRequest(req: Request, res: Response): void {
   });
 }
 
-export const api = onRequest({ cors: false }, handleApiRequest);
+/**
+ * Google redirects a browser here after consent, so this route is
+ * unauthenticated by necessity and runs before `applyCors` — a top-level
+ * navigation carries no Origin header the allowlist could match. Every trust
+ * decision rests on the single-use `state` document instead. The authorization
+ * code is never echoed back into the response or the logs.
+ */
+export async function handleGoogleOAuthCallback(req: Request, res: Response): Promise<void> {
+  const base = (process.env.APP_BASE_URL ?? '').trim().replace(/\/$/, '');
+  const finish = (status: string) => {
+    if (!base) {
+      res.status(status === 'connected' ? 200 : 400).send(`Google Calendar: ${status}. You can close this window and return to First Pit.`);
+      return;
+    }
+    res.redirect(303, `${base}/profile?google=${status}`);
+  };
+  if (typeof req.query.error === 'string' && req.query.error) return finish('denied');
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  if (!code || !state) return finish('invalid');
+  try {
+    await completeGoogleOAuth(code, state);
+    finish('connected');
+  } catch (error) {
+    logger.error('google.oauth.callback.failed', { reason: error instanceof HttpsError ? error.code : 'internal' });
+    finish('failed');
+  }
+}
+
+export async function handleRequestWithIntegrations(req: Request, res: Response): Promise<void> {
+  if (req.path === '/google/oauth/callback') {
+    if (req.method !== 'GET') {
+      res.set('Allow', 'GET');
+      res.status(405).json({ ok: false, error: 'Method not allowed.' });
+      return;
+    }
+    await handleGoogleOAuthCallback(req, res);
+    return;
+  }
+  handleApiRequest(req, res);
+}
+
+/**
+ * Keeps every synced team calendar current without a webhook. Google's push
+ * channels need a verified public HTTPS endpoint, which is a deployment
+ * concern rather than something the emulator can rehearse, so the pilot polls.
+ */
+export const syncGoogleCalendars = onSchedule(
+  { schedule: 'every 30 minutes', timeZone: 'Etc/UTC', retryCount: 1 },
+  async () => {
+    const result = await syncAllTeamCalendars();
+    logger.info('google.calendar.sync.completed', result);
+  }
+);
+
+export const api = onRequest({ cors: false }, handleRequestWithIntegrations);

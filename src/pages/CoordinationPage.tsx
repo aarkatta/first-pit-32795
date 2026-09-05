@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { KanbanBoard } from '@/features/kanban/KanbanBoard';
+import { TeamCalendarPanel } from '@/features/google/TeamCalendarPanel';
 import { getFirebaseServices } from '@/lib/firebase';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
@@ -13,10 +14,12 @@ import {
   UploadAbortedError,
   createEvent,
   createGoal,
+  deleteEvent,
   formatFileSize,
   getTeamFile,
   listTeamFiles,
   markNotificationRead,
+  updateEvent,
   uploadTeamFile,
   type TeamFile
 } from '@/lib/phase3-service';
@@ -39,13 +42,20 @@ const emptyData: CoordinationData = { goals: [], events: [], notifications: [], 
 
 const id = createOperationId;
 
+/** Firestore timestamp -> the local `YYYY-MM-DDTHH:mm` a datetime-local input needs. */
+function toLocalInput(value: unknown): string {
+  const date = toDate(value);
+  if (!date) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 function formatDate(value: unknown) {
   const date = toDate(value);
   return date ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date) : 'No date';
 }
 
 function parseEvent(id: string, data: Record<string, unknown>): CalendarEvent {
-  return { id, teamId: String(data.teamId ?? ''), createdBy: String(data.createdBy ?? ''), title: String(data.title ?? 'Untitled event'), description: String(data.description ?? ''), startsAt: data.startsAt, endsAt: data.endsAt, location: typeof data.location === 'string' ? data.location : null, eventType: (data.eventType ?? 'meeting') as CalendarEvent['eventType'], recurrence: null, occurrenceOf: typeof data.occurrenceOf === 'string' ? data.occurrenceOf : null, reminderMinutes: Array.isArray(data.reminderMinutes) ? data.reminderMinutes.map(Number) : [], linkedTaskIds: Array.isArray(data.linkedTaskIds) ? data.linkedTaskIds.map(String) : [] };
+  return { id, teamId: String(data.teamId ?? ''), createdBy: String(data.createdBy ?? ''), title: String(data.title ?? 'Untitled event'), description: String(data.description ?? ''), startsAt: data.startsAt, endsAt: data.endsAt, location: typeof data.location === 'string' ? data.location : null, eventType: (data.eventType ?? 'meeting') as CalendarEvent['eventType'], recurrence: null, occurrenceOf: typeof data.occurrenceOf === 'string' ? data.occurrenceOf : null, reminderMinutes: Array.isArray(data.reminderMinutes) ? data.reminderMinutes.map(Number) : [], linkedTaskIds: Array.isArray(data.linkedTaskIds) ? data.linkedTaskIds.map(String) : [], version: Number(data.version ?? 1), googleEventId: typeof data.googleEventId === 'string' ? data.googleEventId : null };
 }
 
 function parseGoal(id: string, data: Record<string, unknown>): TeamGoal {
@@ -222,6 +232,21 @@ export function CoordinationPage() {
     finally { setBusy(false); }
   }
 
+  function submitEventEdit(formEvent: FormEvent<HTMLFormElement>, calendarEvent: CalendarEvent) {
+    formEvent.preventDefault();
+    if (!teamId) return;
+    const form = new FormData(formEvent.currentTarget);
+    const startsAt = new Date(String(form.get('startsAt') ?? ''));
+    const endsAt = new Date(String(form.get('endsAt') ?? ''));
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return;
+    void run(() => updateEvent({ teamId, eventId: calendarEvent.id, operationId: id(), expectedVersion: calendarEvent.version, title: String(form.get('title') ?? '').trim(), startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }));
+  }
+
+  function submitEventDelete(calendarEvent: CalendarEvent) {
+    if (!teamId) return;
+    void run(() => deleteEvent(teamId, calendarEvent.id));
+  }
+
   function submitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!teamId || !eventTitle.trim() || !eventStart) return;
@@ -285,8 +310,12 @@ export function CoordinationPage() {
       <KanbanBoard teamId={teamId} canManage={canManage} actorRole={activeTeam?.role ?? 'parent'} actorUserId={user.uid} online={online} />
 
       <section className="calendar-shell"><div><span className="eyebrow light">CALENDAR</span><h3>Practices, meetings, and deadlines.</h3><p>Every event stays inside {activeTeam?.team?.name ?? 'the active team'}.</p></div><div className="calendar-card"><strong>{data.events.length}</strong><span>upcoming events</span></div></section>
-      {data.events.length ? <section className="timeline-list">{data.events.map((calendarEvent) => <article id={`event-${calendarEvent.id}`} tabIndex={-1} key={calendarEvent.id}><span>{calendarEvent.eventType}</span><div><strong>{calendarEvent.title}</strong><small>{formatDate(calendarEvent.startsAt)}</small></div></article>)}</section> : <div className="board-tip"><span>EMPTY</span><p>No upcoming events.</p></div>}
+      {data.events.length ? <section className="timeline-list">{data.events.map((calendarEvent) => <article id={`event-${calendarEvent.id}`} tabIndex={-1} key={calendarEvent.id}><span>{calendarEvent.eventType}</span><div><strong>{calendarEvent.title}</strong><small>{formatDate(calendarEvent.startsAt)}</small>{calendarEvent.googleEventId ? <small className="muted"> · in Google Calendar</small> : null}{canManage && !calendarEvent.occurrenceOf ? <details className="event-edit"><summary>Edit event</summary><form className="form-stack" onSubmit={(formEvent) => submitEventEdit(formEvent, calendarEvent)}><label>Title<input name="title" defaultValue={calendarEvent.title} maxLength={160} required /></label><label>Starts<input name="startsAt" type="datetime-local" defaultValue={toLocalInput(calendarEvent.startsAt)} required /></label><label>Ends<input name="endsAt" type="datetime-local" defaultValue={toLocalInput(calendarEvent.endsAt)} required /></label><div className="form-actions"><button className="button" type="submit" disabled={busy || !online}>Save event</button><button className="danger-text" type="button" disabled={busy || !online} onClick={() => submitEventDelete(calendarEvent)}>Delete event</button></div></form></details> : null}</div></article>)}</section> : <div className="board-tip"><span>EMPTY</span><p>No upcoming events.</p></div>}
       {canManage ? <form className="feature-panel inline-create" onSubmit={submitEvent}><span className="eyebrow">NEW EVENT</span><label>Event name<input value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} placeholder="Robot practice" required /></label><label>Starts<input type="datetime-local" value={eventStart} onChange={(event) => setEventStart(event.target.value)} required /></label><button className="button" disabled={busy} type="submit">{busy ? 'Saving…' : 'Add event'}</button></form> : null}
+
+      <section className="split-panels">
+        <TeamCalendarPanel teamId={teamId} canManage={canManage} online={online} />
+      </section>
 
       <section className="split-panels">
         <article className="feature-panel"><span className="eyebrow">GOALS</span><h3>Team goals</h3><p>{data.goals.length ? 'Track milestones against completed tasks.' : 'No team goals yet.'}</p><div>{data.goals.map((goal) => <span id={`goal-${goal.id}`} tabIndex={-1} key={goal.id}>{goal.title} · {goal.completedTaskCount}/{goal.taskCount}</span>)}</div>{canManage ? <form className="inline-create" onSubmit={submitGoal}><label>New goal<input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} placeholder="Prepare for tournament" required /></label><button className="button" disabled={busy} type="submit">Add goal</button></form> : null}</article>

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
+import { GoogleConnectionCard } from '@/features/google/GoogleConnectionCard';
 import { useAuth } from '@/lib/auth-context';
 import { sendPasswordRecovery } from '@/lib/auth';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { getProfileFirestore, loadProfileSettings, type LoadedProfileSettings, type NotificationPreferences, type UserSettings } from '@/lib/profile-settings';
 import { requestAccountDeletion, updateProfileSettings } from '@/lib/phase7-service';
+import { updatePrivacySettings } from '@/lib/phase2-service';
 import { useTeamContext } from '@/lib/team-context';
 import { usePreferences } from '@/lib/preferences-context';
 
@@ -56,6 +58,9 @@ export function ProfilePage() {
         ...settings.notifications,
         ...(typeof settings.privacy.isMinor === 'boolean' ? { isMinor: settings.privacy.isMinor } : {})
       });
+      // The privacy record is a separate server-owned document; saving the
+      // profile alone left the minor flag and visibility unenforced.
+      await updatePrivacySettings(typeof settings.privacy.isMinor === 'boolean' ? { isMinor: settings.privacy.isMinor } : {});
       if (activeUserId.current !== startedUserId) return;
       setMessage({ title: 'Profile saved', body: 'Your profile and preferences are saved. Safety notifications remain enabled.' });
     } catch (error) {
@@ -114,6 +119,9 @@ export function ProfilePage() {
         </section>
         <button className="button" type="submit" disabled={busy || !online}>{busy ? 'Saving…' : 'Save profile & preferences'}</button>
       </form>
+      <section className="split-panels">
+        <GoogleConnectionCard online={online} />
+      </section>
     </div>
   );
 }

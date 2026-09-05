@@ -2,6 +2,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { StatePanel } from '@/components/StatePanel';
 import { useSearchParams } from 'react-router-dom';
+import { GoogleChatPanel } from '@/features/google/GoogleChatPanel';
 import { useAuth } from '@/lib/auth-context';
 import { createReport } from '@/lib/phase2-service';
 import { getFirebaseServices } from '@/lib/firebase';
@@ -12,27 +13,31 @@ import { useTeamContext } from '@/lib/team-context';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import {
   acknowledgeAnnouncement,
+  archiveChannel,
+  type ChannelCursors,
+  type ChatChannel,
+  type ChatMessage,
   createAnnouncement,
   createChannel,
+  deleteMessage,
+  exportTeamMessages,
   getChannelMute,
-  markChannelRead,
   getMessageTarget,
+  type ListCursor,
   loadAcknowledgedAnnouncementIds,
   loadAnnouncementPage,
   loadChannelPage,
   loadOlderMessages,
+  markChannelRead,
+  purgeExpiredMessages,
+  type MessageCursor,
+  type SearchResult,
   searchTeamMessages,
   sendMessage,
   subscribeToLatestMessages,
+  type TeamAnnouncement,
   toggleChannelMute,
-  toggleReaction,
-  type ChannelCursors,
-  type ChatChannel,
-  type ChatMessage,
-  type ListCursor,
-  type MessageCursor,
-  type SearchResult,
-  type TeamAnnouncement
+  toggleReaction
 } from '@/lib/phase4-service';
 import { toDate } from '@/lib/dates';
 import { createOperationId } from '@/lib/ids';
@@ -425,11 +430,22 @@ export function ChatPage() {
         <div className="conversation">
           <div className="conversation-head"><div><strong># {activeChannel?.name ?? 'No channel selected'}</strong><small>{activeChannel?.description || (activeChannel?.visibility === 'coaches' ? 'Restricted coach channel' : 'Team-wide updates')}</small></div>{activeChannel ? <button className="filter-button" type="button" disabled={busy || muteLoading} onClick={() => void changeMute()}>{muteLoading ? 'Loading mute…' : muted ? 'Unmute' : 'Mute'}</button> : null}</div>
           {announcements.length ? <div className="announcement-strip">{announcements.map((announcement) => <article key={announcement.id}><span className="eyebrow">ANNOUNCEMENT</span><strong>{announcement.title}</strong><p>{announcement.body}</p>{announcement.acknowledgementRequired ? <button type="button" disabled={busy || acknowledged.has(announcement.id)} onClick={() => void run(async () => { await acknowledgeAnnouncement(teamId, announcement.id); setAcknowledged((current) => new Set(current).add(announcement.id)); })}>{acknowledged.has(announcement.id) ? 'Acknowledged' : 'Acknowledge'}</button> : null}</article>)}{hasMoreAnnouncements ? <button className="button button--ghost" type="button" disabled={busy} onClick={loadMoreAnnouncements}>Load earlier announcements</button> : null}</div> : null}
-          {loadingMessages ? <p className="muted messages">Loading newest messages…</p> : messages.length === 0 ? <p className="empty-inline messages">No messages yet. Start the conversation.</p> : <div className="messages">{hasOlderMessages && messageCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => void run(async () => { const page = await loadOlderMessages(firestore, teamId, activeChannel!.id, activeChannel!.visibility, user.uid, messageCursor); setOlderMessages((current) => [...page.messages.filter((message) => !current.some((entry) => entry.id === message.id)), ...current]); setMessageCursor(page.cursor); setHasOlderMessages(page.hasOlder); })}>Load older messages</button> : null}<div className="date-chip">NEWEST MESSAGES</div>{messages.map((message) => <div id={`message-${message.id}`} tabIndex={-1} className={`message ${message.authorUserId === user.uid ? 'mine' : ''}${message.id === deepLinkMessageId ? ' message--target' : ''}`} key={message.id}><span className="message-avatar">{authorInitials(message.authorUserId)}</span><div><small>{authorName(message.authorUserId)} · {formatDate(message.createdAt)}</small><p>{message.body}</p><div className="message-actions"><button type="button" aria-label={`Toggle thumbs up reaction, ${message.reactions['👍']?.length ?? 0} reactions`} disabled={busy} onClick={() => void run(() => toggleReaction(teamId, message.id, '👍'))}>👍 {message.reactions['👍']?.length ?? 0}</button>{!message.parentMessageId ? <button type="button" disabled={busy} onClick={() => setReplyTo(message.id)}>Reply</button> : null}<button type="button" disabled={busy} onClick={() => reportMessage(message.id)}>Report</button></div></div></div>)}</div>}
+          {loadingMessages ? <p className="muted messages">Loading newest messages…</p> : messages.length === 0 ? <p className="empty-inline messages">No messages yet. Start the conversation.</p> : <div className="messages">{hasOlderMessages && messageCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => void run(async () => { const page = await loadOlderMessages(firestore, teamId, activeChannel!.id, activeChannel!.visibility, user.uid, messageCursor); setOlderMessages((current) => [...page.messages.filter((message) => !current.some((entry) => entry.id === message.id)), ...current]); setMessageCursor(page.cursor); setHasOlderMessages(page.hasOlder); })}>Load older messages</button> : null}<div className="date-chip">NEWEST MESSAGES</div>{messages.map((message) => <div id={`message-${message.id}`} tabIndex={-1} className={`message ${message.authorUserId === user.uid ? 'mine' : ''}${message.id === deepLinkMessageId ? ' message--target' : ''}`} key={message.id}><span className="message-avatar">{authorInitials(message.authorUserId)}</span><div><small>{authorName(message.authorUserId)} · {formatDate(message.createdAt)}</small><p>{message.body}</p><div className="message-actions"><button type="button" aria-label={`Toggle thumbs up reaction, ${message.reactions['👍']?.length ?? 0} reactions`} disabled={busy} onClick={() => void run(() => toggleReaction(teamId, message.id, '👍'))}>👍 {message.reactions['👍']?.length ?? 0}</button>{!message.parentMessageId ? <button type="button" disabled={busy} onClick={() => setReplyTo(message.id)}>Reply</button> : null}<button type="button" disabled={busy} onClick={() => reportMessage(message.id)}>Report</button>{canManage ? <button className="danger-text" type="button" disabled={busy || !online} onClick={() => void run(() => deleteMessage(teamId, message.id), 'channel')}>Delete</button> : null}</div></div></div>)}</div>}
           {activeChannel ? <form className="composer" onSubmit={submitMessage}><button type="button" aria-label={replyTo ? 'Cancel reply' : 'Clear message'} onClick={() => { setReplyTo(null); if (!replyTo) setBody(''); }}>{replyTo ? '×' : '＋'}</button><input aria-label={replyTo ? `Replying to ${replyTo}` : 'Message'} value={body} onChange={(event) => setBody(event.target.value)} placeholder={replyTo ? 'Write a reply…' : `Message ${activeChannel.name}`} maxLength={4000} required /><button className="send" type="submit" aria-label="Send message" disabled={busy || !online}>↑</button></form> : null}
         </div>
       </section>
       {activeChannel && canManage ? <form className="feature-panel inline-create" onSubmit={submitAnnouncement}><span className="eyebrow">POST ANNOUNCEMENT</span><label>Title<input value={announcementTitle} onChange={(event) => setAnnouncementTitle(event.target.value)} placeholder="Practice moved to Saturday" required /></label><label>Message<textarea value={announcementBody} onChange={(event) => setAnnouncementBody(event.target.value)} required /></label><button className="button" type="submit" disabled={busy}>Post</button></form> : null}
+      {canManage && activeChannel ? <section className="feature-panel"><span className="eyebrow">CHANNEL MODERATION</span><h3>Manage #{activeChannel.name}</h3><p>Archiving hides a channel from the team without deleting its history. Exporting downloads this channel's messages for a safeguarding or records request.</p><div className="form-actions"><button className="button secondary" type="button" disabled={busy || !online} onClick={() => void run(async () => {
+        const result = await exportTeamMessages(teamId, activeChannel.id);
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = href;
+        link.download = `first-pit-${activeChannel.name}-messages.json`;
+        link.click();
+        URL.revokeObjectURL(href);
+      })}>Export channel messages</button><button className="danger-text" type="button" disabled={busy || !online} onClick={() => void run(() => archiveChannel(teamId, activeChannel.id), 'channels')}>Archive channel</button><button className="button secondary" type="button" disabled={busy || !online} onClick={() => void run(() => purgeExpiredMessages(teamId), 'channel')}>Apply retention now</button></div></section> : null}
+      <GoogleChatPanel teamId={teamId} canManage={canManage} online={online} />
       <section className="search-hero"><div><span className="eyebrow light">AUTHORIZED SEARCH</span><h3>Search team messages.</h3><p>Results stay team-scoped and exclude channels you cannot access.</p></div><form onSubmit={search}><label><span>Search messages</span><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search messages" /></label><button className="button" type="submit" disabled={busy || !online}>Search</button></form></section>
       {searchResults.length ? <section className="feed-list">{searchResults.map((result) => <article key={result.id}><span className="eyebrow">MESSAGE</span><strong>{result.body}</strong><p># {channelName(result.channelId)} · {authorName(result.authorUserId)}</p><button type="button" onClick={() => { setChannelId(result.channelId); setSearchResults([]); setSearchCursor(null); }}>Open channel</button></article>)}{searchCursor ? <button className="button" type="button" disabled={busy || !online} onClick={loadMoreSearchResults}>Load more</button> : null}</section> : null}
     </div>

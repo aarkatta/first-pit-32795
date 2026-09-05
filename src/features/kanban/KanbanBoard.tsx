@@ -42,6 +42,7 @@ import { getFirebaseServices } from '@/lib/firebase';
 import {
   addProjectColumn,
   archiveProject,
+  updateProject,
   createKanbanTask,
   createProject,
   ensureDefaultProject,
@@ -353,6 +354,13 @@ function ProjectSettings({ teamId, project, busy, onRun }: {
   onRun: (action: () => Promise<unknown>, refreshProjects?: boolean) => Promise<boolean>;
 }) {
   const [columnName, setColumnName] = useState('');
+  function renameProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('projectName') ?? '').trim();
+    if (!name) return;
+    void onRun(() => updateProject({ teamId, projectId: project.id, name, description: String(form.get('projectDescription') ?? '').trim() }), true);
+  }
   function addColumn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!columnName.trim()) return;
@@ -384,6 +392,11 @@ function ProjectSettings({ teamId, project, busy, onRun }: {
           <button className="danger-text" type="button" disabled={busy || project.completedColumnId === column.id || project.columns.length <= 2} onClick={() => void onRun(() => removeProjectColumn(teamId, project.id, column.id, projectVersion(project)), true)}>Remove</button>
         </form>)}
       </div>
+      <form className="rename-project-form" onSubmit={renameProject}>
+        <label>Project name<input name="projectName" defaultValue={project.name} maxLength={80} required /></label>
+        <label>Description<input name="projectDescription" defaultValue={project.description ?? ''} maxLength={1000} /></label>
+        <button className="button secondary" type="submit" disabled={busy}>Save project</button>
+      </form>
       <form className="add-column-form" onSubmit={addColumn}><label>New column<input value={columnName} onChange={(event) => setColumnName(event.target.value)} maxLength={40} placeholder="Testing" /></label><button className="button secondary" disabled={busy || project.columns.length >= 8} type="submit">Add column</button></form>
     </details>
   );

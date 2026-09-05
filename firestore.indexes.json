@@ -67,6 +67,10 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "participantUserIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
         }
@@ -89,10 +93,6 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "participantUserIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
         }
@@ -107,7 +107,49 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "occurrenceOf",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "eventOccurrences",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "startsAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "googleEventId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "googlePushPending",
           "order": "ASCENDING"
         }
       ]
@@ -289,12 +331,12 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "channelId",
-          "order": "ASCENDING"
+          "fieldPath": "searchTokens",
+          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "createdAt",
-          "order": "ASCENDING"
+          "order": "DESCENDING"
         }
       ]
     },
@@ -308,10 +350,6 @@
         },
         {
           "fieldPath": "channelId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility",
           "order": "ASCENDING"
         },
         {
@@ -355,7 +393,11 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "deletedAt",
+          "fieldPath": "channelId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "visibility",
           "order": "ASCENDING"
         },
         {
@@ -373,12 +415,12 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "searchTokens",
-          "arrayConfig": "CONTAINS"
+          "fieldPath": "deletedAt",
+          "order": "ASCENDING"
         },
         {
           "fieldPath": "createdAt",
-          "order": "DESCENDING"
+          "order": "ASCENDING"
         }
       ]
     },

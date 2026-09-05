@@ -132,6 +132,8 @@ export type CalendarEvent = TeamRecord & {
   occurrenceOf: string | null;
   reminderMinutes: number[];
   linkedTaskIds: string[];
+  version: number;
+  googleEventId?: string | null;
 };
 
 export type NotificationRecord = TeamRecord & {

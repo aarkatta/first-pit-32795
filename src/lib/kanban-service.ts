@@ -131,6 +131,10 @@ export function createProject(input: { teamId: string; operationId: string; name
   return call<typeof input, { projectId: string }>('createProject', input);
 }
 
+export function updateProject(input: { teamId: string; projectId: string; name?: string; description?: string }) {
+  return call<typeof input, { projectId: string }>('updateProject', input);
+}
+
 export function archiveProject(teamId: string, projectId: string) {
   return call<{ teamId: string; projectId: string }, { projectId: string; archived: true }>('archiveProject', { teamId, projectId });
 }

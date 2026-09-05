@@ -14,6 +14,7 @@ import {
   type TeamAdmin
 } from './phase2.js';
 import { columnHasCapacity, DEFAULT_PROJECT_COLUMNS, MAX_CARDS_PER_COLUMN_PAGE, ORDER_STEP } from './kanban.js';
+import { deleteGoogleEvent } from './google-calendar.js';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_FILE_TYPES = new Set([
@@ -206,6 +207,23 @@ export function goalOperationVersion(
     throw new HttpsError('failed-precondition', 'This operation ID belongs to a different goal update.');
   }
   return mutationVersion(receipt.version, 'Stored goal version');
+}
+
+export function nextEventMutationVersion(currentVersion: unknown, expectedVersion?: unknown): number {
+  return nextRecordVersion(currentVersion, expectedVersion, 'This event changed while you were editing it. Reload the latest event before saving.');
+}
+
+export function eventOperationVersion(
+  receipt: Record<string, unknown>,
+  expected: { teamId: string; actorUserId: string; eventId: string }
+) {
+  if (receipt.teamId !== expected.teamId
+    || receipt.createdBy !== expected.actorUserId
+    || receipt.kind !== 'event.update'
+    || receipt.eventId !== expected.eventId) {
+    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different event update.');
+  }
+  return mutationVersion(receipt.version, 'Stored event version');
 }
 
 export function taskNotificationDedupeKey(taskId: string, version: number) {
@@ -607,7 +625,7 @@ export const createEvent = async (request: Phase3Request) => {
     const operation = opRef ? await transaction.get(opRef) : null;
     if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: admin.uid }, 'Event')) return;
     const now = FieldValue.serverTimestamp();
-    const event = { id: eventId, teamId, createdBy: admin.uid, title, description, startsAt, endsAt, location: input.location === undefined || input.location === null ? null : requireString(input.location, 'Event location', 240), eventType, recurrence, occurrenceOf: null, reminderMinutes, linkedTaskIds, createdAt: now, updatedAt: now };
+    const event = { id: eventId, teamId, createdBy: admin.uid, title, description, startsAt, endsAt, location: input.location === undefined || input.location === null ? null : requireString(input.location, 'Event location', 240), eventType, recurrence, occurrenceOf: null, reminderMinutes, linkedTaskIds, version: 1, source: 'firstPit' as const, googlePushPending: true, createdAt: now, updatedAt: now };
     transaction.set(ref, event);
     transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.created' } }));
     if (opRef) transaction.set(opRef, { teamId, createdBy: admin.uid, kind: 'event.create', createdAt: now });
@@ -620,6 +638,71 @@ export const createEvent = async (request: Phase3Request) => {
     }
   });
   return { eventId, recurring: Boolean(recurrence) };
+};
+
+export const updateEvent = async (request: Phase3Request) => {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const eventId = requireString(getInput(request, 'eventId'), 'Event ID');
+  const input = requestRecord(request);
+  const updates: Record<string, unknown> = {};
+  if (has(input, 'title')) updates.title = requireString(input.title, 'Event title', 160);
+  if (has(input, 'description')) updates.description = requireString(input.description, 'Event description', 4000);
+  if (has(input, 'location')) updates.location = input.location === null ? null : requireString(input.location, 'Event location', 240);
+  if (has(input, 'eventType')) updates.eventType = enumValue(input.eventType, ['meeting', 'practice', 'competition', 'deadline', 'reminder'] as const, 'Event type');
+  if (has(input, 'reminderMinutes')) updates.reminderMinutes = integerArray(input.reminderMinutes, 'Reminder minutes', 5);
+  const linkedTaskIds = has(input, 'linkedTaskIds') ? stringArray(input.linkedTaskIds, 'Linked tasks', 20) : null;
+  const startsAt = has(input, 'startsAt') ? parseTimestamp(input.startsAt, 'Event start') : null;
+  const endsAt = has(input, 'endsAt') ? parseTimestamp(input.endsAt, 'Event end') : null;
+  const expectedVersion = mutationVersion(input.expectedVersion, 'Expected version');
+  const db = getFirestore();
+  const opRef = operationRef(teamId, operationId(input, 'updateEvent'));
+  const committedVersion = await db.runTransaction(async (transaction) => {
+    await assertTeamAdminInTransaction(transaction, teamId, admin);
+    const ref = db.doc(`events/${eventId}`);
+    const snapshot = await transaction.get(ref);
+    const operation = opRef ? await transaction.get(opRef) : null;
+    if (!snapshot.exists || snapshot.data()?.teamId !== teamId) throw new HttpsError('not-found', 'Event not found.');
+    if (operation?.exists) return eventOperationVersion(operation.data() ?? {}, { teamId, actorUserId: admin.uid, eventId });
+    // Every transaction read must precede the first write, so the linked-task
+    // check runs here rather than beside the field validation above.
+    if (linkedTaskIds) await validateTaskReferences(transaction, teamId, linkedTaskIds);
+    const current = snapshot.data() ?? {};
+    const nextStart = startsAt ?? (current.startsAt as Timestamp);
+    const nextEnd = endsAt ?? (current.endsAt as Timestamp);
+    if (nextEnd.toMillis() <= nextStart.toMillis()) throw new HttpsError('invalid-argument', 'Event end must be after event start.');
+    if (startsAt) updates.startsAt = startsAt;
+    if (endsAt) updates.endsAt = endsAt;
+    if (linkedTaskIds) updates.linkedTaskIds = linkedTaskIds;
+    const nextVersion = nextEventMutationVersion(current.version, expectedVersion);
+    const now = FieldValue.serverTimestamp();
+    // A local edit must reach Google on the next sync run.
+    transaction.update(ref, { ...updates, version: nextVersion, googlePushPending: true, updatedAt: now });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.updated' } }));
+    if (opRef) transaction.set(opRef, { teamId, createdBy: admin.uid, kind: 'event.update', eventId, version: nextVersion, createdAt: now });
+    return nextVersion;
+  });
+  return { eventId, ...updates, version: committedVersion };
+};
+
+export const deleteEvent = async (request: Phase3Request) => {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const eventId = requireString(getInput(request, 'eventId'), 'Event ID');
+  const db = getFirestore();
+  const ref = db.doc(`events/${eventId}`);
+  const snapshot = await ref.get();
+  const data = snapshot.data();
+  if (!snapshot.exists || data?.teamId !== teamId) throw new HttpsError('not-found', 'Event not found.');
+  const googleEventId = typeof data.googleEventId === 'string' ? data.googleEventId : null;
+  const occurrenceDocs = await db.collection('eventOccurrences').where('teamId', '==', teamId).where('occurrenceOf', '==', eventId).limit(400).get();
+  const batch = db.batch();
+  batch.delete(ref);
+  for (const doc of occurrenceDocs.docs) batch.delete(doc.ref);
+  batch.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.deleted' } }));
+  await batch.commit();
+  const removedFromGoogle = googleEventId ? await deleteGoogleEvent(teamId, googleEventId).catch(() => false) : false;
+  return { eventId, occurrencesRemoved: occurrenceDocs.size, removedFromGoogle };
 };
 
 export const markNotificationRead = async (request: Phase3Request) => {

@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
-import { isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
+import { completeGoogleRedirect, isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
 import { bootstrapUserProfile } from '@/lib/profile';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -46,6 +46,26 @@ export function AuthPage() {
   const [pendingProfileUser, setPendingProfileUser] = useState<User | null>(null);
   const [pendingVerificationUser, setPendingVerificationUser] = useState<User | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
+
+  // A redirect sign-in finishes on the next page load, not in the click
+  // handler that started it. AuthProvider creates the profile from its own
+  // session listener, so this only has to route the user and surface failures.
+  useEffect(() => {
+    if (!auth) return undefined;
+    let active = true;
+    completeGoogleRedirect(auth)
+      .then((credential) => {
+        if (!active || !credential) return;
+        navigate(new URLSearchParams(location.search).get('next') || '/hub', { replace: true });
+      })
+      .catch((redirectError: unknown) => {
+        if (!active || isDismissedPopup(redirectError)) return;
+        setRequestState({ variant: 'error', title: 'Google sign-in failed', message: authErrorMessage(redirectError) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [auth, location.search, navigate]);
 
   if (status === 'authenticated' && !pendingProfileUser && !pendingVerificationUser && !busy) {
     const needsVerification = user?.providerData.some((provider) => provider.providerId === 'password') && !user.emailVerified;
@@ -114,6 +134,9 @@ export function AuthPage() {
     setMessage(null);
     try {
       const credential = await signInWithGoogle(auth);
+      // Null means a redirect started: this page is navigating away and the
+      // result is collected by the effect above on the next load.
+      if (!credential) return;
       setPendingProfileUser(credential.user);
       if (await bootstrapPendingProfile(credential.user)) navigate(destination(), { replace: true });
     } catch (requestError) {

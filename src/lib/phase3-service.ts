@@ -65,6 +65,14 @@ export function createEvent(input: { teamId: string; eventId?: string; operation
   return call<typeof input, { eventId: string; recurring: boolean }>('createEvent', input);
 }
 
+export function updateEvent(input: { teamId: string; eventId: string; operationId: string; expectedVersion: number; title?: string; description?: string; startsAt?: string; endsAt?: string; location?: string | null; eventType?: 'meeting' | 'practice' | 'competition' | 'deadline' | 'reminder'; reminderMinutes?: number[]; linkedTaskIds?: string[] }) {
+  return call<typeof input, { eventId: string; version: number }>('updateEvent', input);
+}
+
+export function deleteEvent(teamId: string, eventId: string) {
+  return call<{ teamId: string; eventId: string }, { eventId: string; occurrencesRemoved: number; removedFromGoogle: boolean }>('deleteEvent', { teamId, eventId });
+}
+
 export function markNotificationRead(teamId: string, notificationId: string) {
   return call<{ teamId: string; notificationId: string }, { notificationId: string; read: true }>('markNotificationRead', { teamId, notificationId });
 }
