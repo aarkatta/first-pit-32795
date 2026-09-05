@@ -12,9 +12,6 @@ export default tseslint.config(
       'functions/lib',
       'node_modules',
       'ios/App/App/public',
-      // Files staged for deletion this session can't be removed remotely; drop
-      // this entry and the .gitignore one once you delete the folder.
-      '_to_delete'
     ]
   },
   js.configs.recommended,

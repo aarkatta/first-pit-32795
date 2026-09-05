@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { getFirebaseServices } from './lib/firebase';
+import { registerGlobalErrorHandlers } from './lib/report-error';
 import './styles/global.css';
 import './styles/reference-ui.css';
 import './styles/monday.css';
@@ -21,6 +22,11 @@ if (!rootElement) {
 export function bootstrapFirebaseClient() {
   return getFirebaseServices();
 }
+
+// Registered before bootstrap so a failure inside Firebase initialization is
+// reported rather than lost. AppErrorBoundary covers render-time crashes; this
+// covers rejected promises and uncaught errors outside the React tree.
+registerGlobalErrorHandlers();
 
 bootstrapFirebaseClient();
 

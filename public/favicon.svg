@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="First Pit">
+  <title>First Pit</title>
+  <rect width="128" height="128" rx="28" fill="#12211a"/>
+  <g fill="none" stroke="#c8f135" stroke-width="14" stroke-linecap="butt">
+    <path d="M21 30V98"/>
+    <path d="M21 37H58"/>
+    <path d="M21 64H52"/>
+    <path d="M72 30V98"/>
+    <path d="M72 37H93A13.5 13.5 0 0 1 93 64H72"/>
+  </g>
+</svg>

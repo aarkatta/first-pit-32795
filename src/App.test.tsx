@@ -49,13 +49,9 @@ describe('AppRoutes', () => {
     expect(fallback).toHaveAttribute('aria-busy', 'true');
 
     expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i }, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /state lab/i })).toBeInTheDocument();
     expect(screen.getByText('Runtime Team Hub')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('link', { name: /state lab/i }));
-
-    expect(await screen.findByRole('heading', { name: /loading, empty, error, permission, and offline/i })).toBeInTheDocument();
-    expect(screen.getByTestId('location')).toHaveAttribute('data-pathname', '/states');
+    // The QA state catalogue is not linked from any public surface.
+    expect(screen.queryByRole('link', { name: /state lab/i })).not.toBeInTheDocument();
   });
 
   it('renders the state lab page', async () => {
@@ -79,7 +75,8 @@ describe('AppRoutes', () => {
   it('renders the not-found page for unknown routes', async () => {
     renderRoutes('/does-not-exist');
 
-    expect(await screen.findByRole('heading', { name: /this route is not part of the phase 1 foundation/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /we could not find that page/i })).toBeInTheDocument();
+    expect(screen.queryByText(/phase 1 foundation/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back to overview/i })).toHaveAttribute('href', '/');
   });
 
@@ -97,6 +94,15 @@ describe('AppRoutes', () => {
     const location = screen.getByTestId('location');
     expect(location).toHaveAttribute('data-pathname', '/auth');
     expect(new URLSearchParams(location.getAttribute('data-search') ?? '').get('next')).toBe('/scorer?session=session-1#history');
+  });
+
+  it('keeps the invitation id when a signed-out invitee opens a join link', async () => {
+    renderRoutes('/join?invite=invitation-1');
+
+    expect(await screen.findByRole('heading', { name: /sign in to first pit/i })).toBeInTheDocument();
+    const location = screen.getByTestId('location');
+    expect(location).toHaveAttribute('data-pathname', '/auth');
+    expect(new URLSearchParams(location.getAttribute('data-search') ?? '').get('next')).toBe('/join?invite=invitation-1');
   });
 
   it('preserves query and hash through a legacy coordination alias before authentication', async () => {

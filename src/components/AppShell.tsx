@@ -15,6 +15,10 @@ type AppShellProps = {
   appTagline: string;
 };
 
+/** `/states` and `/emulators` are development-only surfaces; `App.tsx` registers them the same way. */
+const devToolsEnabled = import.meta.env.DEV;
+const devOnlyRoutes = new Set(['/states', '/emulators']);
+
 const navItems = [
   { to: '/', label: 'Home', icon: '⌂', mobile: true },
   { to: '/hub', label: 'Team hub', icon: '▤', mobile: true },
@@ -32,8 +36,25 @@ function getBrandMark(appName: string) {
   return appName.trim().split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase();
 }
 
+/**
+ * Routes that carry a page title but no navigation entry. Without them every
+ * unmatched path fell back to "Home", so the Profile screen announced itself —
+ * in its `<h1>` and in `document.title` — as Home.
+ */
+const routeLabels: { to: string; label: string }[] = [
+  { to: '/profile', label: 'Profile & settings' },
+  { to: '/settings', label: 'Profile & settings' },
+  { to: '/teams/new', label: 'Create a team' },
+  { to: '/join', label: 'Join a team' },
+  { to: '/auth', label: 'Sign in' },
+  { to: '/tracker', label: 'Tracker' },
+  { to: '/calendar', label: 'Tracker' }
+];
+
 function pageLabel(pathname: string) {
-  return navItems.find((item) => item.to !== '/' && pathname.startsWith(item.to))?.label ?? 'Home';
+  if (pathname === '/' || pathname === '/home') return 'Home';
+  const match = [...navItems, ...routeLabels].find((item) => item.to !== '/' && (pathname === item.to || pathname.startsWith(`${item.to}/`)));
+  return match?.label ?? 'Not found';
 }
 
 export function AppShell({ children, online, appName, appTagline }: AppShellProps) {
@@ -46,7 +67,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const isAdmin = isCoachOrLeader(teams.find((team) => team.teamId === activeTeamId));
   const visibleItems = navItems.filter((item) => {
-    if (authStatus === 'authenticated' && (item.to === '/states' || item.to === '/emulators')) return false;
+    if (devOnlyRoutes.has(item.to) && !devToolsEnabled) return false;
     if (item.to === '/admin' && !isAdmin) return false;
     return true;
   });

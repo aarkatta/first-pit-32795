@@ -1,0 +1,412 @@
+import { collection, getDocs, limit, orderBy, query, where, type Firestore } from 'firebase/firestore';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { StatePanel } from '@/components/StatePanel';
+import { formatDateTimeLabel, toDate } from '@/lib/dates';
+import { listTeamMembers, memberMap, type TeamMember } from '@/lib/directory';
+import { getFirebaseServices } from '@/lib/firebase';
+import {
+  isCoachOrLeader,
+  type InvitationStatus,
+  type ModerationCase,
+  type ModerationStatus,
+  type TeamPolicy
+} from '@/lib/domain';
+import { useTeamContext } from '@/lib/team-context';
+import {
+  approveJoinRequest,
+  assignTeamRole,
+  createInvitation,
+  rejectJoinRequest,
+  revokeInvitation,
+  transferTeamLeadership,
+  updateMembershipStatus,
+  updateModerationCase,
+  updateTeamPolicy
+} from '@/lib/phase2-service';
+import { getRequestState, type RequestState } from '@/lib/request-state';
+import { useOnlineStatus } from '@/lib/use-online-status';
+
+type InvitationRow = {
+  id: string;
+  email: string;
+  role: string;
+  status: InvitationStatus;
+  expiresAt: unknown;
+};
+type JoinRequestRow = { id: string; userId: string; displayName: string; status: string };
+/** `version` drives the optimistic-concurrency check on every moderation write. */
+type ModerationCaseRow = ModerationCase & { version: number };
+type AdminData = {
+  members: TeamMember[];
+  membersTruncated: boolean;
+  invitations: InvitationRow[];
+  requests: JoinRequestRow[];
+  cases: ModerationCaseRow[];
+  policy: TeamPolicy | null;
+  auditCount: number;
+  truncated: { invitations: boolean; requests: boolean; cases: boolean; audit: boolean };
+};
+
+const emptyData: AdminData = {
+  members: [],
+  membersTruncated: false,
+  invitations: [],
+  requests: [],
+  cases: [],
+  policy: null,
+  auditCount: 0,
+  truncated: { invitations: false, requests: false, cases: false, audit: false }
+};
+
+/**
+ * Bounded reads. Every list is capped and ordered newest-first so a large team
+ * loses the *oldest* tail predictably instead of an arbitrary slice ordered by
+ * document key, and the UI says so out loud when the cap is hit.
+ */
+const LIST_LIMIT = 50;
+const AUDIT_LIMIT = 100;
+
+/**
+ * The composite indexes for these collections are (teamId, status, createdAt),
+ * so an equality filter on `status` has to be part of the query for the ordered
+ * read to be servable. Enumerating every status keeps the result set complete
+ * while matching the index that already exists.
+ */
+const INVITATION_STATUSES: InvitationStatus[] = ['pending', 'accepted', 'revoked', 'expired'];
+const MODERATION_STATUSES: ModerationStatus[] = ['open', 'investigating', 'resolved', 'dismissed'];
+
+function parseInvitation(id: string, data: Record<string, unknown>): InvitationRow {
+  return {
+    id,
+    email: String(data.email ?? ''),
+    role: String(data.role ?? 'student'),
+    status: (data.status ?? 'pending') as InvitationStatus,
+    expiresAt: data.expiresAt
+  };
+}
+
+function parseCase(id: string, data: Record<string, unknown>): ModerationCaseRow {
+  return {
+    id,
+    ...(data as Omit<ModerationCase, 'id'>),
+    // Cases created before the version field existed count as version 1, which
+    // is what the server assumes for them too.
+    version: typeof data.version === 'number' ? data.version : 1
+  };
+}
+
+function invitationExpiry(invitation: InvitationRow): string {
+  const expiry = toDate(invitation.expiresAt);
+  if (!expiry) return 'No expiry recorded';
+  if (invitation.status === 'pending' && expiry.getTime() < Date.now()) return `Expired ${formatDateTimeLabel(expiry)}`;
+  return `Expires ${formatDateTimeLabel(expiry)}`;
+}
+
+/**
+ * A join requester has no membership yet, so the roster callable cannot resolve
+ * their name. `requestToJoinTeam` denormalizes `displayName` onto the request
+ * for exactly this reason; the roster and the short id are fallbacks for
+ * requests written before that field existed.
+ */
+function requesterLabel(members: Map<string, TeamMember>, request: JoinRequestRow): string {
+  if (request.displayName) return request.displayName;
+  const member = members.get(request.userId);
+  if (member) return member.displayName;
+  return `New applicant · ${request.userId.slice(0, 6)}…`;
+}
+
+/**
+ * The server rejects a moderation write whose `expectedVersion` is stale. That
+ * is a collision with another coach, not a broken request, so it gets its own
+ * explanation instead of the generic failure copy.
+ */
+function isVersionConflict(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code.toLowerCase().includes('aborted');
+}
+
+async function loadAdminData(firestore: Firestore, teamId: string): Promise<AdminData> {
+  const [roster, invitations, requests, cases, policy, audit] = await Promise.all([
+    listTeamMembers(teamId),
+    getDocs(query(
+      collection(firestore, 'invitations'),
+      where('teamId', '==', teamId),
+      where('status', 'in', INVITATION_STATUSES),
+      orderBy('createdAt', 'desc'),
+      limit(LIST_LIMIT)
+    )),
+    getDocs(query(
+      collection(firestore, 'joinRequests'),
+      where('teamId', '==', teamId),
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc'),
+      limit(LIST_LIMIT)
+    )),
+    getDocs(query(
+      collection(firestore, 'moderationCases'),
+      where('teamId', '==', teamId),
+      where('status', 'in', MODERATION_STATUSES),
+      orderBy('createdAt', 'desc'),
+      limit(LIST_LIMIT)
+    )),
+    getDocs(query(collection(firestore, 'teamPolicies'), where('__name__', '==', teamId), limit(1))),
+    getDocs(query(
+      collection(firestore, 'auditEvents'),
+      where('teamId', '==', teamId),
+      orderBy('createdAt', 'desc'),
+      limit(AUDIT_LIMIT)
+    ))
+  ]);
+  const policyDoc = policy.docs[0];
+  return {
+    members: roster.members,
+    membersTruncated: roster.truncated,
+    invitations: invitations.docs.map((document) => parseInvitation(document.id, document.data() as Record<string, unknown>)),
+    requests: requests.docs.map((document) => ({
+      id: document.id,
+      userId: String(document.data().userId ?? ''),
+      displayName: String(document.data().displayName ?? ''),
+      status: String(document.data().status ?? '')
+    })),
+    cases: cases.docs.map((document) => parseCase(document.id, document.data() as Record<string, unknown>)),
+    policy: policyDoc ? { teamId, ...(policyDoc.data() as Omit<TeamPolicy, 'teamId'>) } : null,
+    auditCount: audit.size,
+    truncated: {
+      invitations: invitations.size === LIST_LIMIT,
+      requests: requests.size === LIST_LIMIT,
+      cases: cases.size === LIST_LIMIT,
+      audit: audit.size === AUDIT_LIMIT
+    }
+  };
+}
+
+export function TeamAdminPage() {
+  const { user } = useAuth();
+  const { activeTeam } = useTeamContext();
+  const online = useOnlineStatus();
+  const firestore = getFirebaseServices().firestore;
+  const teamId = activeTeam?.teamId ?? null;
+  const canAdminister = isCoachOrLeader(activeTeam);
+  const [data, setData] = useState<AdminData>(emptyData);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [error, setError] = useState<Error | null>(null);
+  const [requestState, setRequestState] = useState<RequestState | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'student' | 'parent' | 'mentor' | 'coach'>('student');
+  const [busy, setBusy] = useState(false);
+  const requestGeneration = useRef(0);
+  const currentTeamId = useRef(teamId);
+  currentTeamId.current = teamId;
+  const locked = busy || !online;
+
+  const refresh = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    if (!teamId || !canAdminister) return;
+    setStatus('loading');
+    setError(null);
+    try {
+      const nextData = await loadAdminData(firestore, teamId);
+      if (generation !== requestGeneration.current) return;
+      setData(nextData);
+      setStatus('ready');
+    } catch (nextError) {
+      if (generation !== requestGeneration.current) return;
+      setError(nextError instanceof Error ? nextError : new Error('Could not load team administration.'));
+      setStatus('error');
+    }
+  }, [canAdminister, firestore, teamId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const members = useMemo(() => memberMap(data.members), [data.members]);
+  const pendingInvitations = data.invitations.filter((invitation) => invitation.status === 'pending');
+  const pendingRequests = data.requests.filter((request) => request.status === 'pending');
+
+  async function run(action: () => Promise<unknown>) {
+    if (!online) {
+      setRequestState(getRequestState(new Error('Network unavailable.'), false));
+      return;
+    }
+    setBusy(true);
+    setRequestState(null);
+    setNotice(null);
+    try { await action(); if (currentTeamId.current === teamId) await refresh(); }
+    catch (nextError) {
+      if (isVersionConflict(nextError)) {
+        setRequestState({
+          variant: 'error',
+          title: 'Another coach updated this case',
+          message: 'Another coach changed this moderation case while you were reviewing it. The queue has been refreshed with their change — check it before saving again.'
+        });
+        if (currentTeamId.current === teamId) await refresh();
+      } else {
+        setRequestState(getRequestState(nextError, online));
+      }
+    }
+    finally { setBusy(false); }
+  }
+
+  function submitInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!teamId) return;
+    void run(async () => {
+      await createInvitation(teamId, email, inviteRole);
+      setEmail('');
+      setNotice(`Invitation sent to ${email}. Share the invite link so they can accept it.`);
+    });
+  }
+
+  async function copyInviteLink(invitationId: string) {
+    const link = `${window.location.origin}/join?invite=${encodeURIComponent(invitationId)}`;
+    try {
+      await navigator.clipboard?.writeText(link);
+      setNotice(`Invite link copied: ${link}`);
+    } catch {
+      setNotice(`Invite link: ${link}`);
+    }
+  }
+
+  if (!user || !teamId) return <StatePanel variant="empty" title="Choose a team" message="Team administration becomes available after you join or create a team." />;
+  if (!canAdminister) return <StatePanel variant="permission" title="Coach access required" message="Only an active Coach or Team Leader can administer membership and safety settings." />;
+  if (status === 'loading') return <StatePanel variant="loading" title="Loading team administration" message="Checking the roster, invitations, safety policy, reports, and audit history." />;
+  if (status === 'error') return <StatePanel variant="error" title="Administration could not load" message={error?.message ?? 'Try again.'} actionLabel="Retry" onAction={() => void refresh()} />;
+
+  return (
+    <div className="page-stack">
+      <section className="team-hero">
+        <div>
+          <span className="eyebrow light">TEAM ADMINISTRATION</span>
+          <h3>{activeTeam?.team?.name ?? 'Your team'}</h3>
+          <p>Manage the private roster, invitations, safety settings, reports, and audit history.</p>
+        </div>
+        <button type="button" onClick={() => document.getElementById('invite-member')?.focus()}>＋ Invite member</button>
+      </section>
+      {!online ? (
+        <StatePanel
+          variant="offline"
+          title="You are offline"
+          message="Administration is read-only until the connection returns. Invitations, role changes, and policy updates are disabled."
+          actionLabel="Try again"
+          onAction={() => void refresh()}
+        />
+      ) : null}
+      {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
+      {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => setNotice(null)} /> : null}
+      <section className="split-panels">
+        <article className="feature-panel">
+          <span className="eyebrow">INVITE A MEMBER</span>
+          <h3>Grow the private roster</h3>
+          <p>Invitations are email-bound and expire. Team discovery stays private.</p>
+          <form className="form-stack" onSubmit={submitInvite}>
+            <label>Email<input id="invite-member" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+            <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)}><option value="student">Student</option><option value="parent">Parent</option><option value="mentor">Mentor</option><option value="coach">Coach</option></select></label>
+            <button className="button" type="submit" disabled={locked}>{busy ? 'Sending…' : 'Send invitation'}</button>
+          </form>
+          <p><small>Invitees accept at <code>/join</code>. They must verify their email address first.</small></p>
+        </article>
+        <article className="feature-panel">
+          <span className="eyebrow">SAFETY DEFAULTS</span>
+          <h3>Private by design</h3>
+          <p>Choose explicit team policies. Least-privilege defaults remain in place for student accounts.</p>
+          <div>
+            <span>Messages: {data.policy?.directMessaging ?? 'disabled'}</span>
+            <span>Approval: {data.policy?.membershipApproval ?? 'inviteOnly'}</span>
+            <span>Discoverability: private</span>
+            <span>Retention: {data.policy?.messageRetentionDays ?? 365} days</span>
+          </div>
+          <div className="form-actions">
+            <button className="button button--ghost" type="button" disabled={locked} onClick={() => teamId && void run(() => updateTeamPolicy(teamId, { directMessaging: data.policy?.directMessaging === 'coachesOnly' ? 'disabled' : 'coachesOnly' }))}>Toggle coach-only messaging</button>
+            <button className="button button--ghost" type="button" disabled={locked} onClick={() => teamId && void run(() => updateTeamPolicy(teamId, { membershipApproval: data.policy?.membershipApproval === 'coachApproval' ? 'inviteOnly' : 'coachApproval' }))}>Toggle join approvals</button>
+            <button className="button button--ghost" type="button" disabled={locked} onClick={() => teamId && void run(() => updateTeamPolicy(teamId, { fileSharing: data.policy?.fileSharing === 'teamOnly' ? 'disabled' : 'teamOnly' }))}>Toggle team files</button>
+            <button className="button button--ghost" type="button" disabled={locked} onClick={() => teamId && void run(() => updateTeamPolicy(teamId, { messageRetentionDays: data.policy?.messageRetentionDays === 30 ? 90 : data.policy?.messageRetentionDays === 90 ? 365 : 30 }))}>Cycle message retention</button>
+          </div>
+        </article>
+      </section>
+      <section>
+        <div className="section-heading"><div><span className="eyebrow">ROSTER</span><h3>{data.members.length} team member{data.members.length === 1 ? '' : 's'}</h3></div></div>
+        {data.membersTruncated ? <p><small>Showing the first 200 members. Older memberships are not listed.</small></p> : null}
+        {data.members.length === 0 ? <StatePanel variant="empty" title="No members yet" message="Invite a student, parent, mentor, or coach to start the private roster." /> : (
+          <div className="member-grid">
+            {data.members.map((member, index) => (
+              <article key={member.userId}>
+                <span className={`big-avatar color-${index % 6}`}>{member.initials}</span>
+                <strong>{member.displayName}</strong>
+                <small>{member.role === 'teamLeader' ? 'Team leader' : member.role} · {member.status}</small>
+                <label className="visually-hidden" htmlFor={`role-${member.userId}`}>Role for {member.displayName}</label>
+                <select id={`role-${member.userId}`} aria-label={`Role for ${member.displayName}`} value={member.role === 'teamLeader' ? 'coach' : member.role} disabled={locked || member.status !== 'active'} onChange={(event) => void run(() => assignTeamRole(teamId, member.userId, event.target.value as 'student' | 'parent' | 'mentor' | 'coach'))}><option value="student">Student</option><option value="parent">Parent</option><option value="mentor">Mentor</option><option value="coach">Coach</option></select>
+                <div className="form-actions"><button className="text-button" type="button" disabled={locked || member.userId === user.uid} onClick={() => void run(() => updateMembershipStatus(teamId, member.userId, member.status === 'suspended' ? 'active' : 'suspended'))}>{member.status === 'suspended' ? 'Restore' : 'Suspend'}</button>{member.role !== 'teamLeader' && member.status === 'active' ? <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => transferTeamLeadership(teamId, member.userId))}>Make leader</button> : null}</div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="split-panels">
+        <article className="feature-panel">
+          <span className="eyebrow">INVITATIONS</span>
+          <h3>{pendingInvitations.length} pending invitation{pendingInvitations.length === 1 ? '' : 's'}</h3>
+          {data.invitations.length === 0 ? <p>No invitations have been sent for this team yet.</p> : null}
+          {data.invitations.map((invitation) => (
+            <div className="list-row" key={invitation.id}>
+              <span>
+                <strong>{invitation.email}</strong>
+                <small>{invitation.role} · {invitation.status} · {invitationExpiry(invitation)}</small>
+              </span>
+              <span>
+                {invitation.status === 'pending' ? (
+                  <>
+                    <button className="text-button" type="button" disabled={busy} onClick={() => void copyInviteLink(invitation.id)}>Copy link</button>
+                    <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => revokeInvitation(teamId, invitation.id))}>Revoke</button>
+                  </>
+                ) : <small>{invitation.status}</small>}
+              </span>
+            </div>
+          ))}
+          {data.truncated.invitations ? <p><small>Showing the {LIST_LIMIT} most recent invitations.</small></p> : null}
+        </article>
+        <article className="feature-panel">
+          <span className="eyebrow">JOIN APPROVALS</span>
+          <h3>Pending requests</h3>
+          {data.policy?.membershipApproval !== 'coachApproval' ? <p><small>This team is invite-only, so requests to join are refused. Turn on join approvals above to accept them.</small></p> : null}
+          {pendingRequests.length === 0 ? <p>No pending join requests.</p> : pendingRequests.map((request) => (
+            <div className="list-row" key={request.id}>
+              <span>{requesterLabel(members, request)}</span>
+              <span>
+                <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => approveJoinRequest(teamId, request.id))}>Approve</button>
+                <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => rejectJoinRequest(teamId, request.id))}>Reject</button>
+              </span>
+            </div>
+          ))}
+          {data.truncated.requests ? <p><small>Showing the {LIST_LIMIT} most recent requests.</small></p> : null}
+          <p><small>Your team ID for join requests: <code>{teamId}</code></small></p>
+        </article>
+      </section>
+      <section className="split-panels">
+        <article className="feature-panel">
+          <span className="eyebrow">MODERATION QUEUE</span>
+          <h3>Safety reports</h3>
+          {data.cases.length === 0 ? <p>No reports in the queue.</p> : data.cases.map((moderationCase) => (
+            <div className="list-row" key={moderationCase.id}>
+              <span>{moderationCase.reasonCode} · {moderationCase.severity}</span>
+              <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => updateModerationCase({ teamId, caseId: moderationCase.id, expectedVersion: moderationCase.version, status: 'resolved', action: 'none' }))}>{moderationCase.status === 'resolved' ? 'Resolved' : 'Resolve'}</button>
+            </div>
+          ))}
+          {data.truncated.cases ? <p><small>Showing the {LIST_LIMIT} most recent reports.</small></p> : null}
+        </article>
+        <article className="feature-panel">
+          <span className="eyebrow">AUDIT HISTORY</span>
+          <h3>Administrative record</h3>
+          <p>Invitations, role changes, membership changes, and moderation actions are recorded by the server.</p>
+          <div>
+            <span>{data.auditCount === 0 ? 'No administrative events yet' : `${data.auditCount}${data.truncated.audit ? '+' : ''} authorized events`}</span>
+            <span>Newest first</span>
+            <span>Server generated</span>
+            <span>Team scoped</span>
+          </div>
+        </article>
+      </section>
+    </div>
+  );
+}

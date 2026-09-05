@@ -459,6 +459,11 @@ td {
   background: white;
 }
 
+.state-panel--success {
+  border-left: 5px solid var(--forest);
+  background: #f6faef;
+}
+
 .state-panel--error {
   border-left: 5px solid var(--danger);
   background: #fff8f7;
@@ -685,21 +690,15 @@ td {
 
 /* Exact page patterns from FIRST-PIT/First-Pit. */
 .onboarding-shell { min-height: 100dvh; display: grid; grid-template-columns: 1fr 1fr; background: #0d1713; }
-.onboarding-art { position: relative; overflow: hidden; background: #1a3129; }
-.orbit { position: absolute; border: 1px solid rgba(200,241,53,.28); border-radius: 50%; inset: 15% -20%; }
-.orbit-two { inset: 28% 5%; transform: rotate(44deg); }
-.bot { position: absolute; z-index: 2; left: 50%; top: 49%; width: 230px; height: 180px; transform: translate(-50%,-50%) rotate(-4deg); border-radius: 38px; background: var(--acid); box-shadow: 0 35px 90px rgba(0,0,0,.35); }
-.bot::before,
-.bot::after { content: ''; position: absolute; top: -34px; width: 18px; height: 52px; border-radius: 9px; background: var(--acid); }
-.bot::before { left: 48px; transform: rotate(-16deg); }
-.bot::after { right: 48px; transform: rotate(16deg); }
-.bot-eye { position: relative; display: inline-block; width: 32px; height: 32px; margin: 57px 26px 0 42px; border-radius: 50%; background: #142119; }
-.bot-eye + .bot-eye { margin-left: 8px; }
-.bot-smile { width: 70px; height: 24px; margin: 13px auto; border-bottom: 7px solid #142119; border-radius: 50%; }
-.float-shape { position: absolute; z-index: 3; color: var(--acid); font-size: 28px; }
-.shape-one { left: 15%; top: 19%; }
-.shape-two { right: 18%; bottom: 22%; font-size: 44px; }
-.shape-three { left: 23%; bottom: 14%; color: var(--orange); }
+.onboarding-art { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 26px; overflow: hidden; padding: 56px 6vw; color: white; background: #1a3129; }
+.onboarding-art h2 { margin: 0; max-width: 15ch; color: white; font: 700 clamp(28px,3vw,42px)/1.06 'Space Grotesk'; letter-spacing: -.04em; }
+.onboarding-art p { margin: 0; max-width: 42ch; color: #b9c7bf; font-size: 16px; line-height: 1.55; }
+.art-points { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.art-points li { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 12px; color: #e4ebe6; font-size: 15px; }
+.art-points li::before { content: ''; width: 12px; height: 12px; margin-left: 5px; border-radius: 3px; background: var(--acid); }
+.art-points li:nth-child(2)::before { background: var(--orange); }
+.art-points li:nth-child(3)::before { background: var(--purple); }
+.art-points li:nth-child(4)::before { background: #33a872; }
 .onboarding-panel { position: relative; display: flex; flex-direction: column; min-height: 100dvh; padding: 44px 9vw 28px; background: #fbfcf8; border-radius: 34px 0 0 34px; }
 .onboarding-content { margin: auto 0; max-width: 520px; }
 .onboarding-content h1 { margin: 14px 0 16px; font: 700 clamp(38px,5vw,68px)/.98 'Space Grotesk'; letter-spacing: -.055em; }
@@ -744,7 +743,11 @@ td {
 .mini-bot { display: grid; place-items: center; width: 64px; height: 54px; margin: 28px auto 0; border-radius: 12px; color: #101713; background: var(--orange); font-size: 28px; transform: rotate(5deg); }
 .score-card { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; border: 1px solid var(--line); border-radius: 20px; background: white; }
 .score-card .eyebrow { align-self: flex-start; }
-.ring { position: relative; display: grid; place-items: center; width: 120px; height: 120px; margin: 14px; border-radius: 50%; border: 10px solid var(--acid); background: #f4f6f2; }
+/* `--value` is a unitless 0–100 percentage supplied by the call site. The old
+   solid border ignored it and always drew a full ring, so every progress ring
+   read as 100% no matter the number printed inside it. */
+.ring { position: relative; display: grid; place-items: center; width: 120px; height: 120px; margin: 14px; border-radius: 50%; background: conic-gradient(var(--acid) calc(clamp(0, var(--value, 0), 100) * 1%), #dfe4dc 0); }
+.ring::before { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: #f4f6f2; }
 .ring strong { position: relative; z-index: 1; font: 700 25px 'Space Grotesk'; }
 .score-card p { margin: 0; color: var(--muted); font-size: 12px; }
 .score-card b { color: var(--ink); }
@@ -772,7 +775,9 @@ td {
 .status-pill.review { color: #6546ce; background: #eee9ff; }
 .status-pill.done { color: #188058; background: #dcf6e9; }
 .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #2c45ad; background: #dfe4ff; font-size: 9px; font-weight: 800; }
-.due { color: var(--muted); font-size: 11px; }
+.due { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.due--overdue { color: var(--danger); font-weight: 700; }
+.due--today { color: var(--ink); font-weight: 700; }
 .role-interface-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
 .role-interface-grid article { padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: #fbfcf8; }
 .role-interface-grid article.active { border-color: #b7d734; background: #f7ffd8; }
@@ -892,15 +897,11 @@ td {
 
 @media (max-width: 800px) {
   .onboarding-shell { grid-template-columns: 1fr; }
-  .onboarding-art { height: 31dvh; }
-  .bot { width: 140px; height: 105px; border-radius: 25px; }
-  .bot::before,
-.bot::after { top: -22px; width: 12px; height: 34px; }
-  .bot-eye { width: 19px; height: 19px; margin: 32px 14px 0 26px; }
-  .bot-eye + .bot-eye { margin-left: 4px; }
-  .bot-smile { width: 42px; height: 14px; margin-top: 7px; border-bottom-width: 4px; }
-  .onboarding-panel { min-height: 69dvh; margin-top: -20px; padding: 26px 22px 20px; border-radius: 24px 24px 0 0; z-index: 5; }
-  .onboarding-panel > .brand { position: absolute; top: -28dvh; color: white; }
+  .onboarding-art { gap: 16px; padding: 28px 22px; }
+  .onboarding-art h2 { font-size: 24px; }
+  .onboarding-art p { font-size: 14px; }
+  .art-points { display: none; }
+  .onboarding-panel { min-height: auto; padding: 26px 22px 20px; border-radius: 0; z-index: 5; }
   .onboarding-content { margin: 40px 0 auto; max-width: none; }
   .onboarding-content h1 { font-size: 40px; }
   .onboarding-content > p { margin-bottom: 24px; font-size: 15px; }
@@ -1149,6 +1150,11 @@ and profile compositions. */
 .feed-list p { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }
 .feed-list div { display: flex; gap: 8px; }
 .feed-list button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 11px; font-weight: 700; }
+.participant-picker { display: grid; gap: 6px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 12px; max-height: 190px; overflow-y: auto; }
+.participant-picker legend { padding: 0 4px; font-size: 12px; font-weight: 700; }
+.participant-picker .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.participant-picker p { margin: 4px 0 0; font-size: 11px; }
+
 .profile-preview { display: flex; align-items: center; gap: 18px; }
 .profile-preview .big-avatar { flex: 0 0 72px; width: 72px; height: 72px; margin: 0; font-size: 20px; }
 .profile-preview h3 { margin: 2px 0 4px; }
@@ -1158,7 +1164,12 @@ and profile compositions. */
   .channels { display: flex; gap: 6px; padding: 8px; overflow-x: auto; border: 0; border-bottom: 1px solid var(--line); }
   .channels > .eyebrow { display: none; }
   .channels button { flex: 0 0 auto; width: auto; padding: 8px 10px; }
-  .channel-create { display: none; }
+  /* Creating a channel used to be impossible on a phone — the primary
+     at-the-pit-table device. The form stays reachable, laid out as a compact
+     inline control at the end of the horizontal channel strip. */
+  .channel-create { flex: 0 0 auto; display: flex; gap: 6px; margin-top: 0; align-items: center; }
+  .channel-create input { width: 8.5rem; padding: 8px 10px; }
+  .channel-create button { flex: 0 0 auto; width: auto; padding: 8px 12px; }
   .conversation { height: calc(100% - 51px); }
   .conversation-head { padding: 13px 15px; }
   .messages { padding: 14px; }
@@ -1185,4 +1196,31 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: 3px solid var(--blue);
   outline-offset: 3px;
+}
+
+/* Storage Area, task attachments, and board busy state. */
+.file-upload-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+.file-upload-controls .button { display: inline-flex; align-items: center; }
+
+.team-file-list { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.team-file-list li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: white; transition: border-color .15s, background-color .15s; }
+.team-file-list li:hover { border-color: var(--border-strong); }
+.team-file-list li.is-linked { border-color: #b7d734; background: #f7ffd8; }
+.team-file-list li:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.team-file-list a { color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.team-file-list strong { font-size: 14px; }
+.team-file-list small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+
+.task-attachments { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.task-attachments h3 { margin: 0 0 10px; font: 700 14px 'Space Grotesk', sans-serif; }
+.mb-attachment-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mb-attachment-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcf8; font-size: 12px; }
+.mb-attachment-list a { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.mb-attachment-list small { color: var(--muted); font-size: 10px; }
+
+.mb-board-stats__busy { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.mb-board-stats__busy::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); animation: fp-pulse 1.4s ease-in-out infinite; }
+
+@media (max-width: 640px) {
+  .team-file-list li { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
