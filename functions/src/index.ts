@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, onRequest, type CallableRequest, type Request } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import type { Response } from 'express';
 import {
@@ -105,6 +106,18 @@ import {
   listScoreDefinitions as listScoreDefinitionsCommand,
   listScoreSessions as listScoreSessionsCommand
 } from './phase6.js';
+
+/**
+ * Secret Manager injects a secret only into the functions that list it in their
+ * dependency array, so every entry point that reaches Google — the consent URL,
+ * the token exchange, a refresh, or a refresh-token decryption — has to declare
+ * both. Without the declaration `googleOAuthConfig()` sees empty strings and the
+ * feature fails as a generic `failed-precondition` at runtime rather than at
+ * deploy time.
+ */
+const googleOAuthClientSecret = defineSecret('GOOGLE_OAUTH_CLIENT_SECRET');
+const googleTokenEncryptionKey = defineSecret('GOOGLE_TOKEN_ENCRYPTION_KEY');
+const googleSecrets = [googleOAuthClientSecret, googleTokenEncryptionKey];
 import { getDashboard as getDashboardCommand, globalSearch as globalSearchCommand, updateProfileSettings as updateProfileSettingsCommand } from './phase7.js';
 
 if (getApps().length === 0) {
@@ -918,15 +931,15 @@ export const createGoal = onCall(async (request) => createGoalCommand(request as
 export const updateGoal = onCall(async (request) => updateGoalCommand(request as CallableRequest<Record<string, unknown>>));
 export const createEvent = onCall(async (request) => createEventCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateEvent = onCall(async (request) => updateEventCommand(request as CallableRequest<Record<string, unknown>>));
-export const deleteEvent = onCall(async (request) => deleteEventCommand(request as CallableRequest<Record<string, unknown>>));
-export const startGoogleOAuth = onCall(async (request) => startGoogleOAuthCommand(request as CallableRequest<Record<string, unknown>>));
+export const deleteEvent = onCall({ secrets: googleSecrets }, async (request) => deleteEventCommand(request as CallableRequest<Record<string, unknown>>));
+export const startGoogleOAuth = onCall({ secrets: googleSecrets }, async (request) => startGoogleOAuthCommand(request as CallableRequest<Record<string, unknown>>));
 export const getGoogleConnection = onCall(async (request) => getGoogleConnectionCommand(request as CallableRequest<Record<string, unknown>>));
-export const disconnectGoogle = onCall(async (request) => disconnectGoogleCommand(request as CallableRequest<Record<string, unknown>>));
-export const listGoogleCalendars = onCall(async (request) => listGoogleCalendarsCommand(request as CallableRequest<Record<string, unknown>>));
-export const listMyGoogleEvents = onCall(async (request) => listMyGoogleEventsCommand(request as CallableRequest<Record<string, unknown>>));
-export const setTeamCalendarSync = onCall(async (request) => setTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
+export const disconnectGoogle = onCall({ secrets: googleSecrets }, async (request) => disconnectGoogleCommand(request as CallableRequest<Record<string, unknown>>));
+export const listGoogleCalendars = onCall({ secrets: googleSecrets }, async (request) => listGoogleCalendarsCommand(request as CallableRequest<Record<string, unknown>>));
+export const listMyGoogleEvents = onCall({ secrets: googleSecrets }, async (request) => listMyGoogleEventsCommand(request as CallableRequest<Record<string, unknown>>));
+export const setTeamCalendarSync = onCall({ secrets: googleSecrets }, async (request) => setTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
 export const getTeamCalendarSync = onCall(async (request) => getTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
-export const syncTeamCalendar = onCall(async (request) => syncTeamCalendarCommand(request as CallableRequest<Record<string, unknown>>));
+export const syncTeamCalendar = onCall({ secrets: googleSecrets }, async (request) => syncTeamCalendarCommand(request as CallableRequest<Record<string, unknown>>));
 export const setTeamChatLink = onCall(async (request) => setTeamChatLinkCommand(request as CallableRequest<Record<string, unknown>>));
 export const markNotificationRead = onCall(async (request) => markNotificationReadCommand(request as CallableRequest<Record<string, unknown>>));
 export const createFileMetadata = onCall(async (request) => createFileMetadataCommand(request as CallableRequest<Record<string, unknown>>));
@@ -1063,11 +1076,11 @@ export async function handleRequestWithIntegrations(req: Request, res: Response)
  * concern rather than something the emulator can rehearse, so the pilot polls.
  */
 export const syncGoogleCalendars = onSchedule(
-  { schedule: 'every 30 minutes', timeZone: 'Etc/UTC', retryCount: 1 },
+  { schedule: 'every 30 minutes', timeZone: 'Etc/UTC', retryCount: 1, secrets: googleSecrets },
   async () => {
     const result = await syncAllTeamCalendars();
     logger.info('google.calendar.sync.completed', result);
   }
 );
 
-export const api = onRequest({ cors: false }, handleRequestWithIntegrations);
+export const api = onRequest({ cors: false, secrets: googleSecrets }, handleRequestWithIntegrations);
