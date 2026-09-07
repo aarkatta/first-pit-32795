@@ -22,7 +22,12 @@ function authErrorMessage(error: unknown) {
     return 'An account already exists for that email. Sign in with your password, then link Google from your profile.';
   }
   if (code.includes('auth/popup-blocked')) return 'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.';
-  if (code.includes('auth/unauthorized-domain')) return 'This address is not an authorized sign-in domain for the project.';
+  // Naming the host matters: the fix is to add exactly this origin to the
+  // Firebase Auth authorized-domain list, and a preview deployment gets a
+  // different one on every branch.
+  if (code.includes('auth/unauthorized-domain')) {
+    return `Sign-in is not enabled for this site address (${window.location.hostname}). Ask an administrator to authorize this domain in Firebase Authentication.`;
+  }
   // Both mean the provider was never switched on in the Firebase console.
   if (code.includes('auth/operation-not-allowed') || code.includes('auth/configuration-not-found')) {
     return 'That sign-in method is not enabled for this project yet.';
