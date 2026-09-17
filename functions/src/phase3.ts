@@ -7,14 +7,14 @@ import {
   getInput,
   isReplayOfOwnCreate,
   requireString,
+  requireText,
   requireTeamAdmin,
   requireTeamId,
   requireTeamMember,
   auditRecord,
   type TeamAdmin
 } from './phase2.js';
-import { columnHasCapacity, DEFAULT_PROJECT_COLUMNS, MAX_CARDS_PER_COLUMN_PAGE, ORDER_STEP } from './kanban.js';
-import { deleteGoogleEvent } from './google-calendar.js';
+import { categoryGoalId, columnHasCapacity, DEFAULT_PROJECT_COLUMNS, MAX_CARDS_PER_COLUMN_PAGE, ORDER_STEP, projectCategories, projectColumns, requireCategoryId, requireProject } from './kanban.js';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_FILE_TYPES = new Set([
@@ -120,16 +120,6 @@ function stringArray(value: unknown, label: string, maxItems = 50, maxLength = 6
   return value.map((entry) => requireString(entry, label, maxLength));
 }
 
-function integerArray(value: unknown, label: string, maxItems = 10): number[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > maxItems) throw new HttpsError('invalid-argument', `${label} must be a bounded list.`);
-  return value.map((entry) => {
-    const number = Number(entry);
-    if (!Number.isInteger(number) || number < 0 || number > 10080) throw new HttpsError('invalid-argument', `${label} contains an invalid value.`);
-    return number;
-  });
-}
-
 function parseTimestamp(value: unknown, label: string): Timestamp {
   if (value instanceof Timestamp) return value;
   if (value && typeof value === 'object' && typeof (value as { toDate?: unknown }).toDate === 'function') {
@@ -209,23 +199,6 @@ export function goalOperationVersion(
   return mutationVersion(receipt.version, 'Stored goal version');
 }
 
-export function nextEventMutationVersion(currentVersion: unknown, expectedVersion?: unknown): number {
-  return nextRecordVersion(currentVersion, expectedVersion, 'This event changed while you were editing it. Reload the latest event before saving.');
-}
-
-export function eventOperationVersion(
-  receipt: Record<string, unknown>,
-  expected: { teamId: string; actorUserId: string; eventId: string }
-) {
-  if (receipt.teamId !== expected.teamId
-    || receipt.createdBy !== expected.actorUserId
-    || receipt.kind !== 'event.update'
-    || receipt.eventId !== expected.eventId) {
-    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different event update.');
-  }
-  return mutationVersion(receipt.version, 'Stored event version');
-}
-
 export function taskNotificationDedupeKey(taskId: string, version: number) {
   return `task:${taskId}:changed:v${version}`;
 }
@@ -257,40 +230,64 @@ function validateChecklist(value: unknown) {
   });
 }
 
-export function validateRecurrence(value: unknown) {
-  if (value === undefined || value === null) return null;
-  if (!value || typeof value !== 'object') throw new HttpsError('invalid-argument', 'Recurrence is invalid.');
-  const record = value as Record<string, unknown>;
-  const frequency = enumValue(record.frequency, ['weekly', 'monthly'] as const, 'Recurrence frequency');
-  const interval = Number(record.interval ?? 1);
-  if (!Number.isInteger(interval) || interval < 1 || interval > 4) throw new HttpsError('invalid-argument', 'Recurrence interval must be 1 to 4.');
-  const count = record.count === undefined ? undefined : Number(record.count);
-  if (count !== undefined && (!Number.isInteger(count) || count < 1 || count > 52)) throw new HttpsError('invalid-argument', 'Recurrence count must be 1 to 52.');
-  const until = record.until === undefined ? undefined : parseTimestamp(record.until, 'Recurrence end');
-  if (count === undefined && until === undefined) throw new HttpsError('invalid-argument', 'Recurrence needs a count or end date.');
-  return { frequency, interval, ...(count === undefined ? {} : { count }), ...(until === undefined ? {} : { until }) };
+/**
+ * Sub-items, in the monday.com sense: a small ordered list inside the task
+ * document rather than a second collection of cards.
+ *
+ * Kept inside the task because it makes a subtask edit atomic with its parent's
+ * `version`, keeps sub-items out of the per-column card budget, and needs no
+ * new collection, rules block or index. The trade-off is deliberate: a subtask
+ * is not a board card and has no history of its own.
+ */
+export const MAX_SUBTASKS_PER_TASK = 30;
+export const SUBTASK_STATUSES = ['todo', 'inProgress', 'done'] as const;
+export type SubtaskStatus = (typeof SUBTASK_STATUSES)[number];
+export type Subtask = { id: string; title: string; status: SubtaskStatus; assignedTo: string | null; dueAt: Timestamp | null };
+
+export function validateSubtasks(value: unknown): Subtask[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_SUBTASKS_PER_TASK) {
+    throw new HttpsError('invalid-argument', `A task can have at most ${MAX_SUBTASKS_PER_TASK} subtasks.`);
+  }
+  const subtasks = value.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new HttpsError('invalid-argument', 'Subtask is invalid.');
+    const record = item as Record<string, unknown>;
+    return {
+      id: requireString(record.id, 'Subtask ID', 64),
+      title: requireText(record.title, 'Subtask title', 160),
+      status: enumValue(record.status, SUBTASK_STATUSES, 'Subtask status', 'todo'),
+      assignedTo: optionalId(record.assignedTo, 'Subtask assignee'),
+      dueAt: optionalTimestamp(record.dueAt, 'Subtask due date')
+    };
+  });
+  if (new Set(subtasks.map((subtask) => subtask.id)).size !== subtasks.length) {
+    throw new HttpsError('invalid-argument', 'Each subtask can appear only once.');
+  }
+  return subtasks;
 }
 
-export function occurrences(start: Date, recurrence: { frequency: 'weekly' | 'monthly'; interval: number; count?: number; until?: Timestamp }) {
-  const result: Date[] = [];
-  const max = recurrence.count ?? 52;
-  for (let index = 0; index < max; index += 1) {
-    const occurrence = new Date(start);
-    if (recurrence.frequency === 'weekly') {
-      occurrence.setDate(occurrence.getDate() + 7 * recurrence.interval * index);
-    } else {
-      // Anchor every occurrence to the original day-of-month, clamped to the
-      // target month's length: a bare setMonth() on Jan 31 overflows short
-      // months and permanently shifts every later occurrence.
-      occurrence.setDate(1);
-      occurrence.setMonth(occurrence.getMonth() + recurrence.interval * index);
-      const daysInMonth = new Date(occurrence.getFullYear(), occurrence.getMonth() + 1, 0).getDate();
-      occurrence.setDate(Math.min(start.getDate(), daysInMonth));
-    }
-    if (recurrence.until && occurrence > recurrence.until.toDate()) break;
-    result.push(occurrence);
-  }
-  return result;
+export function readSubtasks(value: unknown): Subtask[] {
+  return Array.isArray(value) ? validateSubtasks(value) : [];
+}
+
+/**
+ * Who may flip one subtask's status without being able to edit the card: the
+ * person the parent card is assigned to, and the person the subtask itself is
+ * assigned to. Anyone else needs admin rights, which are checked separately.
+ */
+export function canUpdateSubtaskStatus(task: { assignedTo?: unknown }, subtask: Subtask, uid: string): boolean {
+  return task.assignedTo === uid || subtask.assignedTo === uid;
+}
+
+export function applySubtaskStatus(subtasks: Subtask[], change: { id: string; status: SubtaskStatus }): Subtask[] {
+  if (!subtasks.some((subtask) => subtask.id === change.id)) throw new HttpsError('not-found', 'Subtask not found on this task.');
+  return subtasks.map((subtask) => subtask.id === change.id ? { ...subtask, status: change.status } : subtask);
+}
+
+export function requireSubtaskStatusInput(value: unknown): { id: string; status: SubtaskStatus } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpsError('invalid-argument', 'Subtask status change is invalid.');
+  const record = value as Record<string, unknown>;
+  return { id: requireString(record.id, 'Subtask ID', 64), status: enumValue(record.status, SUBTASK_STATUSES, 'Subtask status') };
 }
 
 async function notificationSnapshots(
@@ -344,8 +341,8 @@ async function validateTaskReferences(transaction: Transaction, teamId: string, 
 }
 
 export function validateTaskInput(input: Record<string, unknown>) {
-  const title = requireString(input.title, 'Task title', 160);
-  const description = input.description === undefined ? '' : requireString(input.description, 'Task description', 4000);
+  const title = requireText(input.title, 'Task title', 160);
+  const description = input.description === undefined ? '' : requireText(input.description, 'Task description', 4000);
   const status = enumValue(input.status, ['todo', 'inProgress', 'review', 'completed'] as const, 'Task status', 'todo');
   const priority = enumValue(input.priority, ['low', 'medium', 'high', 'urgent'] as const, 'Task priority', 'medium');
   const labels = stringArray(input.labels, 'Task labels', 20, 40);
@@ -354,7 +351,9 @@ export function validateTaskInput(input: Record<string, unknown>) {
   const assignedTo = optionalId(input.assignedTo, 'Assigned user ID');
   const goalId = optionalId(input.goalId, 'Goal ID');
   const dueAt = optionalTimestamp(input.dueAt, 'Task due date');
-  return { title, description, status, priority, labels, watcherUserIds, checklist, assignedTo, goalId, dueAt };
+  const startAt = optionalTimestamp(input.startAt, 'Task start date');
+  const endAt = optionalTimestamp(input.endAt, 'Task end date');
+  return { title, description, status, priority, labels, watcherUserIds, checklist, assignedTo, goalId, dueAt, startAt, endAt };
 }
 
 export const createTask = async (request: Phase3Request) => {
@@ -437,21 +436,28 @@ export const updateTask = async (request: Phase3Request) => {
   const db = getFirestore();
   const opRef = operationRef(teamId, operationId(input, 'updateTask'));
   const admin = isAdmin(actor);
-  const allowedStudentFields = new Set(['status', 'checklist', 'comment', 'expectedVersion', 'operationId', 'taskId', 'teamId']);
-  for (const key of Object.keys(input)) if (!admin && !allowedStudentFields.has(key)) throw new HttpsError('permission-denied', 'Students can update status, checklist, and comments only.');
+  const allowedStudentFields = new Set(['status', 'checklist', 'comment', 'subtaskStatus', 'expectedVersion', 'operationId', 'taskId', 'teamId']);
+  for (const key of Object.keys(input)) if (!admin && !allowedStudentFields.has(key)) throw new HttpsError('permission-denied', 'Students can update status, checklist, subtask status, and comments only.');
   const nextStatus = has(input, 'status') ? enumValue(input.status, ['todo', 'inProgress', 'review', 'completed'] as const, 'Task status') : undefined;
   const nextChecklist = has(input, 'checklist') ? validateChecklist(input.checklist) : undefined;
-  const comment = has(input, 'comment') ? requireString(input.comment, 'Task comment', 2000) : undefined;
+  const comment = has(input, 'comment') ? requireText(input.comment, 'Task comment', 2000) : undefined;
+  const subtaskStatus = has(input, 'subtaskStatus') ? requireSubtaskStatusInput(input.subtaskStatus) : undefined;
   const adminFields: Record<string, unknown> = {};
   if (admin) {
-    if (has(input, 'title')) adminFields.title = requireString(input.title, 'Task title', 160);
-    if (has(input, 'description')) adminFields.description = requireString(input.description, 'Task description', 4000);
+    if (has(input, 'title')) adminFields.title = requireText(input.title, 'Task title', 160);
+    if (has(input, 'description')) adminFields.description = requireText(input.description, 'Task description', 4000);
     if (has(input, 'priority')) adminFields.priority = enumValue(input.priority, ['low', 'medium', 'high', 'urgent'] as const, 'Task priority');
     if (has(input, 'assignedTo')) adminFields.assignedTo = optionalId(input.assignedTo, 'Assigned user ID');
     if (has(input, 'goalId')) adminFields.goalId = optionalId(input.goalId, 'Goal ID');
     if (has(input, 'labels')) adminFields.labels = stringArray(input.labels, 'Task labels', 20, 40);
+    if (has(input, 'categoryId')) adminFields.categoryId = optionalId(input.categoryId, 'Category ID');
     if (has(input, 'watcherUserIds')) adminFields.watcherUserIds = stringArray(input.watcherUserIds, 'Task watchers', 20);
     if (has(input, 'dueAt')) adminFields.dueAt = optionalTimestamp(input.dueAt, 'Task due date');
+    // Planned window, separate from the deadline: a card can start before it is
+    // due and finish after it, and the board's timeline reads these first.
+    if (has(input, 'startAt')) adminFields.startAt = optionalTimestamp(input.startAt, 'Task start date');
+    if (has(input, 'endAt')) adminFields.endAt = optionalTimestamp(input.endAt, 'Task end date');
+    if (has(input, 'subtasks')) adminFields.subtasks = validateSubtasks(input.subtasks);
   }
   const requiresExpectedVersion = Object.keys(adminFields).length > 0;
   if (requiresExpectedVersion && !has(input, 'expectedVersion')) {
@@ -472,9 +478,22 @@ export const updateTask = async (request: Phase3Request) => {
     // transaction. Re-check it against the in-transaction membership so a coach
     // demoted in between cannot still apply admin-only edits.
     if (!currentAdmin && Object.keys(adminFields).length > 0) {
-      throw new HttpsError('permission-denied', 'Students can update status, checklist, and comments only.');
+      throw new HttpsError('permission-denied', 'Students can update status, checklist, subtask status, and comments only.');
     }
-    if (!currentAdmin && current.assignedTo !== actor.uid) throw new HttpsError('permission-denied', 'Only the assigned student can update this task.');
+    const storedSubtasks = readSubtasks(current.subtasks);
+    const targetSubtask = subtaskStatus ? storedSubtasks.find((entry) => entry.id === subtaskStatus.id) : undefined;
+    if (subtaskStatus && !targetSubtask) throw new HttpsError('not-found', 'Subtask not found on this task.');
+    // A student assigned only to one sub-item may tick that sub-item off, and
+    // nothing else on the card. Any other edit still needs the card itself.
+    const subtaskStatusOnly = subtaskStatus !== undefined
+      && nextStatus === undefined
+      && nextChecklist === undefined
+      && comment === undefined
+      && Object.keys(adminFields).length === 0;
+    const mayEditAsAssignee = current.assignedTo === actor.uid
+      || (subtaskStatusOnly && targetSubtask !== undefined && canUpdateSubtaskStatus(current, targetSubtask, actor.uid));
+    if (!currentAdmin && !mayEditAsAssignee) throw new HttpsError('permission-denied', 'Only the assigned student can update this task.');
+    const nextSubtasks = subtaskStatus ? applySubtaskStatus(storedSubtasks, subtaskStatus) : undefined;
     if (adminFields.assignedTo) await assertTeamMemberInTransaction(transaction, teamId, String(adminFields.assignedTo));
     const nextWatcherUserIds = Array.isArray(adminFields.watcherUserIds) ? adminFields.watcherUserIds : Array.isArray(current.watcherUserIds) ? current.watcherUserIds : [];
     for (const watcherUserId of nextWatcherUserIds) await assertTeamMemberInTransaction(transaction, teamId, String(watcherUserId));
@@ -482,19 +501,50 @@ export const updateTask = async (request: Phase3Request) => {
       const goal = await transaction.get(db.doc(`goals/${String(adminFields.goalId)}`));
       if (!goal.exists || goal.data()?.teamId !== teamId) throw new HttpsError('not-found', 'Goal not found in this team.');
     }
+    // A category belongs to one board, so it is checked against the board this
+    // card is actually on rather than against anything the caller supplied.
+    if (has(adminFields, 'categoryId')) {
+      if (typeof current.projectId !== 'string') throw new HttpsError('failed-precondition', 'This task is not on a board yet.');
+      const projectSnapshot = await transaction.get(db.doc(`projects/${current.projectId}`));
+      const categories = projectCategories(requireProject(projectSnapshot, teamId));
+      const nextCategoryId = adminFields.categoryId === null ? null : requireCategoryId(categories, adminFields.categoryId);
+      // Moving a card to another work package moves it under that package's
+      // milestone, unless this same edit named a milestone explicitly.
+      if (!has(adminFields, 'goalId') && nextCategoryId !== (current.categoryId ?? null)) {
+        adminFields.goalId = categoryGoalId(categories, nextCategoryId);
+      }
+    }
     let boardMoveFields: Record<string, unknown> = {};
     if (nextStatus !== undefined && nextStatus !== current.status && typeof current.projectId === 'string') {
-      const lastCards = await transaction.get(db.collection('tasks')
-        .where('teamId', '==', teamId)
-        .where('projectId', '==', current.projectId)
-        .where('columnId', '==', nextStatus)
-        .orderBy('orderKey', 'desc')
-        .limit(1));
-      boardMoveFields = {
-        columnId: nextStatus,
-        orderKey: Number(lastCards.docs[0]?.data().orderKey ?? 0) + ORDER_STEP,
-        completedAt: nextStatus === 'completed' ? current.completedAt ?? FieldValue.serverTimestamp() : null
-      };
+      // The card's column used to be set to the status id outright. On a board
+      // with custom columns ("Building", "Testing") no such column exists, so
+      // the card moved into a column nothing renders and vanished from the
+      // board. Resolve the status against this board's real workflow instead:
+      // "completed" means the board's completion column, a status that names a
+      // column moves there, and anything else changes the status while the card
+      // stays where it is.
+      const projectSnapshot = await transaction.get(db.doc(`projects/${current.projectId}`));
+      const project = projectSnapshot.data();
+      const columns = project?.archived === true || !projectSnapshot.exists ? [] : projectColumns(project ?? {});
+      const completedColumnId = typeof project?.completedColumnId === 'string' ? project.completedColumnId : 'completed';
+      const requested = nextStatus === 'completed' ? completedColumnId : nextStatus;
+      const targetColumnId = columns.some((column) => column.id === requested) ? requested : String(current.columnId ?? requested);
+      if (targetColumnId !== current.columnId) {
+        const targetCards = await transaction.get(db.collection('tasks')
+          .where('teamId', '==', teamId)
+          .where('projectId', '==', current.projectId)
+          .where('columnId', '==', targetColumnId)
+          .orderBy('orderKey', 'desc')
+          .limit(MAX_CARDS_PER_COLUMN_PAGE));
+        if (!columnHasCapacity(targetCards.size)) {
+          throw new HttpsError('resource-exhausted', 'That column is full. Archive completed work before moving more cards into it.');
+        }
+        boardMoveFields = {
+          columnId: targetColumnId,
+          orderKey: Number(targetCards.docs[0]?.data().orderKey ?? 0) + ORDER_STEP
+        };
+      }
+      boardMoveFields.completedAt = targetColumnId === completedColumnId ? current.completedAt ?? FieldValue.serverTimestamp() : null;
     }
     const recipients = [String(adminFields.assignedTo ?? current.assignedTo ?? ''), ...(Array.isArray(adminFields.watcherUserIds) ? adminFields.watcherUserIds : Array.isArray(current.watcherUserIds) ? current.watcherUserIds : [])].filter((uid) => uid && uid !== actor.uid);
     const dedupe = taskNotificationDedupeKey(taskId, nextVersion);
@@ -503,6 +553,7 @@ export const updateTask = async (request: Phase3Request) => {
       ...adminFields,
       ...(nextStatus === undefined ? {} : { status: nextStatus }),
       ...(nextChecklist === undefined ? {} : { checklist: nextChecklist }),
+      ...(nextSubtasks === undefined ? {} : { subtasks: nextSubtasks }),
       ...boardMoveFields,
       version: nextVersion,
       updatedAt: FieldValue.serverTimestamp()
@@ -548,8 +599,8 @@ export const createGoal = async (request: Phase3Request) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);
   const input = requestRecord(request);
-  const title = requireString(input.title, 'Goal title', 160);
-  const description = input.description === undefined ? '' : requireString(input.description, 'Goal description', 4000);
+  const title = requireText(input.title, 'Goal title', 160);
+  const description = input.description === undefined ? '' : requireText(input.description, 'Goal description', 4000);
   const dueAt = optionalTimestamp(input.dueAt, 'Goal due date');
   const db = getFirestore();
   const goalId = entityId(input, 'goalId', 'goal', db.collection('goals').doc().id);
@@ -574,8 +625,8 @@ export const updateGoal = async (request: Phase3Request) => {
   const goalId = requireString(getInput(request, 'goalId'), 'Goal ID');
   const input = requestRecord(request);
   const updates: Record<string, unknown> = {};
-  if (has(input, 'title')) updates.title = requireString(input.title, 'Goal title', 160);
-  if (has(input, 'description')) updates.description = requireString(input.description, 'Goal description', 4000);
+  if (has(input, 'title')) updates.title = requireText(input.title, 'Goal title', 160);
+  if (has(input, 'description')) updates.description = requireText(input.description, 'Goal description', 4000);
   if (has(input, 'status')) updates.status = enumValue(input.status, ['active', 'completed', 'archived'] as const, 'Goal status');
   if (has(input, 'dueAt')) updates.dueAt = optionalTimestamp(input.dueAt, 'Goal due date');
   // Goals are edited by several coaches at once and used to carry no version at
@@ -599,110 +650,6 @@ export const updateGoal = async (request: Phase3Request) => {
     return nextVersion;
   });
   return { goalId, ...updates, version: committedVersion };
-};
-
-export const createEvent = async (request: Phase3Request) => {
-  const teamId = requireTeamId(request);
-  const admin = await requireTeamAdmin(request, teamId);
-  const input = requestRecord(request);
-  const title = requireString(input.title, 'Event title', 160);
-  const description = input.description === undefined ? '' : requireString(input.description, 'Event description', 4000);
-  const startsAt = parseTimestamp(input.startsAt, 'Event start');
-  const endsAt = parseTimestamp(input.endsAt, 'Event end');
-  if (endsAt.toMillis() <= startsAt.toMillis()) throw new HttpsError('invalid-argument', 'Event end must be after event start.');
-  const eventType = enumValue(input.eventType, ['meeting', 'practice', 'competition', 'deadline', 'reminder'] as const, 'Event type', 'meeting');
-  const recurrence = validateRecurrence(input.recurrence);
-  const linkedTaskIds = stringArray(input.linkedTaskIds, 'Linked tasks', 20);
-  const reminderMinutes = integerArray(input.reminderMinutes, 'Reminder minutes', 5);
-  const db = getFirestore();
-  const eventId = entityId(input, 'eventId', 'event', db.collection('events').doc().id);
-  const opRef = operationRef(teamId, operationId(input, 'createEvent'));
-  await db.runTransaction(async (transaction) => {
-    await assertTeamAdminInTransaction(transaction, teamId, admin);
-    await validateTaskReferences(transaction, teamId, linkedTaskIds);
-    const ref = db.doc(`events/${eventId}`);
-    const existing = await transaction.get(ref);
-    const operation = opRef ? await transaction.get(opRef) : null;
-    if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: admin.uid }, 'Event')) return;
-    const now = FieldValue.serverTimestamp();
-    const event = { id: eventId, teamId, createdBy: admin.uid, title, description, startsAt, endsAt, location: input.location === undefined || input.location === null ? null : requireString(input.location, 'Event location', 240), eventType, recurrence, occurrenceOf: null, reminderMinutes, linkedTaskIds, version: 1, source: 'firstPit' as const, googlePushPending: true, createdAt: now, updatedAt: now };
-    transaction.set(ref, event);
-    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.created' } }));
-    if (opRef) transaction.set(opRef, { teamId, createdBy: admin.uid, kind: 'event.create', createdAt: now });
-    if (recurrence) {
-      const duration = endsAt.toMillis() - startsAt.toMillis();
-      for (const occurrence of occurrences(startsAt.toDate(), recurrence)) {
-        const occurrenceId = `${eventId}_${occurrence.getTime()}`;
-        transaction.set(db.doc(`eventOccurrences/${occurrenceId}`), { ...event, id: occurrenceId, occurrenceOf: eventId, startsAt: Timestamp.fromDate(occurrence), endsAt: Timestamp.fromMillis(occurrence.getTime() + duration), recurrence: null, createdAt: now, updatedAt: now });
-      }
-    }
-  });
-  return { eventId, recurring: Boolean(recurrence) };
-};
-
-export const updateEvent = async (request: Phase3Request) => {
-  const teamId = requireTeamId(request);
-  const admin = await requireTeamAdmin(request, teamId);
-  const eventId = requireString(getInput(request, 'eventId'), 'Event ID');
-  const input = requestRecord(request);
-  const updates: Record<string, unknown> = {};
-  if (has(input, 'title')) updates.title = requireString(input.title, 'Event title', 160);
-  if (has(input, 'description')) updates.description = requireString(input.description, 'Event description', 4000);
-  if (has(input, 'location')) updates.location = input.location === null ? null : requireString(input.location, 'Event location', 240);
-  if (has(input, 'eventType')) updates.eventType = enumValue(input.eventType, ['meeting', 'practice', 'competition', 'deadline', 'reminder'] as const, 'Event type');
-  if (has(input, 'reminderMinutes')) updates.reminderMinutes = integerArray(input.reminderMinutes, 'Reminder minutes', 5);
-  const linkedTaskIds = has(input, 'linkedTaskIds') ? stringArray(input.linkedTaskIds, 'Linked tasks', 20) : null;
-  const startsAt = has(input, 'startsAt') ? parseTimestamp(input.startsAt, 'Event start') : null;
-  const endsAt = has(input, 'endsAt') ? parseTimestamp(input.endsAt, 'Event end') : null;
-  const expectedVersion = mutationVersion(input.expectedVersion, 'Expected version');
-  const db = getFirestore();
-  const opRef = operationRef(teamId, operationId(input, 'updateEvent'));
-  const committedVersion = await db.runTransaction(async (transaction) => {
-    await assertTeamAdminInTransaction(transaction, teamId, admin);
-    const ref = db.doc(`events/${eventId}`);
-    const snapshot = await transaction.get(ref);
-    const operation = opRef ? await transaction.get(opRef) : null;
-    if (!snapshot.exists || snapshot.data()?.teamId !== teamId) throw new HttpsError('not-found', 'Event not found.');
-    if (operation?.exists) return eventOperationVersion(operation.data() ?? {}, { teamId, actorUserId: admin.uid, eventId });
-    // Every transaction read must precede the first write, so the linked-task
-    // check runs here rather than beside the field validation above.
-    if (linkedTaskIds) await validateTaskReferences(transaction, teamId, linkedTaskIds);
-    const current = snapshot.data() ?? {};
-    const nextStart = startsAt ?? (current.startsAt as Timestamp);
-    const nextEnd = endsAt ?? (current.endsAt as Timestamp);
-    if (nextEnd.toMillis() <= nextStart.toMillis()) throw new HttpsError('invalid-argument', 'Event end must be after event start.');
-    if (startsAt) updates.startsAt = startsAt;
-    if (endsAt) updates.endsAt = endsAt;
-    if (linkedTaskIds) updates.linkedTaskIds = linkedTaskIds;
-    const nextVersion = nextEventMutationVersion(current.version, expectedVersion);
-    const now = FieldValue.serverTimestamp();
-    // A local edit must reach Google on the next sync run.
-    transaction.update(ref, { ...updates, version: nextVersion, googlePushPending: true, updatedAt: now });
-    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.updated' } }));
-    if (opRef) transaction.set(opRef, { teamId, createdBy: admin.uid, kind: 'event.update', eventId, version: nextVersion, createdAt: now });
-    return nextVersion;
-  });
-  return { eventId, ...updates, version: committedVersion };
-};
-
-export const deleteEvent = async (request: Phase3Request) => {
-  const teamId = requireTeamId(request);
-  const admin = await requireTeamAdmin(request, teamId);
-  const eventId = requireString(getInput(request, 'eventId'), 'Event ID');
-  const db = getFirestore();
-  const ref = db.doc(`events/${eventId}`);
-  const snapshot = await ref.get();
-  const data = snapshot.data();
-  if (!snapshot.exists || data?.teamId !== teamId) throw new HttpsError('not-found', 'Event not found.');
-  const googleEventId = typeof data.googleEventId === 'string' ? data.googleEventId : null;
-  const occurrenceDocs = await db.collection('eventOccurrences').where('teamId', '==', teamId).where('occurrenceOf', '==', eventId).limit(400).get();
-  const batch = db.batch();
-  batch.delete(ref);
-  for (const doc of occurrenceDocs.docs) batch.delete(doc.ref);
-  batch.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `events/${eventId}`, metadata: { action: 'event.deleted' } }));
-  await batch.commit();
-  const removedFromGoogle = googleEventId ? await deleteGoogleEvent(teamId, googleEventId).catch(() => false) : false;
-  return { eventId, occurrencesRemoved: occurrenceDocs.size, removedFromGoogle };
 };
 
 export const markNotificationRead = async (request: Phase3Request) => {
@@ -765,7 +712,11 @@ export const completeFileUpload = async (request: Phase3Request) => {
   const snapshot = await ref.get();
   const data = snapshot.data();
   if (!snapshot.exists || data?.teamId !== teamId || data.uploadedBy !== member.uid) throw new HttpsError('permission-denied', 'Only the uploader can complete this file.');
-  const bucketName = process.env.FIREBASE_STORAGE_BUCKET ?? (process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined);
+  // The default bucket comes from the runtime's FIREBASE_CONFIG. Deriving
+  // `<project>.appspot.com` broke every upload on projects created after Firebase
+  // moved default buckets to `<project>.firebasestorage.app`, where that name
+  // does not exist. An explicit override is still honoured.
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
   const file = (bucketName ? getStorage().bucket(bucketName) : getStorage().bucket()).file(String(data.storagePath));
   const [metadata] = await file.getMetadata();
   const actualSize = Number(metadata.size ?? 0);

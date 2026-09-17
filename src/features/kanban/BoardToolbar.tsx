@@ -16,13 +16,9 @@ import {
 import { nameOf, type TeamMember } from '@/lib/directory';
 import type { TaskPriority } from '@/lib/domain';
 
-export type BoardView = 'table' | 'kanban';
-
 const EMPTY_DIRECTORY: Map<string, TeamMember> = new Map();
 
 type BoardToolbarProps = {
-  view: BoardView;
-  onViewChange: (view: BoardView) => void;
   filters: BoardFilters;
   onFiltersChange: (filters: BoardFilters) => void;
   sort: BoardSort;
@@ -35,9 +31,15 @@ type BoardToolbarProps = {
   /** Resolved roster so the person filter lists names instead of Firebase UIDs. */
   directory?: Map<string, TeamMember>;
   labels: string[];
+  /** Board categories, in board order, for the category filter. */
+  categories: { id: string; name: string }[];
   canManage: boolean;
   disabled: boolean;
   onNewItem: () => void;
+  /** Opens the spreadsheet import panel; coach-only, like creating an item. */
+  onImport: () => void;
+  /** Board setup is its own screen; the toolbar is the way in. */
+  onOpenSetup: () => void;
 };
 
 /** Closes an open popover when focus or a click lands outside it. */
@@ -69,8 +71,6 @@ function useDismissOnOutside(ref: React.RefObject<HTMLDivElement | null>) {
 }
 
 export function BoardToolbar({
-  view,
-  onViewChange,
   filters,
   onFiltersChange,
   sort,
@@ -82,9 +82,12 @@ export function BoardToolbar({
   people,
   directory = EMPTY_DIRECTORY,
   labels,
+  categories,
   canManage,
   disabled,
-  onNewItem
+  onNewItem,
+  onImport,
+  onOpenSetup
 }: BoardToolbarProps) {
   const root = useRef<HTMLDivElement>(null);
   useDismissOnOutside(root);
@@ -100,18 +103,17 @@ export function BoardToolbar({
 
   return (
     <div className="mb-toolbar" ref={root}>
-      <div className="mb-views" role="group" aria-label="Board view">
-        <button type="button" className={view === 'table' ? 'is-active' : ''} aria-pressed={view === 'table'} onClick={() => onViewChange('table')}>
-          <span aria-hidden="true">▦</span> Main Table
-        </button>
-        <button type="button" className={view === 'kanban' ? 'is-active' : ''} aria-pressed={view === 'kanban'} onClick={() => onViewChange('kanban')}>
-          <span aria-hidden="true">▤</span> Kanban
-        </button>
-      </div>
-
       <div className="mb-toolbar-actions">
         {canManage ? (
-          <button className="mb-new-item" type="button" disabled={disabled} onClick={onNewItem}>New item</button>
+          <>
+            <button className="mb-new-item" type="button" disabled={disabled} onClick={onNewItem}>New item</button>
+            <button className="mb-import-item" type="button" disabled={disabled} onClick={onImport}>
+              <span aria-hidden="true">⭳</span> Import from Excel
+            </button>
+            <button className="mb-import-item" type="button" onClick={onOpenSetup}>
+              <span aria-hidden="true">⚙</span> Board setup
+            </button>
+          </>
         ) : null}
 
         <label className="mb-search">
@@ -158,13 +160,20 @@ export function BoardToolbar({
                 <option value="none">No due date</option>
               </select>
             </label>
+            <label className="mb-menu-field">Category
+              <select value={filters.category} onChange={(event) => onFiltersChange({ ...filters, category: event.target.value })}>
+                <option value="">All categories</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                <option value="uncategorised">No category</option>
+              </select>
+            </label>
             <label className="mb-menu-field">Label
               <select value={filters.label} onChange={(event) => onFiltersChange({ ...filters, label: event.target.value })}>
                 <option value="">All labels</option>
                 {labels.map((label) => <option key={label} value={label}>{label}</option>)}
               </select>
             </label>
-            <button className="mb-menu-clear" type="button" disabled={!filterCount && !filters.query} onClick={() => onFiltersChange({ query: '', person: '', priority: '', label: '', due: '' })}>Clear all</button>
+            <button className="mb-menu-clear" type="button" disabled={!filterCount && !filters.query} onClick={() => onFiltersChange({ query: '', person: '', priority: '', label: '', due: '', category: '' })}>Clear all</button>
           </div>
         </details>
 

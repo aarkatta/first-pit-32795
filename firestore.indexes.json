@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "announcements",
+      "collectionGroup": "tasks",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -9,11 +9,43 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "channelId",
+          "fieldPath": "labels",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
+          "fieldPath": "labels",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "goals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
           "order": "DESCENDING"
         }
       ]
@@ -47,124 +79,6 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "channels",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "archived",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "participantUserIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "channels",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "archived",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "eventOccurrences",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "occurrenceOf",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "eventOccurrences",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "startsAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "googleEventId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "googlePushPending",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "startsAt",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -323,108 +237,6 @@
       ]
     },
     {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "searchTokens",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "channelId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "channelId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "participantUserIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "channelId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "teamId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "deletedAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "moderationCases",
       "queryScope": "COLLECTION",
       "fields": [
@@ -528,6 +340,20 @@
         },
         {
           "fieldPath": "archived",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "projectTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
           "order": "ASCENDING"
         },
         {
@@ -825,6 +651,24 @@
       ]
     },
     {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projectId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "orderKey",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "videoFavorites",
       "queryScope": "COLLECTION",
       "fields": [
@@ -897,6 +741,24 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projectId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoryId",
+          "order": "ASCENDING"
         }
       ]
     }

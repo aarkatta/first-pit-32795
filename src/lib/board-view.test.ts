@@ -13,6 +13,7 @@ import {
   formatDueDate,
   formatRange,
   groupBoardTasks,
+  groupByMilestone,
   initials,
   matchesBoardFilters,
   sortBoardTasks,
@@ -39,6 +40,10 @@ const project: KanbanProject = {
     { id: 'inProgress', name: 'In Progress', color: 'purple' },
     { id: 'completed', name: 'Completed', color: 'green' }
   ],
+  categories: [
+    { id: 'build', name: 'Build', color: 'blue', areaId: 'robot-design', goalId: 'goal-robot' },
+    { id: 'project', name: 'Innovation project', color: 'purple', areaId: 'innovation-project', goalId: 'goal-demo' }
+  ],
   completedColumnId: 'completed',
   archived: false
 };
@@ -55,8 +60,10 @@ function task(overrides: Partial<TrackerTask> = {}): TrackerTask {
     assignedTo: null,
     watcherUserIds: [],
     goalId: null,
+    categoryId: null,
     labels: [],
     checklist: [],
+    subtasks: [],
     attachmentFileIds: [],
     historyCount: 0,
     columnId: 'todo',
@@ -260,6 +267,85 @@ describe('grouping', () => {
     expect(groups.map((group) => group.id)).toEqual(['todo', 'inProgress', 'completed']);
     expect(groups[0].color).toBe('blue');
     expect(groups[0].tasks.map((entry) => entry.id)).toEqual(['a']);
+  });
+
+  it('builds the work breakdown: categories under their milestone, numbered', () => {
+    const milestones = [{ id: 'goal-demo', title: 'Ready for the expert demo' }, { id: 'goal-robot', title: 'Robot consistent' }];
+    const wbs = [
+      { ...tasks[0], id: 'a', categoryId: 'project' },
+      { ...tasks[1], id: 'b', categoryId: 'build' },
+      { ...tasks[0], id: 'c', categoryId: null }
+    ];
+    const groups = groupByMilestone(wbs, project, milestones);
+    // Milestone order leads, each package numbered under its milestone.
+    expect(groups.map((group) => [group.outline, group.title])).toEqual([
+      ['1.1', 'Innovation project'],
+      ['2.1', 'Build'],
+      ['3.1', 'No category']
+    ]);
+    // Only the first package of a branch carries the band heading.
+    expect(groups[0].milestoneTitle).toBe('1. Ready for the expert demo');
+    expect(groups[1].milestoneTitle).toBe('2. Robot consistent');
+    expect(groups[2].milestoneTitle).toBe('3. No milestone');
+  });
+
+  it("sums each milestone's progress from every card beneath it", () => {
+    const milestones = [{ id: 'goal-demo', title: 'Ready for the expert demo' }];
+    const wbs = [
+      { ...tasks[0], id: 'a', categoryId: 'project', columnId: 'completed', status: 'completed' as const },
+      { ...tasks[1], id: 'b', categoryId: 'project', columnId: 'todo', status: 'todo' as const }
+    ];
+    expect(groupByMilestone(wbs, project, milestones)[0].milestoneProgress).toEqual({ done: 1, total: 2 });
+  });
+
+  it('draws no milestone band at all when no category has one', () => {
+    // A board that has not been placed under milestones yet is a flat list of
+    // work packages; a lone "No milestone" heading over all of them is noise.
+    const flatBoard = { ...project, categories: project.categories.map((category) => ({ ...category, goalId: null })) };
+    const groups = groupByMilestone([{ ...tasks[0], categoryId: 'build' }], flatBoard, []);
+    expect(groups.every((group) => group.milestoneTitle === undefined)).toBe(true);
+    // Numbering flattens to match: 1, 2 rather than 1.1, 1.2.
+    expect(groups.map((group) => group.outline)).toEqual(['1', '2']);
+  });
+
+  it('omits a milestone that has no work under it yet', () => {
+    const milestones = [{ id: 'goal-demo', title: 'Ready for the expert demo' }, { id: 'goal-none', title: 'Nothing here' }];
+    const groups = groupByMilestone([{ ...tasks[0], categoryId: 'project' }], project, milestones);
+    expect(groups.some((group) => group.milestoneTitle?.includes('Nothing here'))).toBe(false);
+  });
+
+  it('groups by category in board order, with uncategorised work last', () => {
+    const categorised = [
+      { ...tasks[0], id: 'a', categoryId: 'build' },
+      { ...tasks[1], id: 'b', categoryId: null }
+    ];
+    const groups = groupBoardTasks(categorised, 'category', project, now);
+    expect(groups.map((group) => group.id)).toEqual(['build', 'project', 'uncategorised']);
+    expect(groups[0].tasks.map((entry) => entry.id)).toEqual(['a']);
+    // An empty category still shows, the way a monday group does.
+    expect(groups[1].tasks).toEqual([]);
+    expect(groups[2].title).toBe('No category');
+  });
+
+  it('hides the no-category group when every card is categorised', () => {
+    const categorised = tasks.map((task) => ({ ...task, categoryId: 'build' }));
+    expect(groupBoardTasks(categorised, 'category', project, now).map((group) => group.id)).toEqual(['build', 'project']);
+  });
+
+  it('treats a category the board no longer defines as uncategorised', () => {
+    const stale = [{ ...tasks[0], categoryId: 'deleted-category' }];
+    const groups = groupBoardTasks(stale, 'category', project, now);
+    expect(groups.at(-1)?.id).toBe('uncategorised');
+    expect(groups.at(-1)?.tasks).toHaveLength(1);
+  });
+
+  it('filters by category, including the uncategorised bucket', () => {
+    const inBuild = { ...tasks[0], categoryId: 'build' };
+    const none = { ...tasks[0], categoryId: null };
+    expect(matchesBoardFilters(inBuild, { ...emptyBoardFilters, category: 'build' }, now)).toBe(true);
+    expect(matchesBoardFilters(none, { ...emptyBoardFilters, category: 'build' }, now)).toBe(false);
+    expect(matchesBoardFilters(none, { ...emptyBoardFilters, category: 'uncategorised' }, now)).toBe(true);
+    expect(matchesBoardFilters(inBuild, { ...emptyBoardFilters, category: 'uncategorised' }, now)).toBe(false);
   });
 
   it('returns nothing to group when there is no project', () => {

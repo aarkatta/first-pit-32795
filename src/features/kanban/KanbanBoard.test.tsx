@@ -39,8 +39,10 @@ const task: TrackerTask = {
   assignedTo: null,
   watcherUserIds: [],
   goalId: null,
+  categoryId: null,
   labels: [],
   checklist: [],
+  subtasks: [],
   attachmentFileIds: [],
   historyCount: 0
 };
@@ -58,9 +60,12 @@ describe('TaskDetails native dialog accessibility', () => {
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Test robot' });
     const close = screen.getByRole('button', { name: 'Close task details' });
-    const save = screen.getByRole('button', { name: 'Save task' });
     expect(close).toHaveFocus();
-    save.focus();
+    // Tab from whatever the dialog's last control currently is; the trap has to
+    // wrap to the first one, and the section list below the form changes over
+    // time (subtasks, attachments).
+    const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')];
+    focusable.at(-1)!.focus();
     fireEvent.keyDown(dialog, { key: 'Tab' });
     expect(close).toHaveFocus();
     fireEvent.keyDown(dialog, { key: 'Escape' });

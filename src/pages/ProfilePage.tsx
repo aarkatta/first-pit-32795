@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
-import { GoogleConnectionCard } from '@/features/google/GoogleConnectionCard';
 import { useAuth } from '@/lib/auth-context';
 import { sendPasswordRecovery } from '@/lib/auth';
 import { getRequestState, type RequestState } from '@/lib/request-state';
@@ -120,7 +119,6 @@ export function ProfilePage() {
         <button className="button" type="submit" disabled={busy || !online}>{busy ? 'Saving…' : 'Save profile & preferences'}</button>
       </form>
       <section className="split-panels">
-        <GoogleConnectionCard online={online} />
       </section>
     </div>
   );

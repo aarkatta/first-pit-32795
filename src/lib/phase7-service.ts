@@ -18,11 +18,25 @@ export type DashboardEvent = {
 
 export type DashboardScore = {
   id: string;
-  teamId: string;
+  title?: string;
+  scoreType?: 'practice' | 'match';
   totalPoints?: number;
-  sessionType?: string;
-  recordedAt?: unknown;
+  sessionDate?: unknown;
 };
+
+/**
+ * One FIRST LEGO League judging area. A task counts toward an area when it
+ * carries the area's id as a label, so the importer and the built-in templates
+ * tag cards with these ids and a coach can tag any card by hand.
+ */
+export type DashboardArea = {
+  id: string;
+  label: string;
+  taskCount: number;
+  completedTaskCount: number;
+};
+
+export type DashboardTask = Partial<TrackerTask> & { id: string; title: string };
 
 export type DashboardNotification = {
   id: string;
@@ -37,20 +51,22 @@ export type DashboardNotification = {
 export type DashboardResult = {
   team: { id: string; name: string };
   role: string;
-  tasks: Array<Partial<TrackerTask> & { id: string; title: string }>;
+  tasks: DashboardTask[];
+  /** Open tasks with a due date, soonest first. Overdue work leads the list. */
+  upcomingTasks: DashboardTask[];
   goals: Array<Partial<TeamGoal> & { id: string; title: string }>;
-  events: DashboardEvent[];
+  completedGoals: Array<Partial<TeamGoal> & { id: string; title: string }>;
+  /** The most recent score sessions, newest first. */
   scores: DashboardScore[];
+  areas: DashboardArea[];
   notifications: DashboardNotification[];
   summary: {
     taskCount: number;
     completedTaskCount: number;
     goalCount: number;
-    upcomingEventCount: number;
+    completedGoalCount: number;
     scoreCount: number;
     unreadNotificationCount: number;
-    unreadMessageCount: number;
-    announcementCount: number;
     unreadSummaryTruncated: boolean;
     unreadSummaryLimit: number;
   };

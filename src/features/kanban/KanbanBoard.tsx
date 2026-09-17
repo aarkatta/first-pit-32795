@@ -5,24 +5,17 @@ import {
   PointerSensor,
   TouchSensor,
   closestCorners,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { BoardTable, type BoardDirectory, type BoardTaskPatch } from './BoardTable';
-import { BoardToolbar, type BoardView } from './BoardToolbar';
+import { BoardToolbar } from './BoardToolbar';
 import {
   BOARD_FIELDS,
   boardLabels,
@@ -30,30 +23,26 @@ import {
   defaultBoardSort,
   emptyBoardFilters,
   groupBoardTasks,
+  groupByMilestone,
   matchesBoardFilters,
   sortBoardTasks,
+  SUBTASK_STATUS_META,
+  SUBTASK_STATUS_OPTIONS,
   type BoardFieldId,
   type BoardFilters,
   type BoardGroupBy,
   type BoardSort
 } from '@/lib/board-view';
-import type { KanbanProject, ProjectColumn, TeamRole, TrackerTask } from '@/lib/domain';
+import type { KanbanProject, ProjectCategory, SubtaskStatus, TeamGoal, TeamRole, TrackerTask } from '@/lib/domain';
+import { MAX_SUBTASKS_PER_TASK } from '@/lib/domain';
 import { getFirebaseServices } from '@/lib/firebase';
 import {
-  addProjectColumn,
-  archiveProject,
-  updateProject,
   createKanbanTask,
-  createProject,
   ensureDefaultProject,
   getProjects,
   isVersionConflict,
   moveTaskCard,
-  projectVersion,
-  removeProjectColumn,
-  reorderProjectColumns,
-  subscribeProjectTasks,
-  updateProjectColumn
+  subscribeProjectTasks
 } from '@/lib/kanban-service';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
@@ -61,8 +50,10 @@ import {
   formatFileSize,
   getTeamFilesByIds,
   linkFileToTask,
+  listActiveTeamGoals,
   listTeamFiles,
   updateTask,
+  type SubtaskInput,
   type TeamFile
 } from '@/lib/phase3-service';
 import { dateTimeInputValue, formatDueDate, toDate } from '@/lib/dates';
@@ -81,6 +72,10 @@ const operationId = createOperationId;
 const EMPTY_DIRECTORY: BoardDirectory = new Map();
 
 const NO_ATTACHMENTS: TeamFile[] = [];
+const NO_CATEGORIES: ProjectCategory[] = [];
+const NO_GOALS: TeamGoal[] = [];
+
+
 
 type BoardNotice = RequestState & { retry: 'subscription' | 'projects'; actionLabel?: string };
 
@@ -96,85 +91,6 @@ export function canMoveKanbanTask(task: Pick<TrackerTask, 'assignedTo'>, actorRo
   return actorRole === 'coach'
     || actorRole === 'teamLeader'
     || (actorRole === 'student' && task.assignedTo === actorUserId);
-}
-
-function SortableCard({ task, columns, directory, canManage, canMove, busy, onMove, onOpen }: {
-  task: TrackerTask;
-  columns: ProjectColumn[];
-  directory: BoardDirectory;
-  canManage: boolean;
-  canMove: boolean;
-  busy: boolean;
-  onMove: (task: TrackerTask, columnId: string, index?: number) => void;
-  onOpen: (task: TrackerTask) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id,
-    data: { type: 'task', columnId: task.columnId },
-    disabled: busy || !canMove
-  });
-  const complete = task.checklist.filter((item) => item.completed).length;
-  return (
-    <article
-      ref={setNodeRef}
-      className={`kanban-card priority-${task.priority}${isDragging ? ' dragging' : ''}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      id={`task-${task.id}`}
-    >
-      <div className="kanban-card-topline">
-        <span className={`priority-chip priority-${task.priority}`}>{task.priority}</span>
-        <button className="drag-handle" type="button" aria-label={`Move ${task.title}`} disabled={busy || !canMove} {...attributes} {...listeners}>⠿</button>
-      </div>
-      <button className="kanban-card-title" type="button" onClick={() => onOpen(task)}>{task.title}</button>
-      {task.labels.length ? <div className="kanban-labels">{task.labels.slice(0, 3).map((label) => <span key={label}>{label}</span>)}</div> : null}
-      <div className="kanban-card-meta">
-        <span title={nameOf(directory, task.assignedTo)}>{nameOf(directory, task.assignedTo)}</span>
-        <small>{dueLabel(task.dueAt)}</small>
-        {task.checklist.length ? <small>{complete}/{task.checklist.length} ✓</small> : null}
-      </div>
-      <label className="card-move-menu">
-        <span className="visually-hidden">Move {task.title} to</span>
-        <select disabled={busy || !canMove} value={task.columnId} onChange={(event) => onMove(task, event.target.value)}>
-          {columns.map((column) => <option value={column.id} key={column.id}>{column.name}</option>)}
-        </select>
-      </label>
-      {canManage ? <small className="card-edit-hint">Open to edit details</small> : null}
-    </article>
-  );
-}
-
-function KanbanColumnView({ projectColumn, tasks, allColumns, directory, canManage, canMoveTask, busy, onMove, onOpen, onCreate }: {
-  projectColumn: ProjectColumn;
-  tasks: TrackerTask[];
-  allColumns: ProjectColumn[];
-  directory: BoardDirectory;
-  canManage: boolean;
-  canMoveTask: (task: TrackerTask) => boolean;
-  busy: boolean;
-  onMove: (task: TrackerTask, columnId: string, index?: number) => void;
-  onOpen: (task: TrackerTask) => void;
-  onCreate: (columnId: string, title: string) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: `column:${projectColumn.id}`, data: { type: 'column', columnId: projectColumn.id } });
-  const [title, setTitle] = useState('');
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!title.trim()) return;
-    onCreate(projectColumn.id, title.trim());
-    setTitle('');
-  }
-  return (
-    <section ref={setNodeRef} className={`kanban-column color-${projectColumn.color}${isOver ? ' is-over' : ''}`} aria-labelledby={`column-${projectColumn.id}`}>
-      <header><div><i /><h3 id={`column-${projectColumn.id}`}>{projectColumn.name}</h3></div><span>{tasks.length}</span></header>
-      <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <div className="kanban-card-list">
-          {tasks.map((task) => <SortableCard key={task.id} task={task} columns={allColumns} directory={directory} canManage={canManage} canMove={canMoveTask(task)} busy={busy} onMove={onMove} onOpen={onOpen} />)}
-          {!tasks.length ? <p className="empty-column">Drop a card here</p> : null}
-        </div>
-      </SortableContext>
-      {canManage ? <form className="kanban-quick-add" onSubmit={submit}><input aria-label={`New task in ${projectColumn.name}`} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a task" /><button aria-label={`Add task to ${projectColumn.name}`} disabled={busy} type="submit">＋</button></form> : null}
-    </section>
-  );
 }
 
 /** Card attachments and the team-file picker share one presentation. */
@@ -209,6 +125,10 @@ export function TaskDetails({
   canManage,
   busy,
   conflict = false,
+  categories = NO_CATEGORIES,
+  goals = NO_GOALS,
+  actorUserId = '',
+  onSubtaskStatus,
   people = [],
   directory = EMPTY_DIRECTORY,
   attachments = NO_ATTACHMENTS,
@@ -224,6 +144,14 @@ export function TaskDetails({
   canManage: boolean;
   busy: boolean;
   conflict?: boolean;
+  /** Board categories, in board order, for the category picker. */
+  categories?: ProjectCategory[];
+  /** Active team goals a card can be linked to; linking is what feeds their counters. */
+  goals?: TeamGoal[];
+  /** Who is looking: decides which sub-items they may tick off. */
+  actorUserId?: string;
+  /** Status-only subtask change, the one subtask edit a student may make. */
+  onSubtaskStatus?: (subtaskId: string, status: SubtaskStatus) => void;
   /** Assignable teammates. The picker replaces a raw-UID text box. */
   people?: string[];
   directory?: BoardDirectory;
@@ -235,7 +163,7 @@ export function TaskDetails({
   onAttachFile?: (fileId: string) => void;
   onConflictResolved?: () => void;
   onClose: () => void;
-  onSave: (changes: { title: string; description: string; priority: TrackerTask['priority']; assignedTo: string | null; labels: string[]; dueAt: string | null }, expectedVersion: number) => void;
+  onSave: (changes: { title: string; description: string; priority: TrackerTask['priority']; assignedTo: string | null; labels: string[]; dueAt: string | null; startAt: string | null; endAt: string | null; categoryId: string | null; goalId: string | null; subtasks: SubtaskInput[] }, expectedVersion: number) => void;
 }) {
   const [fileToAttach, setFileToAttach] = useState('');
   const assignableOptions = useMemo(
@@ -253,8 +181,13 @@ export function TaskDetails({
     description: value.description,
     priority: value.priority,
     assignedTo: value.assignedTo ?? '',
+    categoryId: value.categoryId ?? '',
+    goalId: value.goalId ?? '',
     labels: value.labels.join(', '),
-    dueAt: inputDate(value.dueAt)
+    dueAt: inputDate(value.dueAt),
+    startAt: inputDate(value.startAt),
+    endAt: inputDate(value.endAt),
+    subtasks: value.subtasks.map((subtask) => ({ ...subtask, dueAt: inputDate(subtask.dueAt) }))
   });
   const [form, setForm] = useState(() => taskForm(task));
   const [baseVersion, setBaseVersion] = useState(Number(task.version ?? 1));
@@ -298,8 +231,15 @@ export function TaskDetails({
       description: form.description.trim(),
       priority: form.priority,
       assignedTo: form.assignedTo.trim() || null,
+      categoryId: form.categoryId || null,
+      goalId: form.goalId || null,
+      subtasks: form.subtasks
+        .filter((subtask) => subtask.title.trim())
+        .map((subtask) => ({ ...subtask, title: subtask.title.trim(), dueAt: subtask.dueAt ? new Date(subtask.dueAt).toISOString() : null })),
       labels: [...new Set(form.labels.split(',').map((label) => label.trim()).filter(Boolean))].slice(0, 20),
-      dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null
+      dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null,
+      startAt: form.startAt ? new Date(form.startAt).toISOString() : null,
+      endAt: form.endAt ? new Date(form.endAt).toISOString() : null
     }, baseVersion);
   }
   function reloadLatest() {
@@ -318,15 +258,101 @@ export function TaskDetails({
           <label>Description<textarea maxLength={4000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <div className="details-grid">
             <label>Priority<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value as TrackerTask['priority'] })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+            <label>Start date<input type="datetime-local" value={form.startAt} onChange={(event) => setForm({ ...form, startAt: event.target.value })} /></label>
+            <label>End date<input type="datetime-local" value={form.endAt} onChange={(event) => setForm({ ...form, endAt: event.target.value })} /></label>
             <label>Due date<input type="datetime-local" value={form.dueAt} onChange={(event) => setForm({ ...form, dueAt: event.target.value })} /></label>
             <label>Assignee<select value={form.assignedTo} onChange={(event) => setForm({ ...form, assignedTo: event.target.value })}>
               <option value="">Unassigned</option>
               {assignableOptions.map((person) => <option key={person.userId} value={person.userId}>{person.label}</option>)}
             </select></label>
+            <label>Category<select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })}>
+              <option value="">No category</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select></label>
+            <label>Milestone<select value={form.goalId} onChange={(event) => setForm({ ...form, goalId: event.target.value })}>
+              <option value="">No milestone</option>
+              {/* A milestone the card already belongs to stays selectable even
+                  once it is achieved, so saving an edit cannot silently unlink it. */}
+              {[...goals, ...(task.goalId && !goals.some((goal) => goal.id === task.goalId) ? [{ id: task.goalId, title: 'Linked milestone' } as TeamGoal] : [])]
+                .map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
+            </select></label>
             <label>Labels<input value={form.labels} onChange={(event) => setForm({ ...form, labels: event.target.value })} placeholder="robot, outreach" /></label>
           </div>
           <div className="modal-actions"><button className="text-button" type="button" onClick={onClose}>Cancel</button><button className="button" disabled={busy || !form.title.trim() || conflict || hasRemoteChange} type="submit">{busy ? 'Saving…' : 'Save task'}</button></div>
-        </form> : <div className="task-readonly-details"><p>{task.description || 'No description.'}</p><dl><div><dt>Priority</dt><dd>{task.priority}</dd></div><div><dt>Assignee</dt><dd>{nameOf(directory, task.assignedTo)}</dd></div><div><dt>Due</dt><dd>{dueLabel(task.dueAt)}</dd></div></dl></div>}
+        </form> : <div className="task-readonly-details"><p>{task.description || 'No description.'}</p><dl><div><dt>Priority</dt><dd>{task.priority}</dd></div><div><dt>Category</dt><dd>{categories.find((category) => category.id === task.categoryId)?.name ?? 'No category'}</dd></div><div><dt>Milestone</dt><dd>{goals.find((goal) => goal.id === task.goalId)?.title ?? (task.goalId ? 'Linked milestone' : 'No milestone')}</dd></div><div><dt>Assignee</dt><dd>{nameOf(directory, task.assignedTo)}</dd></div><div><dt>Start</dt><dd>{dueLabel(task.startAt)}</dd></div><div><dt>End</dt><dd>{dueLabel(task.endAt)}</dd></div><div><dt>Due</dt><dd>{dueLabel(task.dueAt)}</dd></div></dl></div>}
+        <section className="task-subtasks" aria-labelledby="task-subtasks-heading">
+          <h3 id="task-subtasks-heading">Subtasks{task.subtasks.length ? ` · ${task.subtasks.filter((subtask) => subtask.status === 'done').length}/${task.subtasks.length}` : ''}</h3>
+          {canManage ? (
+            <>
+              <ul className="subtask-editor">
+                {form.subtasks.map((subtask, index) => (
+                  <li key={subtask.id}>
+                    <input
+                      aria-label={`Subtask ${index + 1} title`}
+                      value={subtask.title}
+                      maxLength={160}
+                      onChange={(event) => setForm({ ...form, subtasks: form.subtasks.map((entry) => entry.id === subtask.id ? { ...entry, title: event.target.value } : entry) })}
+                    />
+                    <select
+                      aria-label={`Status for ${subtask.title || `subtask ${index + 1}`}`}
+                      value={subtask.status}
+                      onChange={(event) => setForm({ ...form, subtasks: form.subtasks.map((entry) => entry.id === subtask.id ? { ...entry, status: event.target.value as SubtaskStatus } : entry) })}
+                    >
+                      {SUBTASK_STATUS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                    </select>
+                    <select
+                      aria-label={`Assignee for ${subtask.title || `subtask ${index + 1}`}`}
+                      value={subtask.assignedTo ?? ''}
+                      onChange={(event) => setForm({ ...form, subtasks: form.subtasks.map((entry) => entry.id === subtask.id ? { ...entry, assignedTo: event.target.value || null } : entry) })}
+                    >
+                      <option value="">Unassigned</option>
+                      {assignableOptions.map((person) => <option key={person.userId} value={person.userId}>{person.label}</option>)}
+                    </select>
+                    <input
+                      type="date"
+                      aria-label={`Due date for ${subtask.title || `subtask ${index + 1}`}`}
+                      value={typeof subtask.dueAt === 'string' ? subtask.dueAt.slice(0, 10) : ''}
+                      onChange={(event) => setForm({ ...form, subtasks: form.subtasks.map((entry) => entry.id === subtask.id ? { ...entry, dueAt: event.target.value } : entry) })}
+                    />
+                    <button className="danger-text" type="button" aria-label={`Remove ${subtask.title || `subtask ${index + 1}`}`} onClick={() => setForm({ ...form, subtasks: form.subtasks.filter((entry) => entry.id !== subtask.id) })}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+              {!form.subtasks.length ? <p className="mb-attachment-note">No subtasks yet. Break this card into steps if it helps.</p> : null}
+              <button
+                className="button secondary"
+                type="button"
+                disabled={form.subtasks.length >= MAX_SUBTASKS_PER_TASK}
+                onClick={() => setForm({ ...form, subtasks: [...form.subtasks, { id: createOperationId('sub'), title: '', status: 'todo' as SubtaskStatus, assignedTo: null, dueAt: '' }] })}
+              >Add subtask</button>
+              <p className="mb-attachment-note">Subtasks save with the card, up to {MAX_SUBTASKS_PER_TASK} per task.</p>
+            </>
+          ) : (
+            <ul className="subtask-list">
+              {task.subtasks.map((subtask) => {
+                const mayTick = Boolean(onSubtaskStatus) && (task.assignedTo === actorUserId || subtask.assignedTo === actorUserId);
+                return (
+                  <li key={subtask.id}>
+                    <span className={`subtask-status subtask-status--${subtask.status}`}>{SUBTASK_STATUS_META[subtask.status].label}</span>
+                    <span className="subtask-title">{subtask.title}</span>
+                    <small>{subtask.assignedTo ? nameOf(directory, subtask.assignedTo) : 'Unassigned'}{subtask.dueAt ? ` · ${dueLabel(subtask.dueAt)}` : ''}</small>
+                    {mayTick ? (
+                      <select
+                        aria-label={`Status for ${subtask.title}`}
+                        value={subtask.status}
+                        disabled={busy}
+                        onChange={(event) => onSubtaskStatus?.(subtask.id, event.target.value as SubtaskStatus)}
+                      >
+                        {SUBTASK_STATUS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                      </select>
+                    ) : null}
+                  </li>
+                );
+              })}
+              {!task.subtasks.length ? <p className="mb-attachment-note">This card has no subtasks.</p> : null}
+            </ul>
+          )}
+        </section>
         <section className="task-attachments" aria-labelledby="task-attachments-heading">
           <h3 id="task-attachments-heading">Attachments</h3>
           <AttachmentList files={attachments} status={attachmentsStatus} onRetry={() => onReloadAttachments?.()} />
@@ -347,63 +373,11 @@ export function TaskDetails({
   );
 }
 
-function ProjectSettings({ teamId, project, busy, onRun }: {
-  teamId: string;
-  project: KanbanProject;
-  busy: boolean;
-  onRun: (action: () => Promise<unknown>, refreshProjects?: boolean) => Promise<boolean>;
-}) {
-  const [columnName, setColumnName] = useState('');
-  function renameProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get('projectName') ?? '').trim();
-    if (!name) return;
-    void onRun(() => updateProject({ teamId, projectId: project.id, name, description: String(form.get('projectDescription') ?? '').trim() }), true);
-  }
-  function addColumn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!columnName.trim()) return;
-    void onRun(() => addProjectColumn({ teamId, projectId: project.id, operationId: operationId(), name: columnName.trim(), expectedVersion: projectVersion(project) }), true).then((saved) => { if (saved) setColumnName(''); });
-  }
-  function shift(columnId: string, amount: number) {
-    const ids = project.columns.map((column) => column.id);
-    const index = ids.indexOf(columnId);
-    const next = index + amount;
-    if (index < 0 || next < 0 || next >= ids.length) return;
-    [ids[index], ids[next]] = [ids[next], ids[index]];
-    void onRun(() => reorderProjectColumns(teamId, project.id, ids, projectVersion(project)), true);
-  }
-  return (
-    <details className="project-settings">
-      <summary>Configure workflow</summary>
-      <div className="column-settings-list">
-        {project.columns.map((column, index) => <form key={column.id} onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          void onRun(() => updateProjectColumn({ teamId, projectId: project.id, columnId: column.id, expectedVersion: projectVersion(project), name: String(form.get('name') ?? '').trim(), color: String(form.get('color') ?? 'slate') as ProjectColumn['color'], isCompleted: form.get('completed') === 'on' }), true);
-        }}>
-          <input name="name" aria-label={`Name for ${column.name}`} defaultValue={column.name} maxLength={40} required />
-          <select name="color" aria-label={`Color for ${column.name}`} defaultValue={column.color}><option value="blue">Blue</option><option value="purple">Purple</option><option value="orange">Orange</option><option value="green">Green</option><option value="slate">Slate</option><option value="pink">Pink</option></select>
-          <label className="completed-choice"><input name="completed" type="checkbox" defaultChecked={project.completedColumnId === column.id} disabled={project.completedColumnId === column.id} /> Done</label>
-          <button type="button" aria-label={`Move ${column.name} left`} disabled={busy || index === 0} onClick={() => shift(column.id, -1)}>←</button>
-          <button type="button" aria-label={`Move ${column.name} right`} disabled={busy || index === project.columns.length - 1} onClick={() => shift(column.id, 1)}>→</button>
-          <button type="submit" disabled={busy}>Save</button>
-          <button className="danger-text" type="button" disabled={busy || project.completedColumnId === column.id || project.columns.length <= 2} onClick={() => void onRun(() => removeProjectColumn(teamId, project.id, column.id, projectVersion(project)), true)}>Remove</button>
-        </form>)}
-      </div>
-      <form className="rename-project-form" onSubmit={renameProject}>
-        <label>Project name<input name="projectName" defaultValue={project.name} maxLength={80} required /></label>
-        <label>Description<input name="projectDescription" defaultValue={project.description ?? ''} maxLength={1000} /></label>
-        <button className="button secondary" type="submit" disabled={busy}>Save project</button>
-      </form>
-      <form className="add-column-form" onSubmit={addColumn}><label>New column<input value={columnName} onChange={(event) => setColumnName(event.target.value)} maxLength={40} placeholder="Testing" /></label><button className="button secondary" disabled={busy || project.columns.length >= 8} type="submit">Add column</button></form>
-    </details>
-  );
-}
+
 
 export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online }: KanbanBoardProps) {
   const firestore = getFirebaseServices().firestore;
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<KanbanProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(searchParams.get('project') ?? '');
@@ -417,8 +391,7 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
   const [selectedTask, setSelectedTask] = useState<TrackerTask | null>(null);
   const [taskConflict, setTaskConflict] = useState(false);
   const [filters, setFilters] = useState<BoardFilters>(emptyBoardFilters);
-  const [view, setView] = useState<BoardView>('table');
-  const [groupBy, setGroupBy] = useState<BoardGroupBy>('column');
+  const [groupBy, setGroupBy] = useState<BoardGroupBy>('milestone');
   const [sort, setSort] = useState<BoardSort>(defaultBoardSort);
   const [hiddenFields, setHiddenFields] = useState<BoardFieldId[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -436,10 +409,10 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
   const [attachmentsStatus, setAttachmentsStatus] = useState<AttachmentsStatus>('ready');
   const [attachmentsAttempt, setAttachmentsAttempt] = useState(0);
   const [teamFiles, setTeamFiles] = useState<TeamFile[]>([]);
+  const [goals, setGoals] = useState<TeamGoal[]>([]);
   // A single clock keeps every overdue/today badge in a render consistent, and the
   // minute tick keeps them honest during a long working session.
   const [now, setNow] = useState(() => new Date());
-  const [projectName, setProjectName] = useState('');
   const activeTeamRef = useRef(teamId);
   // Read through a ref: a network flap must not re-identify the loaders and reset
   // the board the reader is looking at.
@@ -517,12 +490,12 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
     setTaskConflict(false);
     setActiveTaskId(null);
     setFilters(emptyBoardFilters);
-    setProjectName('');
     setBusy(false);
     setRequestState(null);
     setBoardNotice(null);
     setMigration(null);
     setTeamFiles([]);
+    setGoals([]);
     setAttachments([]);
     void refreshProjects();
   }, [refreshProjects, teamId]);
@@ -603,6 +576,18 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
     return () => { active = false; };
   }, [canManage, firestore, openTaskId, teamId]);
   useEffect(() => {
+    // Milestones are the top of the work-breakdown tree, so the board itself
+    // needs them — for the grouping bands, the Board setup picker and the card
+    // dialog alike. A team with no milestones, or a rules denial, simply gets a
+    // flat board rather than a broken one.
+    if (!teamId) return undefined;
+    let active = true;
+    void listActiveTeamGoals(firestore, teamId)
+      .then((teamGoals) => { if (active) setGoals(teamGoals); })
+      .catch(() => { if (active) setGoals([]); });
+    return () => { active = false; };
+  }, [firestore, teamId]);
+  useEffect(() => {
     if (!selectedProject) return;
     const next = new URLSearchParams(searchParams);
     next.set('project', selectedProject.id);
@@ -651,9 +636,13 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
 
   const filteredTasks = useMemo(() => tasks.filter((task) => matchesBoardFilters(task, filters, now)), [filters, now, tasks]);
   const sortedTasks = useMemo(() => sortBoardTasks(filteredTasks, sort), [filteredTasks, sort]);
-  const groups = useMemo(() => groupBoardTasks(sortedTasks, groupBy, selectedProject, now), [groupBy, now, selectedProject, sortedTasks]);
+  const groups = useMemo(
+    () => groupBy === 'milestone'
+      ? groupByMilestone(sortedTasks, selectedProject, goals)
+      : groupBoardTasks(sortedTasks, groupBy, selectedProject, now),
+    [goals, groupBy, now, selectedProject, sortedTasks]
+  );
   const visibleFields = useMemo(() => BOARD_FIELDS.map((field) => field.id).filter((field) => !hiddenFields.includes(field)), [hiddenFields]);
-  const tasksByColumn = useMemo(() => new Map((selectedProject?.columns ?? []).map((column) => [column.id, sortedTasks.filter((task) => task.columnId === column.id)])), [selectedProject, sortedTasks]);
   const assignees = useMemo(() => boardPeople(tasks), [tasks]);
   const labels = useMemo(() => boardLabels(tasks), [tasks]);
   const directory = useMemo(() => memberMap(members), [members]);
@@ -776,17 +765,6 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
     move(active, columnId, index);
   }
 
-  function submitProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!projectName.trim()) return;
-    void run(async () => {
-      const result = await createProject({ teamId, operationId: operationId(), name: projectName.trim() });
-      setProjectName('');
-      await refreshProjects('background');
-      setSelectedProjectId(result.projectId);
-    });
-  }
-
   if (status === 'loading') return <StatePanel variant="loading" title="Loading project boards" message={migration ?? 'Preparing private team projects and bounded Kanban columns.'} />;
   if (status === 'error') return <StatePanel variant="error" title="Project boards could not load" message={error?.message ?? 'Try again.'} actionLabel="Retry" onAction={() => void refreshProjects()} autoFocus />;
   if (!selectedProject) return <StatePanel variant="empty" title="No project board" message="A coach can create the first private team project." />;
@@ -828,8 +806,6 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
       </div>
 
       <BoardToolbar
-        view={view}
-        onViewChange={setView}
         filters={filters}
         onFiltersChange={setFilters}
         sort={sort}
@@ -841,19 +817,20 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
         people={people}
         directory={directory}
         labels={labels}
+        categories={selectedProject.categories}
         canManage={canManage}
         disabled={busy || !online}
         onNewItem={() => {
           setGroupBy('column');
-          setView('table');
           setFocusGroupId(selectedProject.columns[0]?.id ?? null);
         }}
+        onOpenSetup={() => navigate('/board-setup')}
+        onImport={() => navigate('/import')}
       />
 
       {!online ? <p className="kanban-offline" role="status">Reconnect before moving or editing cards. The current board remains available to review.</p> : null}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={dragStart} onDragCancel={() => setActiveTaskId(null)} onDragEnd={dragEnd}>
-        {view === 'table' ? (
-          <BoardTable
+        <BoardTable
             groups={groups}
             fields={visibleFields}
             groupBy={groupBy}
@@ -866,33 +843,21 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
             disabled={busy || !online}
             selectedIds={selectedIds}
             focusGroupId={focusGroupId}
+            actorUserId={actorUserId}
             onSelect={selectTask}
             onSelectGroup={selectGroup}
             onOpen={(task) => { setTaskConflict(false); setSelectedTask(task); }}
             onMove={(task, columnId) => move(task, columnId)}
             onPatch={patch}
-            onCreate={(columnId, title) => {
-              setFocusGroupId(null);
-              void run(() => createKanbanTask({ teamId, projectId: selectedProject.id, columnId, operationId: operationId(), title }));
+            onSubtaskStatus={(task, subtaskId, status) => {
+              if (busy || !online) return;
+              void run(() => updateTask({ teamId, taskId: task.id, operationId: operationId(), subtaskStatus: { id: subtaskId, status } }));
             }}
-          />
-        ) : (
-          <div className="kanban-board" aria-label={`${selectedProject.name} Kanban board`}>
-            {selectedProject.columns.map((column) => <KanbanColumnView
-              key={column.id}
-              projectColumn={column}
-              tasks={tasksByColumn.get(column.id) ?? []}
-              allColumns={selectedProject.columns}
-              directory={directory}
-              canManage={canManage}
-              canMoveTask={canMoveTask}
-              busy={busy || !online}
-              onMove={move}
-              onOpen={(task) => { setTaskConflict(false); setSelectedTask(task); }}
-              onCreate={(columnId, title) => void run(() => createKanbanTask({ teamId, projectId: selectedProject.id, columnId, operationId: operationId(), title }))}
-            />)}
-          </div>
-        )}
+          onCreate={(columnId, title) => {
+            setFocusGroupId(null);
+            void run(() => createKanbanTask({ teamId, projectId: selectedProject.id, columnId, operationId: operationId(), title }));
+          }}
+        />
         <DragOverlay>{activeTask ? <article className="kanban-card drag-overlay"><strong>{activeTask.title}</strong></article> : null}</DragOverlay>
       </DndContext>
 
@@ -911,17 +876,17 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
         </div>
       ) : null}
 
-      {canManage ? <div className="project-admin-panel">
-        <form className="new-project-form" onSubmit={submitProject}><label>New project<input value={projectName} onChange={(event) => setProjectName(event.target.value)} maxLength={80} placeholder="Innovation project" /></label><button className="button" type="submit" disabled={busy || projects.length >= 10}>Create project</button></form>
-        <ProjectSettings teamId={teamId} project={selectedProject} busy={busy} onRun={run} />
-        {projects.length > 1 ? <button className="danger-text archive-project" type="button" disabled={busy} onClick={() => void run(() => archiveProject(teamId, selectedProject.id), true)}>Archive this project</button> : null}
-      </div> : <p className="board-permission-note">{actorRole === 'student' ? 'Students can move only cards assigned to them. Project setup and card details remain coach-managed.' : 'Your role has view-only access to project boards.'}</p>}
+      {canManage ? null : <p className="board-permission-note">{actorRole === 'student' ? 'Students can move only cards assigned to them. Project setup and card details remain coach-managed.' : 'Your role has view-only access to project boards.'}</p>}
 
       {selectedTask ? <TaskDetails
         task={selectedTask}
         canManage={canManage}
         busy={busy}
         conflict={taskConflict}
+        categories={selectedProject.categories}
+        goals={goals}
+        actorUserId={actorUserId}
+        onSubtaskStatus={(subtaskId, status) => void run(() => updateTask({ teamId, taskId: selectedTask.id, operationId: operationId(), subtaskStatus: { id: subtaskId, status } }))}
         people={people}
         directory={directory}
         attachments={attachments}

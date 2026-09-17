@@ -62,6 +62,23 @@ export type TrackerTaskStatus = 'todo' | 'inProgress' | 'review' | 'completed';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type ChecklistItem = { id: string; label: string; completed: boolean };
 
+export type SubtaskStatus = 'todo' | 'inProgress' | 'done';
+
+/**
+ * A sub-item of a task, in the monday.com sense. Stored inside the task
+ * document, so a subtask is not a board card: it has its own title, status,
+ * assignee and due date, but no column, ordering or history of its own.
+ */
+export type Subtask = {
+  id: string;
+  title: string;
+  status: SubtaskStatus;
+  assignedTo: string | null;
+  dueAt?: unknown;
+};
+
+export const MAX_SUBTASKS_PER_TASK = 30;
+
 export type TrackerTask = TeamRecord & {
   title: string;
   description: string;
@@ -70,9 +87,15 @@ export type TrackerTask = TeamRecord & {
   assignedTo: string | null;
   watcherUserIds: string[];
   goalId: string | null;
+  /** The board category (group) this card sits in, or null for "No category". */
+  categoryId: string | null;
   labels: string[];
   checklist: ChecklistItem[];
+  subtasks: Subtask[];
   attachmentFileIds: string[];
+  /** Planned window. The deadline is `dueAt`; these two are when work happens. */
+  startAt?: unknown;
+  endAt?: unknown;
   dueAt?: unknown;
   historyCount: number;
   projectId?: string;
@@ -88,10 +111,31 @@ export type ProjectColumn = {
   color: 'blue' | 'purple' | 'orange' | 'green' | 'slate' | 'pink';
 };
 
+/**
+ * A board group, in the monday.com sense: the team's own breakdown of the work,
+ * independent of the workflow columns. `areaId` optionally ties one to a FIRST
+ * LEGO League judging area, which is what new cards in it default to; the area
+ * itself still lives on each task as a label, because that is what the
+ * dashboard counts.
+ */
+export type ProjectCategory = {
+  id: string;
+  name: string;
+  color: ProjectColumn['color'];
+  areaId: string | null;
+  /**
+   * The milestone this work package rolls up into — the parent level of the
+   * work-breakdown tree. Cards created in the category inherit it.
+   */
+  goalId: string | null;
+};
+
 export type KanbanProject = TeamRecord & {
   name: string;
   description: string;
   columns: ProjectColumn[];
+  /** Empty for a board created before categories existed. */
+  categories: ProjectCategory[];
   completedColumnId: string;
   archived: boolean;
   archivedAt?: unknown | null;
@@ -101,6 +145,31 @@ export type KanbanProject = TeamRecord & {
    * version. Projects written before the field existed count as version 1.
    */
   version?: number;
+};
+
+export type ProjectTemplateCard = {
+  columnId: string;
+  categoryId: string | null;
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  labels: string[];
+};
+
+/**
+ * A board preset. Built-in templates are defined in server code and reach the
+ * client only through `listProjectTemplates`, so there is no second copy here to
+ * drift; team templates are Firestore documents a coach saved from a project.
+ */
+export type ProjectTemplate = {
+  id: string;
+  source: 'builtIn' | 'team';
+  name: string;
+  description: string;
+  columns: ProjectColumn[];
+  categories: ProjectCategory[];
+  completedColumnId: string;
+  cards: ProjectTemplateCard[];
 };
 
 export type TeamGoal = TeamRecord & {
@@ -114,31 +183,9 @@ export type TeamGoal = TeamRecord & {
   version?: number;
 };
 
-export type RecurrenceRule = {
-  frequency: 'weekly' | 'monthly';
-  interval: number;
-  count?: number;
-  until?: unknown;
-};
-
-export type CalendarEvent = TeamRecord & {
-  title: string;
-  description: string;
-  startsAt: unknown;
-  endsAt: unknown;
-  location: string | null;
-  eventType: 'meeting' | 'practice' | 'competition' | 'deadline' | 'reminder';
-  recurrence: RecurrenceRule | null;
-  occurrenceOf: string | null;
-  reminderMinutes: number[];
-  linkedTaskIds: string[];
-  version: number;
-  googleEventId?: string | null;
-};
-
 export type NotificationRecord = TeamRecord & {
   recipientUserId: string;
-  type: 'task.assigned' | 'task.updated' | 'event.reminder' | 'file.ready' | 'system';
+  type: 'task.assigned' | 'task.updated' | 'file.ready' | 'system';
   title: string;
   body: string;
   deepLink: string;

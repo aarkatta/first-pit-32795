@@ -47,7 +47,7 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * Field-by-field parsers, in the same shape as `parseChatMessage`. A spread cast
+ * Field-by-field parsers. A spread cast
  * (`{ ...snapshot.data() } as Question`) trusts every field to exist, so one
  * document written before `tags` or `captionTracks` existed crashes the detail
  * view on `.join` / `.length`. Dates go through `toDate` so a Firestore

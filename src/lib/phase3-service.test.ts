@@ -27,7 +27,9 @@ import {
   buildTeamFilesQuery,
   createTask,
   formatFileSize,
+  listActiveTeamGoals,
   listTeamFiles,
+  parseTeamGoal,
   updateGoal,
   uploadTeamFile
 } from './phase3-service';
@@ -73,6 +75,32 @@ describe('Phase 3 service boundary', () => {
     await updateGoal({ teamId: 'team-1', goalId: 'goal-1', operationId: 'operation-9', expectedVersion: 1, title: 'Tournament prep' });
     expect(mocks.httpsCallable).toHaveBeenCalledWith('functions', 'updateGoal');
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ operationId: 'operation-9', expectedVersion: 1 }));
+  });
+});
+
+describe('team goals', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getFirebaseServices.mockReturnValue({ functions: 'functions', storage: 'storage' });
+  });
+
+  it('reads a goal with its version, so an edit can send the version it saw', () => {
+    const goal = parseTeamGoal('goal-1', { teamId: 'team-1', title: 'Tournament readiness', status: 'completed', taskCount: 5, completedTaskCount: 3, version: 4 });
+    expect(goal).toMatchObject({ id: 'goal-1', title: 'Tournament readiness', status: 'completed', taskCount: 5, completedTaskCount: 3, version: 4 });
+  });
+
+  it('defaults a goal written before versions existed, and refuses an unknown status', () => {
+    const goal = parseTeamGoal('goal-2', { teamId: 'team-1', status: 'nonsense', taskCount: -3 });
+    expect(goal).toMatchObject({ title: 'Untitled goal', status: 'active', version: 1, taskCount: 0 });
+  });
+
+  it("asks only for this team's active goals, bounded, for the card picker", async () => {
+    mocks.getDocs.mockResolvedValue({ docs: [{ id: 'goal-1', data: () => ({ teamId: 'team-1', title: 'Tournament readiness' }) }] });
+    const goals = await listActiveTeamGoals('db' as never, 'team-1');
+    expect(mocks.where).toHaveBeenCalledWith('teamId', '==', 'team-1');
+    expect(mocks.where).toHaveBeenCalledWith('status', '==', 'active');
+    expect(mocks.limit).toHaveBeenCalledWith(50);
+    expect(goals.map((goal) => goal.id)).toEqual(['goal-1']);
   });
 });
 

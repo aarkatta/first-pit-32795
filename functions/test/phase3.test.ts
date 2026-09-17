@@ -1,21 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Timestamp } from 'firebase-admin/firestore';
-import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES, detectContentMismatch, goalOperationVersion, nextGoalMutationVersion, nextTaskMutationVersion, occurrences, taskNotificationDedupeKey, taskOperationVersion, validateContentType, validateRecurrence, validateTaskInput } from '../src/phase3.js';
+import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES, MAX_SUBTASKS_PER_TASK, applySubtaskStatus, canUpdateSubtaskStatus, detectContentMismatch, goalOperationVersion, nextGoalMutationVersion, nextTaskMutationVersion, readSubtasks, requireSubtaskStatusInput, taskNotificationDedupeKey, taskOperationVersion, validateContentType, validateSubtasks, validateTaskInput } from '../src/phase3.js';
 
 describe('Phase 3 command validation', () => {
   it('keeps tasks bounded and explicit', () => {
     expect(validateTaskInput({ title: 'Build a drivetrain', priority: 'high', status: 'todo' })).toMatchObject({ title: 'Build a drivetrain', priority: 'high', status: 'todo', checklist: [] });
     expect(() => validateTaskInput({ title: '' })).toThrow(/Task title/);
     expect(() => validateTaskInput({ title: 'x', checklist: Array.from({ length: 101 }, (_, index) => ({ id: String(index), label: 'x' })) })).toThrow(/100/);
-  });
-
-  it('requires bounded recurrence and materializes deterministic occurrences', () => {
-    const recurrence = validateRecurrence({ frequency: 'weekly', interval: 2, count: 3 });
-    expect(recurrence).toMatchObject({ frequency: 'weekly', interval: 2, count: 3 });
-    expect(occurrences(new Date('2026-01-05T10:00:00.000Z'), recurrence)).toHaveLength(3);
-    expect(() => validateRecurrence({ frequency: 'weekly' })).toThrow(/count or end/);
-    expect(() => validateRecurrence({ frequency: 'weekly', count: 53 })).toThrow(/1 to 52/);
-    expect(validateRecurrence({ frequency: 'monthly', until: Timestamp.fromDate(new Date('2026-04-01T00:00:00.000Z')) })).toBeTruthy();
   });
 
   it('keeps uploads allowlisted and capped', () => {
@@ -103,3 +93,43 @@ describe('Phase 3 command validation', () => {
     });
   });
 });
+
+describe('subtasks', () => {
+  const subtask = { id: 'sub-1', title: 'Create the login screen', status: 'todo', assignedTo: 'student-1', dueAt: null };
+
+  it('keeps sub-items bounded, typed and uniquely identified', () => {
+    expect(MAX_SUBTASKS_PER_TASK).toBe(30);
+    expect(validateSubtasks([subtask])).toEqual([{ ...subtask, dueAt: null }]);
+    expect(validateSubtasks(undefined)).toEqual([]);
+    expect(() => validateSubtasks(Array.from({ length: 31 }, (_, index) => ({ ...subtask, id: `sub-${index}` })))).toThrow(/at most 30/);
+    expect(() => validateSubtasks([subtask, subtask])).toThrow(/only once/);
+    expect(() => validateSubtasks([{ ...subtask, status: 'review' }])).toThrow(/Subtask status/);
+    expect(() => validateSubtasks([{ ...subtask, title: '' }])).toThrow(/Subtask title/);
+  });
+
+  it('reads a task saved before subtasks existed as having none', () => {
+    expect(readSubtasks(undefined)).toEqual([]);
+    expect(readSubtasks(null)).toEqual([]);
+    expect(readSubtasks([subtask])).toHaveLength(1);
+  });
+
+  it('lets the card assignee and the sub-item assignee tick one off, and nobody else', () => {
+    expect(canUpdateSubtaskStatus({ assignedTo: 'student-2' }, subtask, 'student-1')).toBe(true);
+    expect(canUpdateSubtaskStatus({ assignedTo: 'student-2' }, subtask, 'student-2')).toBe(true);
+    expect(canUpdateSubtaskStatus({ assignedTo: 'student-2' }, subtask, 'student-3')).toBe(false);
+    expect(canUpdateSubtaskStatus({ assignedTo: null }, { ...subtask, assignedTo: null }, 'student-1')).toBe(false);
+  });
+
+  it('changes only the named sub-item, and refuses one that is not on the card', () => {
+    const subtasks = [subtask, { ...subtask, id: 'sub-2', title: 'Create the database', status: 'todo' as const }];
+    expect(applySubtaskStatus(subtasks, { id: 'sub-2', status: 'done' }).map((entry) => entry.status)).toEqual(['todo', 'done']);
+    expect(() => applySubtaskStatus(subtasks, { id: 'sub-9', status: 'done' })).toThrow(/Subtask not found/);
+  });
+
+  it('validates a status change before it reaches a transaction', () => {
+    expect(requireSubtaskStatusInput({ id: 'sub-1', status: 'inProgress' })).toEqual({ id: 'sub-1', status: 'inProgress' });
+    expect(() => requireSubtaskStatusInput({ id: 'sub-1', status: 'finished' })).toThrow(/Subtask status/);
+    expect(() => requireSubtaskStatusInput('sub-1')).toThrow(/Subtask status change/);
+  });
+});
+

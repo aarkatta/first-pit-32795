@@ -24,6 +24,7 @@ npm test                 # vitest run (src/**/*.test.ts(x) AND functions/test/*.
 npm run test:watch
 npm run build            # vite build -> dist/
 npm run functions:build  # tsc for the functions workspace -> functions/lib/
+npm run template:build   # regenerates public/first-pit-task-template.xlsx
 ```
 
 Run a single test file or case:
@@ -41,7 +42,7 @@ Two aggregate gates — `npm run verify` is what CI runs:
   emulator suite; slow). Requires the `firebase` CLI.
 
 Emulator/rules suites run individually, each against its own throwaway project id,
-e.g. `npm run test:rules:phase4`, `npm run test:phase4-emulator`,
+e.g. `npm run test:rules:phase3`, `npm run test:phase3-emulator`,
 `npm run test:storage:rules`, `npm run test:foundation-emulator`.
 
 Node 24 and npm 11.4.2 are pinned (`engines`, `.nvmrc`, `packageManager`); the
@@ -58,7 +59,7 @@ Three layers, and the boundary between them is the security model:
 
 ### Deny-first data model
 
-Firestore collections are **flat and top-level** (`tasks`, `messages`, `polls`,
+Firestore collections are **flat and top-level** (`tasks`, `goals`, `polls`,
 `scoreSessions`, …), not subcollections; each document carries a validated `teamId`
 and access is derived from a `memberships/{teamId}_{userId}` lookup. Nearly every
 feature collection is `allow create, update, delete: if false` — clients read, the
@@ -73,15 +74,36 @@ Consequences when adding a feature:
   `firestore.indexes.json`, and coverage in the phase's `tests/firestore-rules-*.mjs`.
 - Never widen a rule to make a test pass.
 
+### Work-breakdown model
+
+The tracker is one tree, and the levels are not interchangeable:
+
+- **Milestone** — a `goals` record. The deliverable. Progress counters are
+  maintained per linked task, transactionally.
+- **Category** — an entry in a project's `categories` array: the work package.
+  Carries an optional `goalId` (its milestone) and `areaId` (a judging area).
+- **Task** — a `tasks` document with `categoryId`, `goalId`, `columnId`,
+  `orderKey`, `version`, and `startAt`/`endAt`/`dueAt`.
+- **Subtask** — an entry in the task's `subtasks` array (max 30), with its own
+  status, assignee and due date. Not a board card: no column, order or history.
+
+A card inherits its category's milestone on create and on category change,
+unless the same call names a milestone explicitly. Judging areas are still task
+*labels*, which is what the dashboard counts; a category's `areaId` is applied by
+the importer and the built-in templates, **not** by manual card creation — see
+the follow-ups in `docs/architecture.md`.
+
 ### Server command modules
 
-`functions/src/index.ts` is a thin export surface: it defines Phase 0–2 callables
-inline and re-exports the rest from per-phase command modules — `phase2.ts` (roles,
+`functions/src/index.ts` defines Phase 0–2 callables inline and re-exports the
+rest from per-phase command modules — `phase2.ts` (roles,
 membership, safety, plus the shared validators `requireTeamId`, `requireTeamAdmin`,
-`auditRecord`, …), `phase3.ts` (tracker/calendar/files), `kanban.ts`, `phase4.ts`
-(chat), `phase5.ts` (Q&A/videos/polls), `phase6.ts` (scorer), `phase7.ts`
-(dashboard/search/profile). `phase2.ts` is the shared validation/authorization
-toolkit — reuse its helpers instead of re-deriving auth checks. There is also one
+`auditRecord`, …), `phase3.ts` (tracker/goals/notifications/files),
+`kanban.ts`, `kanban-templates.ts` (board presets and team-saved templates),
+`phase5.ts` (Q&A/videos/polls), `phase6.ts` (scorer), `phase7.ts`
+(dashboard/search/profile). There is no `phase4.ts` — chat was removed from the
+product. `phase2.ts` is the shared validation/authorization toolkit — reuse its
+helpers instead of re-deriving auth checks. There is also one
 `onRequest` HTTP function, `api`, serving `/healthz`.
 
 Mutations follow two conventions worth preserving:
@@ -114,6 +136,17 @@ moderation) must also write an immutable `auditEvents` record.
 - `src/lib/domain.ts` holds shared domain types/role unions. Note `TeamRole` on the
   client includes `teamLeader`; `functions/src/phase2.ts` `TEAM_ROLES` is the
   *assignable* set and excludes it.
+- The tracker is four routes presented as tabs by
+  `src/features/kanban/TrackerTabs.tsx` and absent from the sidebar:
+  `/coordination` (board), `/milestones`, `/import`, `/board-setup`. The last two
+  are coach-only and read the team's single board through `src/lib/use-team-board.ts`.
+  `/files` and `/notifications` are their own sidebar destinations; their shared
+  reads live in `src/lib/coordination-data.ts`.
+- `src/features/kanban/` holds the board: `KanbanBoard.tsx` (subscriptions,
+  movement, card dialog), `BoardTable.tsx` (the one board view), `BoardToolbar.tsx`,
+  `BoardSetup.tsx` (columns + categories), `TaskImportPanel.tsx` and
+  `spreadsheet-reader.ts`. Grouping, numbering, filtering and timeline maths are
+  pure functions in `src/lib/board-view.ts`.
 - Path alias `@/` → `src/` (configured in both `vite.config.ts` and `tsconfig.app.json`).
 
 ### Required UI states
@@ -214,8 +247,7 @@ their dependencies; it is history, not a queue.
 | 0 | Product decisions, repository setup, Firebase emulators, CI, and app shell |
 | 1 | Authentication, profiles, teams, memberships, Firestore model, authorization, rules, audit foundation |
 | 2 | Roles, invitations, membership lifecycle, privacy, youth safety, reporting, and moderation |
-| 3 | Tracker, robot-practice coordination, Calendar, Notifications, and Storage Area |
-| 4 | Team Chat and announcements |
+| 3 | Tracker, robot-practice coordination, Notifications, and Storage Area |
 | 5 | Questions, How-to Videos, and Polls |
 | 6 | Scorer and practice/match history |
 | 7 | Dashboard, search, profile customization, and cross-module integration |
@@ -223,9 +255,12 @@ their dependencies; it is history, not a queue.
 
 Explicitly deferred from MVP: public team discovery, public community feed,
 collaboration marketplace, full innovation-project workflow, advanced robot
-version/parts/maintenance logs, learning courses, external calendar sync,
-offline-first mode, large-scale reputation features, and capabilities requiring
-unproven moderation capacity.
+version/parts/maintenance logs, learning courses, offline-first mode,
+large-scale reputation features, and capabilities requiring unproven moderation
+capacity. Team chat (channels, messages, announcements) and the calendar
+(events, recurrence, Google Calendar sync) were built and then **removed from
+the product**; their collections, rules, indexes and callables are gone, and the
+catch-all deny now covers any documents left behind.
 
 ## Repository Structure
 

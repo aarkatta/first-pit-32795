@@ -60,18 +60,23 @@ await call('acceptInvitation', student.idToken, { invitationId: invitation.invit
 const taskId = `phase7-task-${suffix}`;
 await call('createTask', coach.idToken, { teamId, taskId, operationId: `create-${suffix}`, title: 'Programming practice plan', assignedTo: student.localId, dueAt: '2026-09-01T15:00:00.000Z' });
 await call('createGoal', coach.idToken, { teamId, goalId: `phase7-goal-${suffix}`, operationId: `goal-${suffix}`, title: 'Programming tournament readiness' });
-await call('createEvent', coach.idToken, { teamId, eventId: `phase7-event-${suffix}`, operationId: `event-${suffix}`, title: 'Programming practice', startsAt: '2030-09-01T15:00:00.000Z', endsAt: '2030-09-01T16:00:00.000Z' });
-const channel = await call('createChannel', coach.idToken, { teamId, channelId: `phase7-channel-${suffix}`, name: 'Practice updates' });
-await call('sendMessage', student.idToken, { teamId, channelId: channel.channelId, body: 'Programming practice update', operationId: `message-${suffix}` });
 await call('createQuestion', student.idToken, { teamId, questionId: `phase7-question-${suffix}`, visibility: 'team', title: 'Programming practice question', body: 'How should the robot handle this programming test?', category: 'Programming', tags: ['programming'] });
 const video = await call('createVideo', coach.idToken, { teamId, videoId: `phase7-video-${suffix}`, visibility: 'team', category: 'Programming', title: 'Programming practice video', description: 'Team programming walkthrough.', externalUrl: 'https://example.com/programming', sourceAttribution: 'Team library' });
 await call('updateVideoPublication', coach.idToken, { videoId: video.videoId, publicationStatus: 'published' });
 
+await call('createTask', coach.idToken, { teamId, taskId: `phase7-area-task-${suffix}`, operationId: `area-${suffix}`, title: 'Robot game mission run', labels: ['robot-game'], status: 'completed' });
+const scoreDefinition = await call('createScoreDefinition', coach.idToken, { teamId, definitionId: `phase7-definition-${suffix}`, title: 'Phase 7 definition', season: '2026', missions: [{ id: 'mission-1', name: 'Mission 1', maxPoints: 50 }], deductions: [] });
+await call('createScoreSession', coach.idToken, { teamId, sessionId: `phase7-session-${suffix}`, operationId: `session-${suffix}`, scoreDefinitionId: scoreDefinition.definitionId, title: 'Phase 7 match', scoreType: 'match', sessionDate: '2026-08-20T12:00:00.000Z', missions: [{ missionId: 'mission-1', points: 40, completed: true }], deductions: [] });
+
 const dashboard = await call('getDashboard', student.idToken, { teamId });
-if (dashboard.role !== 'student' || dashboard.summary.taskCount !== 1 || dashboard.summary.goalCount !== 1 || dashboard.summary.upcomingEventCount !== 1 || dashboard.summary.unreadNotificationCount < 1) throw new Error('Dashboard did not return the authorized role, task, goal, event, and assignment notification summary.');
+if (dashboard.role !== 'student' || dashboard.summary.taskCount !== 2 || dashboard.summary.completedTaskCount !== 1 || dashboard.summary.goalCount !== 1 || dashboard.summary.completedGoalCount !== 0 || dashboard.summary.unreadNotificationCount < 1) throw new Error('Dashboard did not return the authorized role, task, goal, and assignment notification summary.');
+const robotGameArea = dashboard.areas?.find((area) => area.id === 'robot-game');
+if (dashboard.areas?.length !== 4 || robotGameArea?.taskCount !== 1 || robotGameArea?.completedTaskCount !== 1) throw new Error('Dashboard did not count the labelled task toward its judging area.');
+if (dashboard.upcomingTasks?.length !== 1 || dashboard.upcomingTasks[0].id !== taskId) throw new Error('Dashboard upcoming tasks must list only open tasks with a due date.');
+if (dashboard.scores?.[0]?.totalPoints !== 40 || dashboard.scores[0].scoreType !== 'match') throw new Error('Dashboard did not return the recorded score session for the trend.');
 const search = await call('globalSearch', student.idToken, { query: 'programming', teamId });
 const resultTypes = new Set(search.results.map((entry) => entry.type));
-for (const type of ['Task', 'Message', 'Question', 'Video']) if (!resultTypes.has(type)) throw new Error(`Global search did not return authorized ${type} results.`);
+for (const type of ['Task', 'Question', 'Video']) if (!resultTypes.has(type)) throw new Error(`Global search did not return authorized ${type} results.`);
 for (const entry of search.results) if (entry.teamId !== teamId || !entry.deepLink.startsWith('/')) throw new Error('Global search returned an invalid team boundary or deep link.');
 if (!search.results.some((entry) => entry.type === 'Task' && entry.recordId === taskId)) throw new Error('Global search returned a task without its record ID.');
 

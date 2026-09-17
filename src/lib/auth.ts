@@ -1,7 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 import {
+  applyActionCode,
   browserLocalPersistence,
   browserPopupRedirectResolver,
+  checkActionCode,
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   getRedirectResult,
   GoogleAuthProvider,
@@ -13,6 +16,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   signOut,
+  verifyPasswordResetCode,
+  type ActionCodeSettings,
   type Auth,
   type User,
   type UserCredential
@@ -60,18 +65,74 @@ export async function configureAuthPersistence(auth: Auth) {
   }
 }
 
+/** The in-app route that handles `oobCode` links out of Firebase Auth emails. */
+export const EMAIL_ACTION_PATH = '/auth/action';
+
+/**
+ * Where the verification link should drop the user.
+ *
+ * Without this, Firebase's own hosted handler ends the flow on a generic
+ * "your email is verified" page with no way back, so the user has to find the
+ * app tab again and prove it a second time. Pointing the continue URL at our
+ * own handler closes the loop: whichever page applies the code, the user lands
+ * back inside First Pit signed in and verified.
+ *
+ * The origin has to be in the Firebase Auth authorized-domain list, which a
+ * per-branch preview deployment will not be — see `sendVerification`.
+ */
+export function emailActionCodeSettings(next?: string | null): ActionCodeSettings {
+  const url = new URL(EMAIL_ACTION_PATH, window.location.origin);
+  if (next) url.searchParams.set('next', next);
+  return { url: url.toString(), handleCodeInApp: false };
+}
+
+/** A continue URL Firebase refuses to embed, as opposed to a real send failure. */
+function isRejectedContinueUri(error: unknown): boolean {
+  const code = authErrorCode(error);
+  return code.includes('auth/unauthorized-continue-uri')
+    || code.includes('auth/invalid-continue-uri')
+    || code.includes('auth/missing-continue-uri');
+}
+
+/**
+ * Sends the verification email, degrading rather than failing when this
+ * origin is not an authorized domain: the link still verifies the address, it
+ * just cannot offer a way back to this deployment.
+ */
+async function sendVerification(user: User, next?: string | null): Promise<void> {
+  try {
+    await sendEmailVerification(user, emailActionCodeSettings(next));
+  } catch (error) {
+    if (!isRejectedContinueUri(error)) throw error;
+    await sendEmailVerification(user);
+  }
+}
+
 export async function signUpWithEmail(auth: Auth, email: string, password: string): Promise<UserCredential> {
   const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
   try {
-    await sendEmailVerification(credential.user);
+    await sendVerification(credential.user);
   } catch (error) {
     throw new VerificationEmailDeliveryError(credential.user, error);
   }
   return credential;
 }
 
-export function resendVerificationEmail(user: User): Promise<void> {
-  return sendEmailVerification(user);
+export function resendVerificationEmail(user: User, next?: string | null): Promise<void> {
+  return sendVerification(user, next);
+}
+
+/**
+ * Re-reads the account from the server and reports whether the address is now
+ * verified.
+ *
+ * `reload()` mutates the `User` in place and writes it back to persistence,
+ * but fires no auth state change, so callers have to act on the return value
+ * rather than waiting for a re-render.
+ */
+export async function refreshVerificationStatus(user: User): Promise<boolean> {
+  await user.reload();
+  return user.emailVerified;
 }
 
 export async function signInWithEmail(auth: Auth, email: string, password: string): Promise<UserCredential> {
@@ -146,10 +207,73 @@ export function requiresEmailVerification(user: User | null): boolean {
   return user.providerData.some((provider) => provider.providerId === 'password');
 }
 
+/**
+ * The address Firebase Auth sends verification and recovery mail from.
+ *
+ * The default sender is `noreply@<authDomain>` — a domain the recipient has
+ * never corresponded with and which carries no First Pit branding, so the mail
+ * reliably lands in spam. Naming the sender lets someone search for it instead
+ * of concluding nothing was sent; the real fix is a custom SMTP sender on a
+ * domain the team owns.
+ */
+export function authEmailSender(auth: Auth | null): string | null {
+  const domain = auth?.config?.authDomain;
+  return domain ? `noreply@${domain}` : null;
+}
+
 export async function sendPasswordRecovery(auth: Auth, email: string): Promise<void> {
   await sendPasswordResetEmail(auth, email.trim());
 }
 
 export function signOutCurrentUser(auth: Auth): Promise<void> {
   return signOut(auth);
+}
+
+/**
+ * The email actions Firebase can send a user to a handler for.
+ *
+ * The action URL is one project-wide setting, so a handler that only knows
+ * `verifyEmail` would break password recovery the moment the console is
+ * pointed at it. All four are handled here for that reason.
+ */
+export type EmailActionMode = 'verifyEmail' | 'verifyAndChangeEmail' | 'recoverEmail' | 'resetPassword';
+
+const EMAIL_ACTION_MODES: readonly EmailActionMode[] = [
+  'verifyEmail',
+  'verifyAndChangeEmail',
+  'recoverEmail',
+  'resetPassword'
+];
+
+export function parseEmailActionMode(mode: string | null): EmailActionMode | null {
+  return EMAIL_ACTION_MODES.find((known) => known === mode) ?? null;
+}
+
+/** Reads the address an action code belongs to, without consuming the code. */
+export async function inspectEmailActionCode(auth: Auth, oobCode: string): Promise<string | null> {
+  const info = await checkActionCode(auth, oobCode);
+  return info.data.email ?? null;
+}
+
+/** Consumes a `verifyEmail`, `verifyAndChangeEmail`, or `recoverEmail` code. */
+export function applyEmailActionCode(auth: Auth, oobCode: string): Promise<void> {
+  return applyActionCode(auth, oobCode);
+}
+
+/** Validates a `resetPassword` code and returns the address it is for. */
+export function checkPasswordResetCode(auth: Auth, oobCode: string): Promise<string> {
+  return verifyPasswordResetCode(auth, oobCode);
+}
+
+export function completePasswordReset(auth: Auth, oobCode: string, newPassword: string): Promise<void> {
+  return confirmPasswordReset(auth, oobCode, newPassword);
+}
+
+/** A code that has already been used, expired, or was never valid. */
+export function isSpentActionCode(error: unknown): boolean {
+  const code = authErrorCode(error);
+  return code.includes('auth/invalid-action-code')
+    || code.includes('auth/expired-action-code')
+    || code.includes('auth/user-disabled')
+    || code.includes('auth/user-not-found');
 }

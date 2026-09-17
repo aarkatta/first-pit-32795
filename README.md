@@ -2,9 +2,11 @@
 
 First Pit is a private team-management application for the FIRST LEGO League
 community. The web MVP and pilot-hardening foundation are implemented, with
-Release 1.1 adding team-scoped Kanban project management. Trusted identity,
-transactional membership administration, explicit safety policies, reporting,
-moderation, and audit history remain the authorization foundation.
+Release 1.1 adding team-scoped project management: a work-breakdown tracker of
+milestones, categories, tasks and subtasks, fed by a standard spreadsheet
+template. Trusted identity, transactional membership administration, explicit
+safety policies, reporting, moderation, and audit history remain the
+authorization foundation.
 
 [`docs/architecture.md`](docs/architecture.md) is the single reference for the
 data model, authorization contract, per-domain behavior, open product blockers,
@@ -25,7 +27,12 @@ and the release runbook.
 - Firebase emulator configuration for Auth, Firestore, Storage, and Functions
 - Node.js Cloud Functions scaffold
 - Team-scoped Firestore and Storage rules with deny-by-default feature writes
-- Multi-project Kanban boards with configurable workflows, accessible card movement, conflict detection, and role-scoped controls
+- A work-breakdown tracker: milestones → categories → tasks → subtasks, numbered (1, 1.1, 1.1.1), with progress rolling up at every level
+- One board screen — a grouped, sortable, filterable table with status, person, category, priority, start/end/due dates, timeline, labels and files — plus accessible card movement, conflict detection, and role-scoped controls
+- Tracker tabs for Board, Milestones, Import tasks and Board setup, so project management lives in one place
+- A standard 12-week, 48-task FLL template (`public/first-pit-task-template.xlsx`, rebuilt by `npm run template:build`) that teams edit and upload back
+- Spreadsheet import with a row-by-row preview: categories created on the fly, statuses matched to board columns, assignees resolved server-side by name or email, subtasks nested under their task
+- Team milestones with server-maintained progress counters, achieved/reopen state, and dashboard highlights
 - CI workflow: `verify:static` on every push and pull request, plus the full emulator and rules suites on `main`
 
 ## Local development prerequisites
@@ -86,7 +93,7 @@ The individual scripts behind them, for iterating on one thing:
 - `npm run test:release` — static release gate (Capacitor metadata, Vercel routing,
   brand and social metadata, the production emulator guard, secret scan)
 - `npm run test:firebase` — every rules and emulator suite; individual suites such as
-  `npm run test:rules:phase4` or `npm run test:phase4-emulator` run on their own
+  `npm run test:rules:phase3` or `npm run test:phase3-emulator` run on their own
 
 ## Route strategy
 

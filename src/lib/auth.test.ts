@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   browserPopupRedirectResolver: { name: 'resolver' },
   createUserWithEmailAndPassword: vi.fn(),
   sendEmailVerification: vi.fn(),
+  applyActionCode: vi.fn(),
+  checkActionCode: vi.fn(),
+  verifyPasswordResetCode: vi.fn(),
+  confirmPasswordReset: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   signOut: vi.fn(),
@@ -23,7 +27,16 @@ vi.mock('firebase/auth', () => mocks);
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: mocks.isNativePlatform } }));
 
 import {
+  applyEmailActionCode,
+  authEmailSender,
+  checkPasswordResetCode,
   completeGoogleRedirect,
+  completePasswordReset,
+  emailActionCodeSettings,
+  inspectEmailActionCode,
+  isSpentActionCode,
+  parseEmailActionMode,
+  refreshVerificationStatus,
   configureAuthPersistence,
   isDismissedPopup,
   isNativeShell,
@@ -67,7 +80,7 @@ describe('auth service helpers', () => {
     await sendPasswordRecovery(auth, ' reset@example.com ');
     await signOutCurrentUser(auth);
     expect(mocks.createUserWithEmailAndPassword).toHaveBeenCalledWith(auth, 'new@example.com', 'password');
-    expect(mocks.sendEmailVerification).toHaveBeenCalledWith(user);
+    expect(mocks.sendEmailVerification).toHaveBeenCalledWith(user, emailActionCodeSettings());
     expect(mocks.signInWithEmailAndPassword).toHaveBeenCalledWith(auth, 'user@example.com', 'password');
     expect(mocks.sendPasswordResetEmail).toHaveBeenCalledWith(auth, 'reset@example.com');
     expect(mocks.signOut).toHaveBeenCalledWith(auth);
@@ -152,6 +165,70 @@ describe('auth service helpers', () => {
     expect(isDismissedPopup('not an error')).toBe(false);
   });
 
+  describe('email action links', () => {
+    it('points the verification link back at the in-app handler', () => {
+      // Without a continue URL the flow ends on Firebase's own hosted page,
+      // and the user has to find the app again and prove it a second time.
+      const settings = emailActionCodeSettings('/join?invite=abc');
+      expect(settings.url).toBe(`${window.location.origin}/auth/action?next=%2Fjoin%3Finvite%3Dabc`);
+      expect(settings.handleCodeInApp).toBe(false);
+    });
+
+    it('still sends the email when this origin is not an authorized domain', async () => {
+      // A per-branch preview deployment is not in the Firebase authorized
+      // domain list. Losing the return trip beats losing verification.
+      const user = { uid: 'user' };
+      mocks.sendEmailVerification
+        .mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'auth/unauthorized-continue-uri' }))
+        .mockResolvedValueOnce(undefined);
+
+      await resendVerificationEmail(user as never);
+
+      expect(mocks.sendEmailVerification).toHaveBeenNthCalledWith(2, user);
+    });
+
+    it('reports a real delivery failure rather than retrying forever', async () => {
+      mocks.sendEmailVerification.mockRejectedValue(Object.assign(new Error('x'), { code: 'auth/too-many-requests' }));
+      await expect(resendVerificationEmail({ uid: 'user' } as never)).rejects.toThrow();
+      expect(mocks.sendEmailVerification).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-reads the account so a stale verification flag does not gate the app', async () => {
+      const user = { emailVerified: false, reload: vi.fn().mockImplementation(async () => { user.emailVerified = true; }) };
+      await expect(refreshVerificationStatus(user as never)).resolves.toBe(true);
+      expect(user.reload).toHaveBeenCalled();
+    });
+
+    it('accepts only the modes the handler can complete', () => {
+      expect(parseEmailActionMode('verifyEmail')).toBe('verifyEmail');
+      expect(parseEmailActionMode('resetPassword')).toBe('resetPassword');
+      expect(parseEmailActionMode('recoverEmail')).toBe('recoverEmail');
+      expect(parseEmailActionMode('verifyAndChangeEmail')).toBe('verifyAndChangeEmail');
+      expect(parseEmailActionMode('signIn')).toBeNull();
+      expect(parseEmailActionMode(null)).toBeNull();
+    });
+
+    it('passes action codes through to the Firebase SDK', async () => {
+      mocks.checkActionCode.mockResolvedValue({ data: { email: 'coach@example.com' } });
+      mocks.verifyPasswordResetCode.mockResolvedValue('coach@example.com');
+
+      await expect(inspectEmailActionCode(auth, 'code')).resolves.toBe('coach@example.com');
+      await applyEmailActionCode(auth, 'code');
+      await expect(checkPasswordResetCode(auth, 'reset')).resolves.toBe('coach@example.com');
+      await completePasswordReset(auth, 'reset', 'newpassword');
+
+      expect(mocks.applyActionCode).toHaveBeenCalledWith(auth, 'code');
+      expect(mocks.confirmPasswordReset).toHaveBeenCalledWith(auth, 'reset', 'newpassword');
+    });
+
+    it('separates a spent code from a transient failure', () => {
+      expect(isSpentActionCode(Object.assign(new Error('x'), { code: 'auth/expired-action-code' }))).toBe(true);
+      expect(isSpentActionCode(Object.assign(new Error('x'), { code: 'auth/invalid-action-code' }))).toBe(true);
+      // A network blip is worth retrying; telling the user the link is dead is not.
+      expect(isSpentActionCode(Object.assign(new Error('x'), { code: 'auth/network-request-failed' }))).toBe(false);
+    });
+  });
+
   describe('requiresEmailVerification', () => {
     const password = { providerId: 'password' };
     const google = { providerId: 'google.com' };
@@ -168,5 +245,17 @@ describe('auth service helpers', () => {
     it('still requires verification when a password provider is linked alongside Google', () => {
       expect(requiresEmailVerification({ emailVerified: false, providerData: [google, password] } as never)).toBe(true);
     });
+  });
+});
+
+describe('authEmailSender', () => {
+  it('names the default Firebase sender for the project', () => {
+    expect(authEmailSender({ config: { authDomain: 'first-pit-32795.firebaseapp.com' } } as never))
+      .toBe('noreply@first-pit-32795.firebaseapp.com');
+  });
+
+  it('returns null rather than a broken address when there is no auth instance', () => {
+    expect(authEmailSender(null)).toBeNull();
+    expect(authEmailSender({} as never)).toBeNull();
   });
 });

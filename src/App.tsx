@@ -9,13 +9,18 @@ import { PreferencesProvider } from '@/lib/preferences-context';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 
+const AuthActionPage = lazy(() => import('@/pages/AuthActionPage').then((module) => ({ default: module.AuthActionPage })));
 const AuthPage = lazy(() => import('@/pages/AuthPage').then((module) => ({ default: module.AuthPage })));
-const ChatPage = lazy(() => import('@/pages/ChatPage').then((module) => ({ default: module.ChatPage })));
 const CoordinationPage = lazy(() => import('@/pages/CoordinationPage').then((module) => ({ default: module.CoordinationPage })));
 const CreateTeamPage = lazy(() => import('@/pages/CreateTeamPage').then((module) => ({ default: module.CreateTeamPage })));
 const EmulatorPage = lazy(() => import('@/pages/EmulatorPage').then((module) => ({ default: module.EmulatorPage })));
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage').then((module) => ({ default: module.JoinTeamPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })));
+const BoardSetupPage = lazy(() => import('@/pages/BoardSetupPage').then((module) => ({ default: module.BoardSetupPage })));
+const ImportTasksPage = lazy(() => import('@/pages/ImportTasksPage').then((module) => ({ default: module.ImportTasksPage })));
+const MilestonesPage = lazy(() => import('@/pages/MilestonesPage').then((module) => ({ default: module.MilestonesPage })));
+const NotificationsPage = lazy(() => import('@/pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
+const TeamFilesPage = lazy(() => import('@/pages/TeamFilesPage').then((module) => ({ default: module.TeamFilesPage })));
 const KnowledgePage = lazy(() => import('@/pages/KnowledgePage').then((module) => ({ default: module.KnowledgePage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
@@ -64,17 +69,29 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/auth" element={<AuthPage />} />
+            {/* Handler for the `?mode=…&oobCode=…` links Firebase Auth emails out.
+                Unprotected on purpose: the link opens in whatever browser the
+                recipient reads mail in, usually with no session. */}
+            <Route path="/auth/action" element={<AuthActionPage />} />
             <Route path="/hub" element={<ProtectedRoute><TeamHubPage /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><TeamAdminPage /></ProtectedRoute>} />
             <Route path="/coordination" element={<ProtectedRoute><CoordinationPage /></ProtectedRoute>} />
-            <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+            <Route path="/board-setup" element={<ProtectedRoute><BoardSetupPage /></ProtectedRoute>} />
+            <Route path="/import" element={<ProtectedRoute><ImportTasksPage /></ProtectedRoute>} />
+            <Route path="/milestones" element={<ProtectedRoute><MilestonesPage /></ProtectedRoute>} />
+            <Route path="/files" element={<ProtectedRoute><TeamFilesPage /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
             <Route path="/knowledge" element={<ProtectedRoute><KnowledgePage /></ProtectedRoute>} />
             <Route path="/scorer" element={<ProtectedRoute><ScorerPage /></ProtectedRoute>} />
             <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/tracker" element={<CoordinationAlias />} />
+            {/* Chat and the calendar were removed from the product, but
+                notifications already delivered to a mailbox still carry their
+                deep links. Landing on the team hub beats a not-found page. */}
             <Route path="/calendar" element={<CoordinationAlias />} />
+            <Route path="/chat" element={<Navigate to="/hub" replace />} />
             <Route path="/teams/new" element={<ProtectedRoute><CreateTeamPage /></ProtectedRoute>} />
             {/* Invitation acceptance, reached from an emailed `/join?invite=<id>` link.
                 ProtectedRoute round-trips the full deep link through `/auth?next=…`,

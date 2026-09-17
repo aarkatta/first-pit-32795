@@ -1,0 +1,29 @@
+/* Spreadsheet task import on the project board (TaskImportPanel). */
+
+.task-import > .template-note { margin-top: 10px; line-height: 1.5; }
+.task-import > .template-note a { color: var(--blue); font-weight: 700; }
+.task-import__file { display: grid; gap: 6px; margin-top: 10px; font-size: 12px; font-weight: 700; }
+.task-import__file input { max-width: 100%; font-size: 12px; }
+.task-import__notice { margin: 10px 0 0; padding: 8px 10px; border-radius: 9px; color: #1f6b43; background: #dcf6e9; font-size: 12px; font-weight: 700; }
+.task-import__form { display: grid; gap: 10px; margin-top: 12px; }
+.task-import__summary { margin: 0; color: var(--muted); font-size: 12px; }
+.task-import__summary strong { color: var(--ink); }
+.task-import__problem { margin: 0; color: var(--danger); font-size: 12px; font-weight: 700; }
+.task-import__table { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.task-import__table:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.task-import__table table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 12px; }
+.task-import__table th { position: sticky; top: 0; padding: 8px; color: var(--muted); background: #f5f7f2; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-align: left; text-transform: uppercase; }
+.task-import__table td { padding: 8px; border-top: 1px solid var(--line); vertical-align: top; }
+.task-import__table td:first-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+.task-import__table tr.is-blocked td:not(:last-child) { color: var(--muted); text-decoration: line-through; }
+.task-import__issue,
+.task-import__warning { display: block; font-size: 11px; line-height: 1.4; }
+.task-import__issue { color: var(--danger); font-weight: 700; }
+.task-import__warning { color: var(--muted); }
+.task-import__actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.task-import__actions label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; }
+.task-import__actions select { min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+
+.task-import__template-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 12px; }
+.task-import__table tr.is-subtask td { background: #fbfcfa; color: #4b5b50; }
+.task-import__branch { color: #95a29a; }

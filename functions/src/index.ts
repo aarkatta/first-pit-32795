@@ -2,9 +2,6 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, onRequest, type CallableRequest, type Request } from 'firebase-functions/v2/https';
-import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineSecret } from 'firebase-functions/params';
-import { logger } from 'firebase-functions';
 import type { Response } from 'express';
 import {
   assertTeamMemberInTransaction,
@@ -27,30 +24,14 @@ import {
 } from './phase2.js';
 import {
   completeFileUpload as completeFileUploadCommand,
-  createEvent as createEventCommand,
   createFileMetadata as createFileMetadataCommand,
   createGoal as createGoalCommand,
   createTask as createTaskCommand,
   linkFileToTask as linkFileToTaskCommand,
   markNotificationRead as markNotificationReadCommand,
-  deleteEvent as deleteEventCommand,
-  updateEvent as updateEventCommand,
   updateGoal as updateGoalCommand,
   updateTask as updateTaskCommand
 } from './phase3.js';
-import {
-  completeGoogleOAuth,
-  disconnectGoogle as disconnectGoogleCommand,
-  getGoogleConnection as getGoogleConnectionCommand,
-  getTeamCalendarSync as getTeamCalendarSyncCommand,
-  listGoogleCalendars as listGoogleCalendarsCommand,
-  listMyGoogleEvents as listMyGoogleEventsCommand,
-  setTeamCalendarSync as setTeamCalendarSyncCommand,
-  setTeamChatLink as setTeamChatLinkCommand,
-  startGoogleOAuth as startGoogleOAuthCommand,
-  syncAllTeamCalendars,
-  syncTeamCalendar as syncTeamCalendarCommand
-} from './google-calendar.js';
 import {
   addProjectColumn as addProjectColumnCommand,
   archiveProject as archiveProjectCommand,
@@ -61,24 +42,17 @@ import {
   removeProjectColumn as removeProjectColumnCommand,
   reorderProjectColumns as reorderProjectColumnsCommand,
   updateProject as updateProjectCommand,
+  updateProjectCategories as updateProjectCategoriesCommand,
   updateProjectColumn as updateProjectColumnCommand,
   withBoardErrors
 } from './kanban.js';
 import {
-  acknowledgeAnnouncement as acknowledgeAnnouncementCommand,
-  archiveChannel as archiveChannelCommand,
-  createAnnouncement as createAnnouncementCommand,
-  createChannel as createChannelCommand,
-  deleteMessage as deleteMessageCommand,
-  exportTeamMessages as exportTeamMessagesCommand,
-  markChannelRead as markChannelReadCommand,
-  purgeExpiredMessages as purgeExpiredMessagesCommand,
-  purgeExpiredMessagesForTeam,
-  searchMessages as searchMessagesCommand,
-  sendMessage as sendMessageCommand,
-  toggleChannelMute as toggleChannelMuteCommand,
-  toggleReaction as toggleReactionCommand
-} from './phase4.js';
+  createProjectFromTemplate as createProjectFromTemplateCommand,
+  deleteProjectTemplate as deleteProjectTemplateCommand,
+  listProjectTemplates as listProjectTemplatesCommand,
+  saveProjectAsTemplate as saveProjectAsTemplateCommand
+} from './kanban-templates.js';
+import { importProjectTasks as importProjectTasksCommand, resolveImportAssignees as resolveImportAssigneesCommand } from './task-import.js';
 import {
   acceptAnswer as acceptAnswerCommand,
   closePoll as closePollCommand,
@@ -106,18 +80,6 @@ import {
   listScoreDefinitions as listScoreDefinitionsCommand,
   listScoreSessions as listScoreSessionsCommand
 } from './phase6.js';
-
-/**
- * Secret Manager injects a secret only into the functions that list it in their
- * dependency array, so every entry point that reaches Google — the consent URL,
- * the token exchange, a refresh, or a refresh-token decryption — has to declare
- * both. Without the declaration `googleOAuthConfig()` sees empty strings and the
- * feature fails as a generic `failed-precondition` at runtime rather than at
- * deploy time.
- */
-const googleOAuthClientSecret = defineSecret('GOOGLE_OAUTH_CLIENT_SECRET');
-const googleTokenEncryptionKey = defineSecret('GOOGLE_TOKEN_ENCRYPTION_KEY');
-const googleSecrets = [googleOAuthClientSecret, googleTokenEncryptionKey];
 import { getDashboard as getDashboardCommand, globalSearch as globalSearchCommand, updateProfileSettings as updateProfileSettingsCommand } from './phase7.js';
 
 if (getApps().length === 0) {
@@ -195,7 +157,6 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
   const teamRef = db.collection('teams').doc();
   const membershipRef = db.collection('memberships').doc(`${teamRef.id}_${uid}`);
   const auditRef = db.collection('auditEvents').doc();
-  const generalChannelRef = db.collection('channels').doc();
   const userRef = db.doc(`users/${uid}`);
   const notificationPreferencesRef = db.doc(`notificationPreferences/${uid}`);
   const privacySettingsRef = db.doc(`privacySettings/${uid}`);
@@ -256,21 +217,6 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
         updatedAt: now
       });
     }
-    // A team with no channel lands the coach on an empty Chat page where the
-    // announcement form does not render at all, so the first channel ships with
-    // the team rather than being a manual setup step.
-    transaction.set(generalChannelRef, {
-      id: generalChannelRef.id,
-      teamId: teamRef.id,
-      name: 'General',
-      description: 'Team-wide updates, questions, and announcements.',
-      visibility: 'team',
-      participantUserIds: [],
-      archived: false,
-      createdBy: uid,
-      createdAt: now,
-      updatedAt: now
-    });
     transaction.set(auditRef, auditRecord({
       type: 'team.created',
       actorUserId: uid,
@@ -280,7 +226,7 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
     }));
   });
 
-  return { teamId: teamRef.id, auditEventId: auditRef.id, channelId: generalChannelRef.id };
+  return { teamId: teamRef.id, auditEventId: auditRef.id };
 });
 
 type Phase2Request = CallableRequest<Record<string, unknown>>;
@@ -875,72 +821,10 @@ export const listTeamMembers = onCall(async (request) => {
   return { members, truncated: memberships.size === ROSTER_LIMIT };
 });
 
-/**
- * Nightly enforcement of every team's `messageRetentionDays` policy.
- *
- * The policy is a promise to families about how long student chat is kept, so
- * it cannot depend on a coach remembering to open team settings. This walks
- * every team policy and purges one page per team per run; a team with a large
- * backlog drains over consecutive nights rather than in one long transaction.
- *
- * One team's failure must not stop the rest, so each is caught and logged. No
- * message body is ever logged.
- */
-const RETENTION_TEAM_PAGE_SIZE = 200;
-
-export const enforceMessageRetention = onSchedule(
-  { schedule: 'every 24 hours', timeZone: 'Etc/UTC', retryCount: 1 },
-  async () => {
-    const db = getFirestore();
-    const policies = await db.collection('teamPolicies').limit(RETENTION_TEAM_PAGE_SIZE).get();
-    let teamsProcessed = 0;
-    let messagesPurged = 0;
-    let teamsWithBacklog = 0;
-    let failures = 0;
-
-    for (const policy of policies.docs) {
-      const teamId = typeof policy.data().teamId === 'string' ? String(policy.data().teamId) : policy.id;
-      try {
-        const result = await purgeExpiredMessagesForTeam(teamId, 'system');
-        teamsProcessed += 1;
-        messagesPurged += result.deletedCount;
-        if (result.hasMore) teamsWithBacklog += 1;
-      } catch (error) {
-        failures += 1;
-        logger.error('Scheduled retention failed for a team.', {
-          teamId,
-          reason: error instanceof Error ? error.message : 'unknown'
-        });
-      }
-    }
-
-    logger.info('Scheduled message retention complete.', {
-      teamsProcessed,
-      messagesPurged,
-      teamsWithBacklog,
-      failures,
-      teamsScanned: policies.size,
-      truncated: policies.size === RETENTION_TEAM_PAGE_SIZE
-    });
-  }
-);
-
 export const createTask = onCall(async (request) => createTaskCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateTask = onCall(async (request) => updateTaskCommand(request as CallableRequest<Record<string, unknown>>));
 export const createGoal = onCall(async (request) => createGoalCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateGoal = onCall(async (request) => updateGoalCommand(request as CallableRequest<Record<string, unknown>>));
-export const createEvent = onCall(async (request) => createEventCommand(request as CallableRequest<Record<string, unknown>>));
-export const updateEvent = onCall(async (request) => updateEventCommand(request as CallableRequest<Record<string, unknown>>));
-export const deleteEvent = onCall({ secrets: googleSecrets }, async (request) => deleteEventCommand(request as CallableRequest<Record<string, unknown>>));
-export const startGoogleOAuth = onCall({ secrets: googleSecrets }, async (request) => startGoogleOAuthCommand(request as CallableRequest<Record<string, unknown>>));
-export const getGoogleConnection = onCall(async (request) => getGoogleConnectionCommand(request as CallableRequest<Record<string, unknown>>));
-export const disconnectGoogle = onCall({ secrets: googleSecrets }, async (request) => disconnectGoogleCommand(request as CallableRequest<Record<string, unknown>>));
-export const listGoogleCalendars = onCall({ secrets: googleSecrets }, async (request) => listGoogleCalendarsCommand(request as CallableRequest<Record<string, unknown>>));
-export const listMyGoogleEvents = onCall({ secrets: googleSecrets }, async (request) => listMyGoogleEventsCommand(request as CallableRequest<Record<string, unknown>>));
-export const setTeamCalendarSync = onCall({ secrets: googleSecrets }, async (request) => setTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
-export const getTeamCalendarSync = onCall(async (request) => getTeamCalendarSyncCommand(request as CallableRequest<Record<string, unknown>>));
-export const syncTeamCalendar = onCall({ secrets: googleSecrets }, async (request) => syncTeamCalendarCommand(request as CallableRequest<Record<string, unknown>>));
-export const setTeamChatLink = onCall(async (request) => setTeamChatLinkCommand(request as CallableRequest<Record<string, unknown>>));
 export const markNotificationRead = onCall(async (request) => markNotificationReadCommand(request as CallableRequest<Record<string, unknown>>));
 export const createFileMetadata = onCall(async (request) => createFileMetadataCommand(request as CallableRequest<Record<string, unknown>>));
 export const completeFileUpload = onCall(async (request) => completeFileUploadCommand(request as CallableRequest<Record<string, unknown>>));
@@ -953,20 +837,15 @@ export const addProjectColumn = onCall(async (request) => withBoardErrors(addPro
 export const updateProjectColumn = onCall(async (request) => withBoardErrors(updateProjectColumnCommand)(request as CallableRequest<Record<string, unknown>>));
 export const reorderProjectColumns = onCall(async (request) => withBoardErrors(reorderProjectColumnsCommand)(request as CallableRequest<Record<string, unknown>>));
 export const removeProjectColumn = onCall(async (request) => withBoardErrors(removeProjectColumnCommand)(request as CallableRequest<Record<string, unknown>>));
+export const updateProjectCategories = onCall(async (request) => withBoardErrors(updateProjectCategoriesCommand)(request as CallableRequest<Record<string, unknown>>));
 export const createKanbanTask = onCall(async (request) => withBoardErrors(createKanbanTaskCommand)(request as CallableRequest<Record<string, unknown>>));
 export const moveTaskCard = onCall(async (request) => withBoardErrors(moveTaskCardCommand)(request as CallableRequest<Record<string, unknown>>));
-export const createChannel = onCall(async (request) => createChannelCommand(request as CallableRequest<Record<string, unknown>>));
-export const archiveChannel = onCall(async (request) => archiveChannelCommand(request as CallableRequest<Record<string, unknown>>));
-export const sendMessage = onCall(async (request) => sendMessageCommand(request as CallableRequest<Record<string, unknown>>));
-export const toggleReaction = onCall(async (request) => toggleReactionCommand(request as CallableRequest<Record<string, unknown>>));
-export const markChannelRead = onCall(async (request) => markChannelReadCommand(request as CallableRequest<Record<string, unknown>>));
-export const toggleChannelMute = onCall(async (request) => toggleChannelMuteCommand(request as CallableRequest<Record<string, unknown>>));
-export const deleteMessage = onCall(async (request) => deleteMessageCommand(request as CallableRequest<Record<string, unknown>>));
-export const exportTeamMessages = onCall(async (request) => exportTeamMessagesCommand(request as CallableRequest<Record<string, unknown>>));
-export const createAnnouncement = onCall(async (request) => createAnnouncementCommand(request as CallableRequest<Record<string, unknown>>));
-export const acknowledgeAnnouncement = onCall(async (request) => acknowledgeAnnouncementCommand(request as CallableRequest<Record<string, unknown>>));
-export const searchMessages = onCall(async (request) => searchMessagesCommand(request as CallableRequest<Record<string, unknown>>));
-export const purgeExpiredMessages = onCall(async (request) => purgeExpiredMessagesCommand(request as CallableRequest<Record<string, unknown>>));
+export const listProjectTemplates = onCall(async (request) => withBoardErrors(listProjectTemplatesCommand)(request as CallableRequest<Record<string, unknown>>));
+export const createProjectFromTemplate = onCall(async (request) => withBoardErrors(createProjectFromTemplateCommand)(request as CallableRequest<Record<string, unknown>>));
+export const saveProjectAsTemplate = onCall(async (request) => withBoardErrors(saveProjectAsTemplateCommand)(request as CallableRequest<Record<string, unknown>>));
+export const deleteProjectTemplate = onCall(async (request) => withBoardErrors(deleteProjectTemplateCommand)(request as CallableRequest<Record<string, unknown>>));
+export const importProjectTasks = onCall(async (request) => withBoardErrors(importProjectTasksCommand)(request as CallableRequest<Record<string, unknown>>));
+export const resolveImportAssignees = onCall(async (request) => withBoardErrors(resolveImportAssigneesCommand)(request as CallableRequest<Record<string, unknown>>));
 export const createQuestion = onCall(async (request) => createQuestionCommand(request as CallableRequest<Record<string, unknown>>));
 export const searchQuestions = onCall(async (request) => searchQuestionsCommand(request as CallableRequest<Record<string, unknown>>));
 export const createAnswer = onCall(async (request) => createAnswerCommand(request as CallableRequest<Record<string, unknown>>));
@@ -1028,59 +907,4 @@ export function handleApiRequest(req: Request, res: Response): void {
   });
 }
 
-/**
- * Google redirects a browser here after consent, so this route is
- * unauthenticated by necessity and runs before `applyCors` — a top-level
- * navigation carries no Origin header the allowlist could match. Every trust
- * decision rests on the single-use `state` document instead. The authorization
- * code is never echoed back into the response or the logs.
- */
-export async function handleGoogleOAuthCallback(req: Request, res: Response): Promise<void> {
-  const base = (process.env.APP_BASE_URL ?? '').trim().replace(/\/$/, '');
-  const finish = (status: string) => {
-    if (!base) {
-      res.status(status === 'connected' ? 200 : 400).send(`Google Calendar: ${status}. You can close this window and return to First Pit.`);
-      return;
-    }
-    res.redirect(303, `${base}/profile?google=${status}`);
-  };
-  if (typeof req.query.error === 'string' && req.query.error) return finish('denied');
-  const code = typeof req.query.code === 'string' ? req.query.code : '';
-  const state = typeof req.query.state === 'string' ? req.query.state : '';
-  if (!code || !state) return finish('invalid');
-  try {
-    await completeGoogleOAuth(code, state);
-    finish('connected');
-  } catch (error) {
-    logger.error('google.oauth.callback.failed', { reason: error instanceof HttpsError ? error.code : 'internal' });
-    finish('failed');
-  }
-}
-
-export async function handleRequestWithIntegrations(req: Request, res: Response): Promise<void> {
-  if (req.path === '/google/oauth/callback') {
-    if (req.method !== 'GET') {
-      res.set('Allow', 'GET');
-      res.status(405).json({ ok: false, error: 'Method not allowed.' });
-      return;
-    }
-    await handleGoogleOAuthCallback(req, res);
-    return;
-  }
-  handleApiRequest(req, res);
-}
-
-/**
- * Keeps every synced team calendar current without a webhook. Google's push
- * channels need a verified public HTTPS endpoint, which is a deployment
- * concern rather than something the emulator can rehearse, so the pilot polls.
- */
-export const syncGoogleCalendars = onSchedule(
-  { schedule: 'every 30 minutes', timeZone: 'Etc/UTC', retryCount: 1, secrets: googleSecrets },
-  async () => {
-    const result = await syncAllTeamCalendars();
-    logger.info('google.calendar.sync.completed', result);
-  }
-);
-
-export const api = onRequest({ cors: false, secrets: googleSecrets }, handleRequestWithIntegrations);
+export const api = onRequest({ cors: false }, handleApiRequest);

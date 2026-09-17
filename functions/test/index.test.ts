@@ -15,31 +15,27 @@ import { handleApiRequest, moderationCaseVersion, phase2OperationReceipt, report
  * genuinely added or removed.
  */
 const EXPECTED_CALLABLES = [
-  'acceptAnswer', 'acceptInvitation', 'acknowledgeAnnouncement', 'addProjectColumn', 'approveJoinRequest',
-  'archiveChannel', 'archiveProject', 'assignTeamRole', 'closePoll', 'completeFileUpload',
-  'correctScoreSession', 'createAnnouncement', 'createAnswer', 'createChannel', 'createEvent',
+  'acceptAnswer', 'acceptInvitation', 'addProjectColumn', 'approveJoinRequest', 'archiveProject',
+  'assignTeamRole', 'closePoll', 'completeFileUpload', 'correctScoreSession', 'createAnswer',
   'createFileMetadata', 'createGoal', 'createInvitation', 'createKanbanTask', 'createPoll',
-  'createProject', 'createQuestion', 'createQuestionComment', 'createReport', 'createScoreDefinition',
-  'createScoreSession', 'createTask', 'createTeam', 'createVideo', 'deleteEvent',
-  'deleteMessage', 'disconnectGoogle', 'ensureDefaultProject', 'exportScoreReport', 'exportTeamMessages',
-  'getDashboard', 'getGoogleConnection', 'getPollResults', 'getTeamCalendarSync', 'globalSearch',
-  'leaveTeam', 'linkFileToTask', 'listGoogleCalendars', 'listMyGoogleEvents', 'listPolls',
-  'listScoreDefinitions', 'listScoreSessions', 'listTeamMembers', 'markChannelRead', 'markNotificationRead',
-  'moveTaskCard', 'purgeExpiredMessages', 'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn',
-  'reorderProjectColumns', 'requestAccountDeletion', 'requestToJoinTeam', 'revokeInvitation', 'searchMessages',
-  'searchQuestions', 'searchVideos', 'sendMessage', 'setTeamCalendarSync', 'setTeamChatLink',
-  'startGoogleOAuth', 'syncTeamCalendar', 'toggleChannelMute', 'toggleReaction', 'toggleSavedQuestion',
-  'toggleVideoFavorite', 'transferTeamLeadership', 'updateEvent', 'updateGoal', 'updateMembershipStatus',
-  'updateModerationCase', 'updatePrivacySettings', 'updateProfileSettings', 'updateProject', 'updateProjectColumn',
-  'updateTask', 'updateTeamPolicy', 'updateVideoPublication', 'votePoll', 'voteQuestion'
+  'createProject', 'createProjectFromTemplate', 'createQuestion', 'createQuestionComment', 'createReport',
+  'createScoreDefinition', 'createScoreSession', 'createTask', 'createTeam', 'createVideo',
+  'deleteProjectTemplate', 'ensureDefaultProject', 'exportScoreReport', 'getDashboard', 'getPollResults',
+  'globalSearch', 'importProjectTasks', 'leaveTeam', 'linkFileToTask', 'listPolls', 'listProjectTemplates',
+  'listScoreDefinitions', 'listScoreSessions', 'listTeamMembers', 'markNotificationRead', 'moveTaskCard',
+  'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn', 'reorderProjectColumns', 'requestAccountDeletion',
+  'requestToJoinTeam', 'resolveImportAssignees', 'revokeInvitation', 'saveProjectAsTemplate', 'searchQuestions', 'searchVideos',
+  'toggleSavedQuestion', 'toggleVideoFavorite', 'transferTeamLeadership', 'updateGoal', 'updateMembershipStatus',
+  'updateModerationCase', 'updatePrivacySettings', 'updateProfileSettings', 'updateProject', 'updateProjectCategories',
+  'updateProjectColumn',
+  'updateTask', 'updateTeamPolicy', 'updateVideoPublication', 'votePoll', 'voteQuestion',
 ] as const;
 
 /**
- * Exports that are deliberately not client callables: the HTTP health endpoint,
- * the nightly retention schedule (Cloud Scheduler invokes it, no client can),
+ * Exports that are deliberately not client callables: the HTTP health endpoint
  * and pure helpers exported for tests.
  */
-const EXPECTED_NON_CALLABLES = ['api', 'enforceMessageRetention', 'handleApiRequest', 'handleGoogleOAuthCallback', 'handleRequestWithIntegrations', 'moderationCaseVersion', 'phase2OperationReceipt', 'reportOperationResult', 'syncGoogleCalendars'] as const;
+const EXPECTED_NON_CALLABLES = ['api', 'handleApiRequest', 'moderationCaseVersion', 'phase2OperationReceipt', 'reportOperationResult'] as const;
 
 /**
  * A client callable, specifically. Scheduled and HTTP functions also expose
@@ -113,7 +109,8 @@ describe('Functions API', () => {
   it('keeps every client-facing callable of the Kanban board deployed', () => {
     // The board's callables are the ones a rename would break most visibly.
     for (const name of ['ensureDefaultProject', 'createProject', 'updateProject', 'archiveProject', 'addProjectColumn',
-      'updateProjectColumn', 'reorderProjectColumns', 'removeProjectColumn', 'createKanbanTask', 'moveTaskCard']) {
+      'updateProjectColumn', 'reorderProjectColumns', 'removeProjectColumn', 'updateProjectCategories', 'createKanbanTask', 'moveTaskCard',
+      'listProjectTemplates', 'createProjectFromTemplate', 'saveProjectAsTemplate', 'deleteProjectTemplate', 'importProjectTasks', 'resolveImportAssignees']) {
       expect(EXPECTED_CALLABLES).toContain(name);
       expect(isCallable((api as Record<string, unknown>)[name])).toBe(true);
     }

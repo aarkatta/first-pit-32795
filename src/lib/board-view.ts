@@ -1,5 +1,5 @@
 import { dateInputToIso, dateInputValue, formatDueDate, toDate } from './dates';
-import type { KanbanProject, ProjectColumn, TaskPriority, TrackerTask } from './domain';
+import type { KanbanProject, ProjectCategory, ProjectColumn, SubtaskStatus, TaskPriority, TrackerTask } from './domain';
 
 // Re-exported so the board's consumers keep importing their date helpers from one place.
 export { toDate, formatDueDate, dateInputValue, dateInputToIso };
@@ -7,33 +7,52 @@ export { toDate, formatDueDate, dateInputValue, dateInputToIso };
 /** Palette shared by group headers, status cells, and summary bars. */
 export type BoardColor = ProjectColumn['color'] | 'red' | 'yellow' | 'gray';
 
-export type BoardGroupBy = 'column' | 'person' | 'priority' | 'dueWindow' | 'label';
+export type BoardGroupBy = 'milestone' | 'category' | 'column' | 'person' | 'priority' | 'dueWindow' | 'label';
 export type BoardSortKey = 'manual' | 'title' | 'priority' | 'dueAt' | 'person';
-export type BoardFieldId = 'person' | 'status' | 'priority' | 'dueAt' | 'timeline' | 'labels' | 'files';
+export type BoardFieldId = 'person' | 'status' | 'category' | 'priority' | 'startAt' | 'endAt' | 'dueAt' | 'timeline' | 'labels' | 'files';
 
 export type BoardSort = { key: BoardSortKey; direction: 'asc' | 'desc' };
-export type BoardFilters = { query: string; person: string; priority: string; label: string; due: string };
-export type BoardGroup = { id: string; title: string; color: BoardColor; tasks: TrackerTask[] };
+export type BoardFilters = { query: string; person: string; priority: string; label: string; due: string; category: string };
+export type BoardGroup = {
+  id: string;
+  title: string;
+  color: BoardColor;
+  tasks: TrackerTask[];
+  /**
+   * Work-breakdown position. `outline` is the group's number ("1.2") and
+   * `milestoneTitle` is set on the first group of each milestone, which is where
+   * the table draws the band that opens that branch of the tree.
+   */
+  outline?: string;
+  milestoneId?: string | null;
+  milestoneTitle?: string;
+  milestoneProgress?: { done: number; total: number };
+};
 export type BoardSummarySegment = { id: string; label: string; color: BoardColor; count: number; percent: number };
 export type BoardSummary = { segments: BoardSummarySegment[]; total: number; done: number };
 export type TimelineSpan = { start: Date; end: Date; label: string };
 export type TimelineBounds = { start: number; end: number };
 export type DueTone = 'none' | 'overdue' | 'today' | 'soon' | 'later';
 
-export const emptyBoardFilters: BoardFilters = { query: '', person: '', priority: '', label: '', due: '' };
+export const emptyBoardFilters: BoardFilters = { query: '', person: '', priority: '', label: '', due: '', category: '' };
 export const defaultBoardSort: BoardSort = { key: 'manual', direction: 'asc' };
 
 export const BOARD_FIELDS: { id: BoardFieldId; label: string }[] = [
   { id: 'person', label: 'Person' },
   { id: 'status', label: 'Status' },
+  { id: 'category', label: 'Category' },
   { id: 'priority', label: 'Priority' },
-  { id: 'dueAt', label: 'Date' },
+  { id: 'startAt', label: 'Start' },
+  { id: 'endAt', label: 'End' },
+  { id: 'dueAt', label: 'Due' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'labels', label: 'Labels' },
   { id: 'files', label: 'Files' }
 ];
 
 export const BOARD_GROUP_OPTIONS: { id: BoardGroupBy; label: string }[] = [
+  { id: 'milestone', label: 'Milestone (work breakdown)' },
+  { id: 'category', label: 'Category' },
   { id: 'column', label: 'Status group' },
   { id: 'person', label: 'Person' },
   { id: 'priority', label: 'Priority' },
@@ -48,6 +67,14 @@ export const BOARD_SORT_OPTIONS: { id: BoardSortKey; label: string }[] = [
   { id: 'dueAt', label: 'Due date' },
   { id: 'person', label: 'Person' }
 ];
+
+export const SUBTASK_STATUS_META: Record<SubtaskStatus, { label: string; color: BoardColor }> = {
+  todo: { label: 'To do', color: 'gray' },
+  inProgress: { label: 'Working on it', color: 'orange' },
+  done: { label: 'Done', color: 'green' }
+};
+
+export const SUBTASK_STATUS_OPTIONS = (Object.keys(SUBTASK_STATUS_META) as SubtaskStatus[]).map((id) => ({ id, label: SUBTASK_STATUS_META[id].label }));
 
 export const PRIORITY_META: Record<TaskPriority, { label: string; color: BoardColor; rank: number }> = {
   urgent: { label: 'Urgent', color: 'red', rank: 0 },
@@ -64,6 +91,11 @@ export function startOfDay(date: Date): Date {
   const copy = new Date(date.getTime());
   copy.setHours(0, 0, 0, 0);
   return copy;
+}
+
+export function boardCategory(project: KanbanProject | null, categoryId: string | null | undefined): ProjectCategory | null {
+  if (!categoryId) return null;
+  return project?.categories.find((category) => category.id === categoryId) ?? null;
 }
 
 export function boardColumn(project: KanbanProject | null, columnId: string | undefined): ProjectColumn | null {
@@ -107,16 +139,18 @@ export function formatRange(start: Date, end: Date): string {
 }
 
 /**
- * Tasks carry a due date but no start date, so the planned window runs from when the
- * card was opened to when it is due. Completed cards end on their completion date.
+ * The planned window. A card that carries start and end dates uses them; one
+ * that carries only a deadline falls back to when it was opened, which is what
+ * every card did before the dates existed. Completed cards end on their
+ * completion date when nothing else says otherwise.
  */
 export function timelineSpan(task: TrackerTask): TimelineSpan | null {
-  const due = toDate(task.dueAt);
-  const completed = toDate(task.completedAt);
-  const end = due ?? completed;
-  if (!end) return null;
+  const planned = toDate(task.startAt);
+  const end = toDate(task.endAt) ?? toDate(task.dueAt) ?? toDate(task.completedAt);
+  if (!end) return planned ? { start: planned, end: new Date(planned.getTime() + DAY_MS), label: formatRange(planned, new Date(planned.getTime() + DAY_MS)) } : null;
   const created = toDate(task.createdAt);
-  const start = created && created.getTime() < end.getTime() ? created : new Date(end.getTime() - DAY_MS);
+  const fallback = created && created.getTime() < end.getTime() ? created : new Date(end.getTime() - DAY_MS);
+  const start = planned && planned.getTime() <= end.getTime() ? planned : fallback;
   return { start, end, label: formatRange(start, end) };
 }
 
@@ -138,6 +172,7 @@ export function timelineOffsets(span: TimelineSpan, bounds: TimelineBounds): { l
 }
 
 export function matchesBoardFilters(task: TrackerTask, filters: BoardFilters, now: Date): boolean {
+  if (filters.category && (filters.category === 'uncategorised' ? Boolean(task.categoryId) : task.categoryId !== filters.category)) return false;
   const query = filters.query.trim().toLowerCase();
   if (query && !`${task.title} ${task.description} ${task.labels.join(' ')}`.toLowerCase().includes(query)) return false;
   if (filters.priority && task.priority !== filters.priority) return false;
@@ -155,7 +190,7 @@ export function matchesBoardFilters(task: TrackerTask, filters: BoardFilters, no
 }
 
 export function activeFilterCount(filters: BoardFilters): number {
-  return [filters.person, filters.priority, filters.label, filters.due].filter(Boolean).length;
+  return [filters.person, filters.priority, filters.label, filters.due, filters.category].filter(Boolean).length;
 }
 
 function comparePrimitive(a: number | string, b: number | string): number {
@@ -194,7 +229,84 @@ export function dueWindow(date: Date | null, now: Date): { id: string; title: st
   return { id: 'none', title: 'No due date', color: 'gray', order: 4 };
 }
 
+/**
+ * The work-breakdown view: categories ordered under the milestone they roll up
+ * into, each numbered (1.1, 1.2, 2.1) and each milestone's own progress summed
+ * from the cards beneath it. Categories with no milestone, and cards with no
+ * category, come last under plain headings rather than being hidden.
+ */
+export function groupByMilestone(
+  tasks: TrackerTask[],
+  project: KanbanProject | null,
+  milestones: Array<{ id: string; title: string }>
+): BoardGroup[] {
+  const categories = project?.categories ?? [];
+  const known = new Set(categories.map((category) => category.id));
+  const order = [
+    ...milestones.map((milestone) => ({ id: milestone.id as string | null, title: milestone.title })),
+    { id: null, title: 'No milestone' }
+  ];
+  const groups: BoardGroup[] = [];
+  let milestoneNumber = 0;
+  // A board with nothing under a milestone gets no bands at all: a lone
+  // "No milestone" heading over every group is noise, not structure.
+  const banded = order.some((milestone) => milestone.id !== null && categories.some((category) => (category.goalId ?? null) === milestone.id));
+
+  for (const milestone of order) {
+    const owned = categories.filter((category) => (category.goalId ?? null) === milestone.id);
+    const loose = milestone.id === null ? tasks.filter((task) => !task.categoryId || !known.has(task.categoryId)) : [];
+    if (!owned.length && !loose.length) continue;
+    milestoneNumber += 1;
+    const branch: BoardGroup[] = owned.map((category, index) => ({
+      id: category.id,
+      title: category.name,
+      color: category.color as BoardColor,
+      tasks: tasks.filter((task) => task.categoryId === category.id),
+      outline: banded ? `${milestoneNumber}.${index + 1}` : `${groups.length + index + 1}`,
+      milestoneId: milestone.id
+    }));
+    if (loose.length) {
+      branch.push({
+        id: 'uncategorised',
+        title: 'No category',
+        color: 'gray',
+        tasks: loose,
+        outline: banded ? `${milestoneNumber}.${owned.length + 1}` : `${groups.length + owned.length + 1}`,
+        milestoneId: null
+      });
+    }
+    if (banded) {
+      const all = branch.flatMap((group) => group.tasks);
+      const done = all.filter((task) => task.columnId === (project?.completedColumnId ?? 'completed') || task.status === 'completed').length;
+      // Only the first group of a branch carries the heading, so the table draws
+      // one band per milestone however many packages hang off it.
+      branch[0] = {
+        ...branch[0],
+        milestoneTitle: `${milestoneNumber}. ${milestone.title}`,
+        milestoneProgress: { done, total: all.length }
+      };
+    }
+    groups.push(...branch);
+  }
+  return groups;
+}
+
 export function groupBoardTasks(tasks: TrackerTask[], groupBy: BoardGroupBy, project: KanbanProject | null, now: Date): BoardGroup[] {
+  if (groupBy === 'category') {
+    // Categories keep the coach's order and stay visible while empty, the way a
+    // monday group does. The trailing bucket only appears when something is in
+    // it, so a fully categorised board shows no stray "No category" row.
+    const groups = (project?.categories ?? []).map((category) => ({
+      id: category.id,
+      title: category.name,
+      color: category.color as BoardColor,
+      tasks: tasks.filter((task) => task.categoryId === category.id)
+    }));
+    const known = new Set((project?.categories ?? []).map((category) => category.id));
+    const uncategorised = tasks.filter((task) => !task.categoryId || !known.has(task.categoryId));
+    return uncategorised.length ? [...groups, { id: 'uncategorised', title: 'No category', color: 'gray' as BoardColor, tasks: uncategorised }] : groups;
+  }
+
   if (groupBy === 'column') {
     // Board columns stay in workflow order and keep showing when empty, like a monday group.
     return (project?.columns ?? []).map((column) => ({

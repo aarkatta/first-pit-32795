@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
-import { completeGoogleRedirect, isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
+import { authEmailSender, completeGoogleRedirect, isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
 import { bootstrapUserProfile } from '@/lib/profile';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -35,6 +35,19 @@ function authErrorMessage(error: unknown) {
   if (code.includes('auth/network-request-failed')) return 'The authentication service could not be reached. Check your connection.';
   if (code.includes('auth/too-many-requests')) return 'Too many attempts. Wait a moment before trying again.';
   return 'That request could not be completed. Try again.';
+}
+
+function recoveryNotice(sender: string | null): string {
+  const sent = 'If an account exists for that address, a recovery email has been sent.';
+  const where = sender ? ` Check your spam or junk folder and search for ${sender}.` : ' Check your spam or junk folder.';
+  return `${sent}${where} If you created your account with Google, sign in with Google instead — that account has no password to reset.`;
+}
+
+/** ` (permission-denied)`, or nothing when the error carries no Firebase code. */
+function failureCode(error: unknown): string {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return '';
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code ? ` (${code})` : '';
 }
 
 export function AuthPage() {
@@ -78,7 +91,7 @@ export function AuthPage() {
       <section className="card auth-card">
         <p className="eyebrow">Signed in</p>
         <h1>{needsVerification ? 'Verify your email address.' : 'Your First Pit session is ready.'}</h1>
-        <p>{needsVerification ? 'Open the verification link in your inbox before accepting an email invitation.' : 'Open your team hub to continue.'}</p>
+        <p>{needsVerification ? `Open the verification link in your inbox before accepting an email invitation. If it is not there, check your spam or junk folder${authEmailSender(auth) ? ` and search for ${authEmailSender(auth)}` : ''}.` : 'Open your team hub to continue.'}</p>
         {verificationNotice ? <p role="status">{verificationNotice}</p> : null}
         {needsVerification && user ? (
           <button className="button secondary" type="button" onClick={() => void resendForSignedInUser(user)}>Resend verification email</button>
@@ -92,7 +105,7 @@ export function AuthPage() {
     setBusy(true);
     setVerificationNotice(null);
     try {
-      await resendVerificationEmail(currentUser);
+      await resendVerificationEmail(currentUser, destination());
       setVerificationNotice('A new verification email has been sent.');
     } catch {
       setVerificationNotice('The verification email could not be sent. Check your connection and try again.');
@@ -113,6 +126,19 @@ export function AuthPage() {
       return true;
     } catch (profileError) {
       const nextState = getRequestState(profileError, online);
+      // A denied profile write is never a team-access problem — the account was
+      // created seconds ago and belongs to no team yet — so the shared
+      // "check your team access or ask a coach" copy sends the user after a
+      // permission that does not exist. Name the real failure instead, and
+      // carry the Firebase code so it can be reported.
+      if (nextState.variant === 'permission') {
+        setRequestState({
+          variant: 'error',
+          title: 'Profile setup failed',
+          message: `You are signed in, but First Pit could not save your private profile${failureCode(profileError)}. Try again, and report this to an administrator if it keeps happening.`
+        });
+        return false;
+      }
       setRequestState(nextState.variant === 'error'
         ? { ...nextState, title: 'Profile setup failed', message: 'Your account is signed in, but the private profile could not be saved. Try again.' }
         : nextState);
@@ -177,7 +203,12 @@ export function AuthPage() {
         if (await bootstrapPendingProfile(credential.user)) navigate('/hub', { replace: true });
       } else {
         await sendPasswordRecovery(auth, email);
-        setMessage('If an account exists for that address, a recovery email has been sent.');
+        // Testers reported the recovery mail as never sent; it was in their spam
+        // folder every time, because Firebase's default sender is a noreply@
+        // address on a domain they had never corresponded with. Two accounts
+        // also had no password to recover — Google sign-in creates no password
+        // credential — and enumeration protection makes both cases look alike.
+        setMessage(recoveryNotice(authEmailSender(auth)));
       }
     } catch (requestError) {
       if (requestError instanceof VerificationEmailDeliveryError) {
@@ -212,7 +243,7 @@ export function AuthPage() {
       const currentUser = pendingVerificationUser;
       setBusy(true);
       setRequestState(null);
-      void resendVerificationEmail(currentUser)
+      void resendVerificationEmail(currentUser, destination())
         .then(async () => {
           setPendingVerificationUser(null);
           setPendingProfileUser(currentUser);
@@ -251,8 +282,8 @@ export function AuthPage() {
         <p>Plan practice, track the innovation project, talk to the team, and keep every score in one place.</p>
         <ul className="art-points">
           <li>Boards and tasks everyone can see</li>
-          <li>Calendar, files, and announcements</li>
-          <li>Moderated chat and Q&amp;A</li>
+          <li>Files and team notifications</li>
+          <li>Moderated questions and how-to videos</li>
           <li>Robot game scorer with season history</li>
         </ul>
       </div>
