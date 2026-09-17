@@ -1,32 +1,31 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Flag, Trophy } from 'lucide-react';
 import { StatePanel } from '@/components/StatePanel';
+import { ScoreTrendChart } from '@/features/dashboard/ScoreTrendChart';
 import { LandingPage } from '@/features/landing/landing-page';
 import { useAuth } from '@/lib/auth-context';
+import { areaRows, dashboardHighlights, percentOf, scoreTrendPoints } from '@/lib/dashboard-view';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { useTeamContext } from '@/lib/team-context';
-import { getDashboard, type DashboardResult } from '@/lib/phase7-service';
+import { getDashboard, type DashboardResult, type DashboardTask } from '@/lib/phase7-service';
 import { markNotificationRead } from '@/lib/phase3-service';
 import { safeInternalRoute } from '@/lib/notification-route';
-import { formatDateLabel, toDate } from '@/lib/dates';
+import { formatDateLabel, formatDueDate, toDate } from '@/lib/dates';
 import { dueTone } from '@/lib/board-view';
 import { initialsOf, listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
+import '@/styles/dashboard.css';
 
 function roleLabel(role: string | undefined) {
   return role === 'teamLeader' ? 'Team leader' : role ? role[0].toUpperCase() + role.slice(1) : 'Member';
 }
 
-function displayDate(value: unknown) {
-  const date = toDate(value);
-  return date ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date) : 'Date not set';
-}
-
 function roleEmptyCopy(role: string | undefined) {
-  if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task, event, goal, or score session so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };
-  if (role === 'student') return { title: 'Nothing is assigned yet', message: 'Your coach or team leader has not assigned work yet. You can still browse team knowledge and chat.', action: '/knowledge', label: 'Open knowledge' };
+  if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task, milestone, or score session so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };
+  if (role === 'student') return { title: 'Nothing is assigned yet', message: 'Your coach or team leader has not assigned work yet. You can still browse team knowledge.', action: '/knowledge', label: 'Open knowledge' };
   if (role === 'parent') return { title: 'Follow the team safely', message: 'Visibility follows the team policy set by the coach.', action: '/hub', label: 'Open team hub' };
-  return { title: 'Support the next milestone', message: 'Follow authorized work, knowledge, chat, and scoring activity.', action: '/hub', label: 'Open team hub' };
+  return { title: 'Support the next milestone', message: 'Follow authorized work, knowledge, and scoring activity.', action: '/hub', label: 'Open team hub' };
 }
 
 function taskStatus(status: unknown) {
@@ -34,6 +33,11 @@ function taskStatus(status: unknown) {
   if (status === 'review') return { label: 'Review', className: 'review' };
   if (status === 'completed') return { label: 'Done', className: 'done' };
   return { label: 'To do', className: 'to-do' };
+}
+
+function taskLink(task: DashboardTask) {
+  const project = task.projectId ? `project=${encodeURIComponent(task.projectId)}&` : '';
+  return `/coordination?${project}task=${encodeURIComponent(task.id)}`;
 }
 
 export function HomePage() {
@@ -127,8 +131,16 @@ export function HomePage() {
 
   const emptyCopy = roleEmptyCopy(dashboard.role);
   const summary = dashboard.summary;
-  const readiness = summary.taskCount ? Math.round((summary.completedTaskCount / summary.taskCount) * 100) : 0;
-  const nextEvent = dashboard.events[0];
+  const readiness = percentOf(summary.completedTaskCount, summary.taskCount);
+  const openTaskCount = Math.max(0, summary.taskCount - summary.completedTaskCount);
+  const completedGoalCount = summary.completedGoalCount ?? 0;
+  const areas = areaRows(dashboard.areas);
+  const taggedAreaCount = areas.filter((area) => area.taskCount > 0).length;
+  const highlights = dashboardHighlights(dashboard);
+  const trend = scoreTrendPoints(dashboard.scores);
+  const latestScores = [...trend].reverse().slice(0, 5);
+  const upcomingTasks = dashboard.upcomingTasks ?? [];
+  const now = new Date();
 
   function openDeepLink(deepLink: string, teamId: string, notificationId: string, unread: boolean) {
     if (teams.some((team) => team.teamId === teamId)) setActiveTeamId(teamId);
@@ -136,43 +148,142 @@ export function HomePage() {
     navigate(safeInternalRoute(deepLink));
   }
 
-  const widgets = [
-    ['Assigned tasks', `${summary.taskCount - summary.completedTaskCount} open`],
-    ['Upcoming events', `${summary.upcomingEventCount} next events shown`],
-    ['Practice scores', `${summary.scoreCount} recorded`],
-    ['Messages', `${summary.unreadMessageCount}${summary.unreadSummaryTruncated ? '+' : ''} in the newest ${summary.unreadSummaryLimit} unread notifications`],
-    ['Announcements', `${summary.announcementCount}${summary.unreadSummaryTruncated ? '+' : ''} in the newest ${summary.unreadSummaryLimit} unread notifications`],
-    ['Notifications', `${summary.unreadNotificationCount} need attention`]
-  ];
-
   return (
-    <div className="reference-page">
+    <div className="reference-page dashboard-page">
       {!online ? <StatePanel variant="offline" title="You are offline" message="Showing the last available dashboard summary. Reconnect before saving changes." /> : null}
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} /> : null}
 
-      <section className="hero-grid">
-        <article className="mission-card">
-          <div><span className="eyebrow light">{nextEvent ? `NEXT UP · ${displayDate(nextEvent.startsAt)}` : 'TEAM DASHBOARD'}</span><h3>{nextEvent ? nextEvent.title || 'Team event' : dashboard.team.name}</h3><p>{nextEvent ? `Your next ${nextEvent.eventType ?? 'team event'} is ready in the calendar.` : 'Create the first task or event so everyone has a clear next step.'}</p><Link to="/coordination">Open project board →</Link></div>
-          <div className="mission-visual"><span>{String(summary.upcomingEventCount).padStart(2, '0')}</span><small>EVENTS</small><div className="mini-bot">▣</div></div>
+      <header className="dashboard-header">
+        <div>
+          <span className="eyebrow">TEAM DASHBOARD</span>
+          <h1>{dashboard.team.name}</h1>
+          <p>{roleLabel(dashboard.role)} view · {summary.taskCount} task{summary.taskCount === 1 ? '' : 's'} · {summary.goalCount} milestone{summary.goalCount === 1 ? '' : 's'} · {summary.scoreCount} score session{summary.scoreCount === 1 ? '' : 's'}</p>
+        </div>
+        <div className="dashboard-header__actions">
+          <Link className="button button--ghost" to="/scorer">Record a score</Link>
+          <Link className="button" to="/coordination">Open project board</Link>
+        </div>
+      </header>
+
+      <div className="dash-grid">
+        <article className="dash-card dash-card--progress" aria-labelledby="dash-progress-title">
+          <h2 id="dash-progress-title">Overall season progress</h2>
+          <div className="ring ring--large" role="img" aria-label={`${readiness}% of team tasks complete`} style={{ '--value': String(readiness) } as CSSProperties}>
+            <strong>{readiness}%</strong>
+            <small>complete</small>
+          </div>
+          <dl className="dash-stats">
+            <div><dt>Tasks complete</dt><dd>{summary.completedTaskCount} / {summary.taskCount}</dd></div>
+            <div><dt>Milestones achieved</dt><dd>{completedGoalCount} / {summary.goalCount}</dd></div>
+            <div><dt>Open tasks</dt><dd>{openTaskCount}</dd></div>
+          </dl>
+          {summary.taskCount === 0 ? <p className="dash-empty">{emptyCopy.message} <Link to={emptyCopy.action}>{emptyCopy.label}</Link></p> : null}
         </article>
-        <article className="score-card"><span className="eyebrow">TASK COMPLETION</span><div className="ring" role="img" aria-label={`${readiness}% of team tasks complete`} style={{ '--value': String(readiness) } as CSSProperties}><strong>{readiness}%</strong></div><p><b>{summary.completedTaskCount} complete.</b> {summary.taskCount} team tasks tracked.</p></article>
-      </section>
 
-      <section className="section-heading"><div><span className="eyebrow">DASHBOARD</span><h3>Today’s command center</h3></div><Link to="/coordination">Open calendar <span>→</span></Link></section>
-      <div className="widget-grid">{widgets.map(([title, detail]) => <article key={title}><strong>{title}</strong><small>{detail}</small></article>)}</div>
+        <article className="dash-card dash-card--areas" aria-labelledby="dash-areas-title">
+          <h2 id="dash-areas-title">Progress by area</h2>
+          <ul className="area-list">
+            {areas.map((area) => (
+              <li key={area.id}>
+                <div className="area-list__head"><span>{area.label}</span><strong>{area.taskCount ? `${area.percent}%` : '—'}</strong></div>
+                <div
+                  className="meter"
+                  role="progressbar"
+                  aria-label={`${area.label} tasks complete`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={area.percent}
+                  aria-valuetext={area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks complete` : 'No tasks labelled yet'}
+                >
+                  <span style={{ '--value': String(area.percent) } as CSSProperties} />
+                </div>
+                <small>{area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks` : 'No tasks yet'}</small>
+              </li>
+            ))}
+          </ul>
+          {taggedAreaCount === 0 ? (
+            <p className="dash-note">
+              Add an area label to a task to track it here: {areas.map((area, index) => <span key={area.id}>{index ? ', ' : ''}<code>{area.id}</code></span>)}.
+            </p>
+          ) : null}
+        </article>
 
-      <section className="section-heading"><div><span className="eyebrow">FOCUS</span><h3>Assigned tasks</h3></div><Link to="/coordination">View full board <span>→</span></Link></section>
+        <article className="dash-card dash-card--highlights" aria-labelledby="dash-highlights-title">
+          <h2 id="dash-highlights-title">Top achievements</h2>
+          {highlights.length ? (
+            <ul className="highlight-list">
+              {highlights.map((highlight) => (
+                <li key={highlight.id} className={`highlight highlight--${highlight.kind}`}>
+                  <span className="highlight__icon" aria-hidden="true">{highlight.kind === 'score' ? <Trophy size={16} /> : <Flag size={16} />}</span>
+                  <span><strong>{highlight.title}</strong><small>{highlight.detail}</small></span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="dash-empty">Record a match score or achieve a milestone and it shows up here. <Link to="/scorer">Open scorer</Link></p>}
+        </article>
+
+        <article className="dash-card dash-card--upcoming" aria-labelledby="dash-upcoming-title">
+          <div className="dash-card__heading"><h2 id="dash-upcoming-title">Upcoming tasks</h2><Link to="/coordination">View board →</Link></div>
+          {upcomingTasks.length ? (
+            <ul className="upcoming-list">
+              {upcomingTasks.map((task) => {
+                const due = toDate(task.dueAt);
+                const tone = dueTone(due, now);
+                const assignedTo = task.assignedTo ?? null;
+                return (
+                  <li key={task.id}>
+                    <Link to={taskLink(task)}>
+                      <span className={`status-dot ${taskStatus(task.status).className}`} aria-hidden="true" />
+                      <span className="upcoming-list__copy">
+                        <strong>{task.title || 'Task'}</strong>
+                        <small>
+                          <span className={`due due--${tone}`}>{tone === 'overdue' ? 'Overdue · ' : ''}Due {formatDueDate(due)}</span>
+                          {' · '}{assignedTo ? nameOf(members, assignedTo) : 'Unassigned'}
+                        </small>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p className="dash-empty">No open tasks have a due date. <Link to="/coordination">Plan the next task</Link></p>}
+        </article>
+
+        <article className="dash-card dash-card--trend" aria-labelledby="dash-trend-title">
+          <div className="dash-card__heading">
+            <div><h2 id="dash-trend-title">Score trend</h2><p>Total points{trend.length ? `, last ${trend.length} session${trend.length === 1 ? '' : 's'}` : ''}</p></div>
+            <Link to="/scorer">Open scorer →</Link>
+          </div>
+          {trend.length ? <ScoreTrendChart points={trend} /> : <p className="dash-empty">No score sessions yet. Record a practice run to start the trend. <Link to="/scorer">Open scorer</Link></p>}
+        </article>
+
+        <article className="dash-card dash-card--scores" aria-labelledby="dash-scores-title">
+          <h2 id="dash-scores-title">Latest scores</h2>
+          {latestScores.length ? (
+            <table className="score-table">
+              <thead><tr><th scope="col">Session</th><th scope="col">Date</th><th scope="col" className="num">Points</th></tr></thead>
+              <tbody>
+                {latestScores.map((score) => (
+                  <tr key={score.id}>
+                    <td><Link to={`/scorer?session=${encodeURIComponent(score.id)}`}>{score.title}</Link><small>{score.scoreType === 'match' ? 'Match' : 'Practice'}</small></td>
+                    <td>{formatDueDate(score.date)}</td>
+                    <td className="num">{score.points.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="dash-empty">Scores appear here after the first session is recorded.</p>}
+        </article>
+      </div>
+
+      <section className="section-heading"><div><span className="eyebrow">FOCUS</span><h3>Recently updated tasks</h3></div><Link to="/coordination">View full board <span>→</span></Link></section>
       {dashboard.tasks.length ? <div className="task-list">{dashboard.tasks.slice(0, 5).map((task) => {
         const taskState = taskStatus(task.status);
-        const project = task.projectId ? `project=${encodeURIComponent(task.projectId)}&` : '';
         const assignedTo = task.assignedTo ?? null;
         const assigneeName = nameOf(members, assignedTo);
         const dueDate = toDate(task.dueAt);
-        return <Link to={`/coordination?${project}task=${encodeURIComponent(task.id)}`} key={task.id}><article><span className={`status-dot ${taskState.className}`} /><div className="task-copy"><strong>{task.title || 'Task'}</strong><small>{assignedTo ? `Assigned to ${assigneeName}` : 'Unassigned'}</small></div><span className={`status-pill ${taskState.className}`}>{taskState.label}</span><span className="avatar" title={assigneeName} aria-hidden="true">{initialsOf(members, assignedTo)}</span><span className={`due due--${dueTone(dueDate, new Date())}`}>{formatDateLabel(task.dueAt, 'No due date')}</span></article></Link>;
+        return <Link to={taskLink(task)} key={task.id}><article><span className={`status-dot ${taskState.className}`} /><div className="task-copy"><strong>{task.title || 'Task'}</strong><small>{assignedTo ? `Assigned to ${assigneeName}` : 'Unassigned'}</small></div><span className={`status-pill ${taskState.className}`}>{taskState.label}</span><span className="avatar" title={assigneeName} aria-hidden="true">{initialsOf(members, assignedTo)}</span><span className={`due due--${dueTone(dueDate, now)}`}>{formatDateLabel(task.dueAt, 'No due date')}</span></article></Link>;
       })}</div> : <div className="board-tip"><span>START</span><p>{emptyCopy.message}</p><Link to={emptyCopy.action}>{emptyCopy.label}</Link></div>}
-
-      <section className="section-heading"><div><span className="eyebrow">ROLE INTERFACE</span><h3>{roleLabel(dashboard.role)} dashboard</h3></div><Link to="/profile">Manage profile <span>→</span></Link></section>
-      <div className="role-interface-grid"><article className="active"><strong>{emptyCopy.title}</strong><p>{emptyCopy.message}</p></article><article><strong>Goal progress</strong><p>{summary.goalCount} team goal{summary.goalCount === 1 ? '' : 's'}; showing up to 20 recently updated.</p></article><article><strong>Recent scoring</strong><p>{dashboard.scores.length ? `${dashboard.scores[0].totalPoints ?? 0} points in the latest session.` : 'No score recorded yet.'}</p></article><article><strong>Team privacy</strong><p>Only authorized active team members can see this dashboard.</p></article></div>
 
       <section className="chip-panel"><div><span className="eyebrow">NOTIFICATIONS</span><h3>Notifications</h3></div><div>{dashboard.notifications.length ? dashboard.notifications.slice(0, 8).map((notification) => <button key={notification.id} type="button" onClick={() => openDeepLink(notification.deepLink ?? '/coordination', notification.teamId || activeTeam.teamId, notification.id, notification.readAt == null)}>{notification.title || 'Notification'}{notification.readAt ? '' : ' · New'}</button>) : <span>Nothing needs your attention</span>}</div></section>
     </div>

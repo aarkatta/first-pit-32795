@@ -6,6 +6,7 @@ import {
   BOARD_FIELDS,
   PRIORITY_META,
   avatarTone,
+  boardCategory,
   boardColumn,
   dateInputToIso,
   dateInputValue,
@@ -13,6 +14,7 @@ import {
   formatDueDate,
   initials,
   summarizeGroup,
+  SUBTASK_STATUS_META,
   timelineBounds,
   timelineOffsets,
   timelineSpan,
@@ -22,7 +24,7 @@ import {
   type BoardGroupBy
 } from '@/lib/board-view';
 import { initialsOf, nameOf, type TeamMember } from '@/lib/directory';
-import type { KanbanProject, TaskPriority, TrackerTask } from '@/lib/domain';
+import type { KanbanProject, Subtask, SubtaskStatus, TaskPriority, TrackerTask } from '@/lib/domain';
 
 /** Resolved team roster, keyed by user id. Empty until `listTeamMembers` returns. */
 export type BoardDirectory = Map<string, TeamMember>;
@@ -34,6 +36,9 @@ export type BoardTaskPatch = {
   assignedTo?: string | null;
   priority?: TaskPriority;
   dueAt?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+  categoryId?: string | null;
 };
 
 type CellContext = {
@@ -46,6 +51,9 @@ type CellContext = {
   onPatch: (task: TrackerTask, patch: BoardTaskPatch) => void;
   onMove: (task: TrackerTask, columnId: string) => void;
   onOpen: (task: TrackerTask) => void;
+  /** Who is looking: decides which sub-items they may tick off. */
+  actorUserId: string;
+  onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
 };
 
 /**
@@ -121,6 +129,28 @@ function StatusCell({ task, context, canMove }: { task: TrackerTask; context: Ce
   );
 }
 
+function CategoryCell({ task, context }: { task: TrackerTask; context: CellContext }) {
+  const category = boardCategory(context.project, task.categoryId);
+  const color = category?.color ?? 'gray';
+  return (
+    <div className={`mb-cell mb-cell--status mb-fill mb-color-${color}`}>
+      <span>{category?.name ?? 'No category'}</span>
+      {context.canManage ? (
+        <select
+          className="mb-overlay-select"
+          aria-label={`Category for ${task.title}`}
+          value={category?.id ?? ''}
+          disabled={context.disabled}
+          onChange={(event) => context.onPatch(task, { categoryId: event.target.value || null })}
+        >
+          <option value="">No category</option>
+          {context.project.categories.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 function PriorityCell({ task, context }: { task: TrackerTask; context: CellContext }) {
   const meta = PRIORITY_META[task.priority];
   return (
@@ -141,20 +171,25 @@ function PriorityCell({ task, context }: { task: TrackerTask; context: CellConte
   );
 }
 
-function DateCell({ task, context }: { task: TrackerTask; context: CellContext }) {
-  const due = toDate(task.dueAt);
-  const tone = dueTone(due, context.now);
+/**
+ * One editor for all three dates. Only the due date is toned by how close it
+ * is: a start or end date is a plan, not a deadline, so colouring it overdue
+ * would cry wolf.
+ */
+function DateCell({ task, context, field, label }: { task: TrackerTask; context: CellContext; field: 'startAt' | 'endAt' | 'dueAt'; label: string }) {
+  const value = toDate(task[field]);
+  const tone = field === 'dueAt' ? dueTone(value, context.now) : 'none';
   if (!context.canManage) {
-    return <div className={`mb-cell mb-cell--date mb-due-${tone}`}>{due ? formatDueDate(due) : <span className="mb-muted">—</span>}</div>;
+    return <div className={`mb-cell mb-cell--date mb-due-${tone}`}>{value ? formatDueDate(value) : <span className="mb-muted">—</span>}</div>;
   }
   return (
     <div className={`mb-cell mb-cell--date mb-due-${tone}`}>
       <input
         type="date"
-        aria-label={`Due date for ${task.title}`}
-        value={dateInputValue(task.dueAt)}
+        aria-label={`${label} for ${task.title}`}
+        value={dateInputValue(task[field])}
         disabled={context.disabled}
-        onChange={(event) => context.onPatch(task, { dueAt: dateInputToIso(event.target.value) })}
+        onChange={(event) => context.onPatch(task, { [field]: dateInputToIso(event.target.value) })}
       />
     </div>
   );
@@ -194,8 +229,61 @@ function FilesCell({ task, context }: { task: TrackerTask; context: CellContext 
   );
 }
 
-function BoardRow({ task, fields, context, canMove, draggable, selected, onSelect, bounds }: {
+/**
+ * Sub-items render as their own rows under the card, the way a monday sub-item
+ * board does. They are not board cards, so they have no drag handle, no
+ * selection checkbox, and only the columns that mean anything for a sub-item.
+ */
+function SubtaskRow({ task, subtask, fields, context, outline }: { task: TrackerTask; subtask: Subtask; fields: BoardFieldId[]; context: CellContext; outline: string }) {
+  const meta = SUBTASK_STATUS_META[subtask.status];
+  const mayTick = context.canManage || task.assignedTo === context.actorUserId || subtask.assignedTo === context.actorUserId;
+  return (
+    <tr className="mb-row mb-row--subtask">
+      <td className="mb-td mb-td--select"><span className="mb-subtask-rail" aria-hidden="true" /></td>
+      <td className="mb-td mb-td--item">
+        <div className="mb-item mb-item--subtask">
+          <span className="mb-subtask-branch" aria-hidden="true">↳</span>
+          {outline ? <span className="mb-outline">{outline}</span> : null}
+          <span className="mb-item-title mb-item-title--static">{subtask.title}</span>
+        </div>
+      </td>
+      {fields.map((field) => (
+        <td className="mb-td" key={field}>
+          {field === 'person' ? (
+            <div className="mb-cell mb-cell--person">
+              <Avatar userId={subtask.assignedTo} directory={context.directory} />
+              <span className="visually-hidden">{personName(context.directory, subtask.assignedTo)}</span>
+            </div>
+          ) : null}
+          {field === 'status' ? (
+            <div className={`mb-cell mb-cell--status mb-fill mb-color-${meta.color}`}>
+              <span>{meta.label}</span>
+              {mayTick ? (
+                <select
+                  className="mb-overlay-select"
+                  aria-label={`Status for subtask ${subtask.title}`}
+                  value={subtask.status}
+                  disabled={context.disabled}
+                  onChange={(event) => context.onSubtaskStatus(task, subtask.id, event.target.value as SubtaskStatus)}
+                >
+                  {(Object.keys(SUBTASK_STATUS_META) as SubtaskStatus[]).map((option) => <option key={option} value={option}>{SUBTASK_STATUS_META[option].label}</option>)}
+                </select>
+              ) : null}
+            </div>
+          ) : null}
+          {field === 'dueAt' ? (
+            <div className="mb-cell mb-cell--date">{subtask.dueAt ? formatDueDate(toDate(subtask.dueAt)!) : <span className="mb-muted">—</span>}</div>
+          ) : null}
+          {field !== 'person' && field !== 'status' && field !== 'dueAt' ? <div className="mb-cell"><span className="mb-muted">—</span></div> : null}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+function BoardRow({ task, fields, context, canMove, draggable, selected, onSelect, bounds, expanded, onToggleSubtasks, outline }: {
   task: TrackerTask;
+  outline: string;
   fields: BoardFieldId[];
   context: CellContext;
   canMove: boolean;
@@ -203,6 +291,8 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
   selected: boolean;
   onSelect: (taskId: string, next: boolean) => void;
   bounds: ReturnType<typeof timelineBounds>;
+  expanded: boolean;
+  onToggleSubtasks: (taskId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -211,6 +301,7 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
   });
   const column = boardColumn(context.project, task.columnId);
   const checklistDone = task.checklist.filter((item) => item.completed).length;
+  const subtasksDone = task.subtasks.filter((subtask) => subtask.status === 'done').length;
   return (
     <tr
       ref={setNodeRef}
@@ -232,7 +323,19 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
           {draggable ? (
             <button className="mb-drag" type="button" aria-label={`Reorder ${task.title}`} disabled={!canMove || context.disabled} {...attributes} {...listeners}>⠿</button>
           ) : <span className="mb-drag mb-drag--static" aria-hidden="true" />}
+          {outline ? <span className="mb-outline">{outline}</span> : null}
           <button className="mb-item-title" type="button" onClick={() => context.onOpen(task)}>{task.title}</button>
+          {task.subtasks.length ? (
+            <button
+              className="mb-subtask-toggle"
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Hide' : 'Show'} ${task.subtasks.length} subtask${task.subtasks.length === 1 ? '' : 's'} of ${task.title}`}
+              onClick={() => onToggleSubtasks(task.id)}
+            >
+              <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {subtasksDone}/{task.subtasks.length}
+            </button>
+          ) : null}
           {task.checklist.length ? <span className="mb-item-meta" title="Checklist progress">{checklistDone}/{task.checklist.length}</span> : null}
           {task.description ? <span className="mb-item-meta" title="Has a description" aria-hidden="true">≡</span> : null}
         </div>
@@ -241,8 +344,11 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
         <td className="mb-td" key={field}>
           {field === 'person' ? <PersonCell task={task} context={context} /> : null}
           {field === 'status' ? <StatusCell task={task} context={context} canMove={canMove} /> : null}
+          {field === 'category' ? <CategoryCell task={task} context={context} /> : null}
           {field === 'priority' ? <PriorityCell task={task} context={context} /> : null}
-          {field === 'dueAt' ? <DateCell task={task} context={context} /> : null}
+          {field === 'startAt' ? <DateCell task={task} context={context} field="startAt" label="Start date" /> : null}
+          {field === 'endAt' ? <DateCell task={task} context={context} field="endAt" label="End date" /> : null}
+          {field === 'dueAt' ? <DateCell task={task} context={context} field="dueAt" label="Due date" /> : null}
           {field === 'timeline' ? <TimelineCell task={task} bounds={bounds} /> : null}
           {field === 'labels' ? <LabelsCell task={task} /> : null}
           {field === 'files' ? <FilesCell task={task} context={context} /> : null}
@@ -287,6 +393,7 @@ function SummaryRow({ group, fields, context }: { group: BoardGroup; fields: Boa
             </div>
           ) : null}
           {field === 'dueAt' ? <div className="mb-cell mb-summary-text">{overdue ? `${overdue} overdue` : '—'}</div> : null}
+          {field === 'startAt' || field === 'endAt' ? <div className="mb-cell mb-summary-text">—</div> : null}
           {field === 'timeline' ? (
             <div className="mb-cell mb-cell--timeline">
               {bounds ? <span className="mb-timeline-track"><span className="mb-timeline-bar mb-timeline-bar--summary" style={{ width: '100%' }}>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(bounds.start))} – {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(bounds.end))}</span></span> : <span className="mb-muted">—</span>}
@@ -316,6 +423,15 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
   const draggable = groupBy === 'column';
   const { setNodeRef, isOver } = useDroppable({ id: `column:${group.id}`, data: { type: 'column', columnId: group.id }, disabled: !draggable });
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
+  function toggleSubtasks(taskId: string) {
+    setExpandedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }
   const [title, setTitle] = useState('');
   const addRef = useRef<HTMLInputElement>(null);
   const bounds = useMemo(() => timelineBounds(group.tasks), [group.tasks]);
@@ -335,6 +451,16 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
 
   return (
     <section className={`mb-group mb-color-${group.color}${isOver ? ' is-over' : ''}`} aria-labelledby={`group-${group.id}`}>
+      {group.milestoneTitle ? (
+        <div className="mb-milestone-band">
+          <h2 className="mb-milestone-title">{group.milestoneTitle}</h2>
+          {group.milestoneProgress ? (
+            <span className="mb-milestone-progress">
+              {group.milestoneProgress.done}/{group.milestoneProgress.total} tasks done
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <header className="mb-group-head">
         <button
           className="mb-collapse"
@@ -346,7 +472,10 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
           <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
           <span className="visually-hidden">{collapsed ? 'Expand' : 'Collapse'} {groupTitle}</span>
         </button>
-        <h3 className="mb-group-title" id={`group-${group.id}`}>{groupTitle}</h3>
+        <h3 className="mb-group-title" id={`group-${group.id}`}>
+          {group.outline ? <span className="mb-outline">{group.outline}</span> : null}
+          {groupTitle}
+        </h3>
         <span className="mb-group-count">{group.tasks.length} item{group.tasks.length === 1 ? '' : 's'}</span>
       </header>
 
@@ -371,9 +500,10 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
             </thead>
             <tbody>
               <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
-                {group.tasks.map((task) => (
+                {group.tasks.flatMap((task, taskIndex) => [
                   <BoardRow
                     key={task.id}
+                    outline={group.outline ? `${group.outline}.${taskIndex + 1}` : ''}
                     task={task}
                     fields={fields}
                     context={context}
@@ -382,8 +512,20 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
                     selected={selectedIds.has(task.id)}
                     onSelect={onSelect}
                     bounds={bounds}
-                  />
-                ))}
+                    expanded={expandedTaskIds.has(task.id)}
+                    onToggleSubtasks={toggleSubtasks}
+                  />,
+                  ...(expandedTaskIds.has(task.id)
+                    ? task.subtasks.map((subtask, subtaskIndex) => <SubtaskRow
+                      key={`${task.id}:${subtask.id}`}
+                      outline={group.outline ? `${group.outline}.${taskIndex + 1}.${subtaskIndex + 1}` : ''}
+                      task={task}
+                      subtask={subtask}
+                      fields={fields}
+                      context={context}
+                    />)
+                    : [])
+                ])}
               </SortableContext>
               {!group.tasks.length ? (
                 <tr className="mb-empty-row">
@@ -418,7 +560,7 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
   );
 }
 
-export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch }: {
+export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, actorUserId, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch, onSubtaskStatus }: {
   groups: BoardGroup[];
   fields: BoardFieldId[];
   groupBy: BoardGroupBy;
@@ -431,14 +573,16 @@ export function BoardTable({ groups, fields, groupBy, project, people, directory
   disabled: boolean;
   selectedIds: Set<string>;
   focusGroupId: string | null;
+  actorUserId: string;
   onSelect: (taskId: string, next: boolean) => void;
   onSelectGroup: (taskIds: string[], next: boolean) => void;
   onCreate: (columnId: string, title: string) => void;
   onOpen: (task: TrackerTask) => void;
   onMove: (task: TrackerTask, columnId: string) => void;
   onPatch: (task: TrackerTask, patch: BoardTaskPatch) => void;
+  onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
 }) {
-  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen };
+  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen, actorUserId, onSubtaskStatus };
   if (!groups.length) {
     return <p className="mb-board-empty">No items match the current filters. Clear a filter to see the rest of the board.</p>;
   }

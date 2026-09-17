@@ -54,6 +54,10 @@ describe('profile bootstrap', () => {
       update
     }));
     await bootstrapUserProfile({ uid: 'user-1', email: 'coach@example.com', displayName: 'Coach', photoURL: 'https://example.com/auth.png' } as never);
-    expect(update).toHaveBeenCalledWith('profile-ref', expect.objectContaining({ email: 'coach@example.com', displayName: 'Coach', photoURL: 'https://example.com/auth.png' }));
+    expect(update).toHaveBeenCalledWith('profile-ref', expect.objectContaining({ displayName: 'Coach', photoURL: 'https://example.com/auth.png' }));
+    // The rules pin `email` to its create-time value, so backfilling it here
+    // could only ever be denied — which read to the user as a team-access
+    // problem on an account that had just been created.
+    expect(update.mock.calls[0][1]).not.toHaveProperty('email');
   });
 });

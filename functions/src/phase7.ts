@@ -1,7 +1,6 @@
 import { getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { auditRecord, getInput, requireAuth, requireString, requireTeamMember, type TeamAdmin } from './phase2.js';
-import { canAccessChannel as canAccessTeamChannel } from './phase4.js';
+import { auditRecord, getInput, requireAuth, requireString, requireTeamMember } from './phase2.js';
 
 export type Phase7Request = CallableRequest<Record<string, unknown>>;
 
@@ -22,13 +21,6 @@ function textMatches(tokens: string[], ...values: unknown[]) {
   return tokens.every((token) => text.includes(token));
 }
 
-function dateMillis(value: unknown) {
-  if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
-    return (value as { toMillis: () => number }).toMillis();
-  }
-  return 0;
-}
-
 function publicRecord(snapshot: FirebaseFirestore.QueryDocumentSnapshot, fields: string[]) {
   const data = snapshot.data();
   return fields.reduce<Record<string, unknown>>((result, field) => {
@@ -41,19 +33,8 @@ function result(type: string, teamId: string, recordId: string, title: string, s
   return { type, teamId, recordId, title, snippet: snippet.slice(0, 240), deepLink };
 }
 
-/**
- * Search reuses the Phase 4 channel rule verbatim — a second copy of it drifted
- * away from the `parentVisibility` policy once already — and only adds the
- * archived-channel exclusion that search results need.
- */
-function canAccessChannel(actor: TeamAdmin, channel: DocumentData, policy: DocumentData) {
-  return channel.archived !== true && canAccessTeamChannel(actor, channel, policy);
-}
-
 export function summarizeUnreadNotifications(records: DocumentData[], limit = 50) {
   return {
-    unreadMessageCount: records.filter((notification) => String(notification.type ?? '').startsWith('chat.')).length,
-    announcementCount: records.filter((notification) => String(notification.type ?? '').includes('announcement')).length,
     unreadSummaryTruncated: records.length === limit,
     unreadSummaryLimit: limit
   };
@@ -82,10 +63,9 @@ async function requireActiveTeam(uid: string, teamId: string) {
 
 async function recentTeamRecords(teamId: string, searchTokens: string[]) {
   const db = getFirestore();
-  const [tasks, goals, events, scores] = await Promise.all([
+  const [tasks, goals, scores] = await Promise.all([
     db.collection('tasks').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
     db.collection('goals').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
-    db.collection('eventOccurrences').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
     db.collection('scoreSessions').where('teamId', '==', teamId).limit(MAX_SCAN).get()
   ]);
   const records = [
@@ -93,11 +73,34 @@ async function recentTeamRecords(teamId: string, searchTokens: string[]) {
       const projectId = typeof snapshot.data().projectId === 'string' ? `project=${encodeURIComponent(snapshot.data().projectId)}&` : '';
       return result('Task', teamId, snapshot.id, String(snapshot.data().title ?? 'Task'), String(snapshot.data().description ?? ''), `/coordination?${projectId}task=${encodeURIComponent(snapshot.id)}`);
     }),
-    ...goals.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description)).map((snapshot) => result('Goal', teamId, snapshot.id, String(snapshot.data().title ?? 'Goal'), String(snapshot.data().description ?? ''), `/coordination?goal=${encodeURIComponent(snapshot.id)}`)),
-    ...events.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description, snapshot.data().location)).map((snapshot) => result('Event', teamId, snapshot.id, String(snapshot.data().title ?? 'Event'), String(snapshot.data().description ?? ''), `/coordination?event=${encodeURIComponent(snapshot.id)}`)),
+    ...goals.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description)).map((snapshot) => result('Goal', teamId, snapshot.id, String(snapshot.data().title ?? 'Goal'), String(snapshot.data().description ?? ''), `/milestones?goal=${encodeURIComponent(snapshot.id)}`)),
     ...scores.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().notes, snapshot.data().robotProgramContext)).map((snapshot) => result('Score', teamId, snapshot.id, String(snapshot.data().title ?? 'Score session'), String(snapshot.data().notes ?? ''), `/scorer?session=${encodeURIComponent(snapshot.id)}`))
   ];
   return records;
+}
+
+/**
+ * The four FIRST LEGO League judging areas. A task belongs to an area when it
+ * carries the area id as a label — the built-in templates and the task importer
+ * apply these, and a coach can add one to any card. Labels rather than a new
+ * task field keep every existing task, rule, and editor unchanged.
+ */
+export const DASHBOARD_AREAS = [
+  { id: 'innovation-project', label: 'Innovation project' },
+  { id: 'robot-design', label: 'Robot design' },
+  { id: 'robot-game', label: 'Robot game' },
+  { id: 'core-values', label: 'Core values' }
+] as const;
+
+const OPEN_TASK_STATUSES = ['todo', 'inProgress', 'review'];
+/** Enough sessions for a readable trend line without scanning a season. */
+export const DASHBOARD_SCORE_LIMIT = 12;
+
+export function areaProgress(counts: Array<{ taskCount: number; completedTaskCount: number }>) {
+  return DASHBOARD_AREAS.map((area, index) => {
+    const taskCount = Math.max(0, counts[index]?.taskCount ?? 0);
+    return { id: area.id, label: area.label, taskCount, completedTaskCount: Math.min(taskCount, Math.max(0, counts[index]?.completedTaskCount ?? 0)) };
+  });
 }
 
 export const getDashboard = async (request: Phase7Request) => {
@@ -105,33 +108,41 @@ export const getDashboard = async (request: Phase7Request) => {
   const teamId = requireString(getInput(request, 'teamId'), 'Team ID');
   const actor = await requireTeamMember(request, teamId);
   const db = getFirestore();
-  const now = Timestamp.now();
   const taskQuery = db.collection('tasks').where('teamId', '==', teamId);
   const goalQuery = db.collection('goals').where('teamId', '==', teamId);
   const scoreQuery = db.collection('scoreSessions').where('teamId', '==', teamId);
   const unreadNotificationQuery = db.collection('notifications').where('recipientUserId', '==', auth.uid).where('teamId', '==', teamId).where('readAt', '==', null);
-  const [team, tasks, goals, events, occurrences, scores, notifications, unreadNotificationsSnapshot, taskCount, completedTaskCount, goalCount, scoreCount, unreadNotificationCount] = await Promise.all([
+  // Count aggregations cost one read per 1,000 matches, so per-area progress
+  // stays bounded however many tasks a team accumulates.
+  const areaCountsPromise = Promise.all(DASHBOARD_AREAS.map(async (area) => {
+    const areaQuery = taskQuery.where('labels', 'array-contains', area.id);
+    const [total, completed] = await Promise.all([areaQuery.count().get(), areaQuery.where('status', '==', 'completed').count().get()]);
+    return { taskCount: total.data().count, completedTaskCount: completed.data().count };
+  }));
+  const [team, tasks, upcomingTasks, goals, completedGoals, scores, notifications, unreadNotificationsSnapshot, taskCount, completedTaskCount, goalCount, completedGoalCount, scoreCount, unreadNotificationCount, areaCounts] = await Promise.all([
     db.doc(`teams/${teamId}`).get(),
     taskQuery.orderBy('updatedAt', 'desc').limit(5).get(),
+    // The range filter drops tasks without a due date, which have no place on
+    // an "upcoming" list; overdue open work sorts first.
+    taskQuery.where('status', 'in', OPEN_TASK_STATUSES).where('dueAt', '>', Timestamp.fromMillis(0)).orderBy('dueAt', 'asc').limit(5).get(),
     goalQuery.orderBy('updatedAt', 'desc').limit(20).get(),
-    db.collection('events').where('teamId', '==', teamId).where('startsAt', '>=', now).orderBy('startsAt', 'asc').limit(20).get(),
-    db.collection('eventOccurrences').where('teamId', '==', teamId).where('startsAt', '>=', now).orderBy('startsAt', 'asc').limit(20).get(),
-    scoreQuery.orderBy('sessionDate', 'desc').limit(5).get(),
+    goalQuery.where('status', '==', 'completed').orderBy('updatedAt', 'desc').limit(3).get(),
+    scoreQuery.orderBy('sessionDate', 'desc').limit(DASHBOARD_SCORE_LIMIT).get(),
     db.collection('notifications').where('recipientUserId', '==', auth.uid).where('teamId', '==', teamId).orderBy('createdAt', 'desc').limit(10).get(),
     unreadNotificationQuery.orderBy('createdAt', 'desc').limit(50).get(),
     taskQuery.count().get(),
     taskQuery.where('status', '==', 'completed').count().get(),
     goalQuery.count().get(),
+    goalQuery.where('status', '==', 'completed').count().get(),
     scoreQuery.count().get(),
-    unreadNotificationQuery.count().get()
+    unreadNotificationQuery.count().get(),
+    areaCountsPromise
   ]);
   if (!team.exists) throw new HttpsError('not-found', 'Team not found.');
-  const taskRecords = tasks.docs.map((snapshot) => publicRecord(snapshot, ['title', 'status', 'priority', 'assignedTo', 'projectId', 'dueAt', 'updatedAt']));
-  const goalRecords = goals.docs.map((snapshot) => publicRecord(snapshot, ['title', 'status', 'taskCount', 'completedTaskCount', 'dueAt', 'updatedAt']));
-  const eventRecords = [
-    ...events.docs.filter((snapshot) => !snapshot.data().recurrence).map((snapshot) => publicRecord(snapshot, ['title', 'startsAt', 'endsAt', 'eventType', 'location'])),
-    ...occurrences.docs.map((snapshot) => publicRecord(snapshot, ['title', 'startsAt', 'endsAt', 'eventType', 'location', 'occurrenceOf']))
-  ].sort((a, b) => dateMillis(a.startsAt) - dateMillis(b.startsAt)).slice(0, 5);
+  const taskFields = ['title', 'status', 'priority', 'assignedTo', 'projectId', 'labels', 'dueAt', 'updatedAt'];
+  const goalFields = ['title', 'status', 'taskCount', 'completedTaskCount', 'dueAt', 'updatedAt'];
+  const taskRecords = tasks.docs.map((snapshot) => publicRecord(snapshot, taskFields));
+  const goalRecords = goals.docs.map((snapshot) => publicRecord(snapshot, goalFields));
   const scoreRecords = scores.docs.map((snapshot) => publicRecord(snapshot, ['title', 'scoreType', 'totalPoints', 'sessionDate', 'updatedAt']));
   const notificationRecords = notifications.docs.map((snapshot) => publicRecord(snapshot, ['teamId', 'title', 'body', 'type', 'deepLink', 'mandatory', 'readAt', 'createdAt']));
   const unreadNotifications = unreadNotificationsSnapshot.docs.map((snapshot) => snapshot.data());
@@ -140,15 +151,17 @@ export const getDashboard = async (request: Phase7Request) => {
     team: { id: team.id, name: String(team.data()?.name ?? 'Your team') },
     role: actor.role ?? 'member',
     tasks: taskRecords,
+    upcomingTasks: upcomingTasks.docs.map((snapshot) => publicRecord(snapshot, taskFields)),
     goals: goalRecords,
-    events: eventRecords,
+    completedGoals: completedGoals.docs.map((snapshot) => publicRecord(snapshot, goalFields)),
     scores: scoreRecords,
+    areas: areaProgress(areaCounts),
     notifications: notificationRecords,
     summary: {
       taskCount: taskCount.data().count,
       completedTaskCount: completedTaskCount.data().count,
       goalCount: goalCount.data().count,
-      upcomingEventCount: eventRecords.length,
+      completedGoalCount: completedGoalCount.data().count,
       scoreCount: scoreCount.data().count,
       unreadNotificationCount: unreadNotificationCount.data().count,
       ...unreadSummary
@@ -227,26 +240,18 @@ export const globalSearch = async (request: Phase7Request) => {
   for (const teamId of teamIds) {
     // Stop fanning out as soon as the response is already full.
     if (records.length >= MAX_RESULTS) break;
-    const actor = await requireTeamMember(request, teamId);
-    const [questions, videos, messages, files, channels, policy] = await Promise.all([
+    await requireTeamMember(request, teamId);
+    const [questions, videos, files, policy] = await Promise.all([
       db.collection('questions').where('teamId', '==', teamId).where('visibility', '==', 'team').where('moderationStatus', '==', 'published').where('searchTokens', 'array-contains', tokens[0]).limit(MAX_SCAN).get(),
       db.collection('videos').where('teamId', '==', teamId).where('visibility', '==', 'team').where('publicationStatus', '==', 'published').where('searchTokens', 'array-contains', tokens[0]).limit(MAX_SCAN).get(),
-      db.collection('messages').where('teamId', '==', teamId).where('searchTokens', 'array-contains', tokens[0]).limit(MAX_SCAN).get(),
       db.collection('fileMetadata').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
-      db.collection('channels').where('teamId', '==', teamId).where('archived', '==', false).limit(MAX_SCAN).get(),
       db.doc(`teamPolicies/${teamId}`).get()
     ]);
     questions.docs.filter((snapshot) => textMatches(tokens, snapshot.data().title, snapshot.data().body, snapshot.data().category, ...(snapshot.data().tags ?? []))).forEach((snapshot) => records.push(result('Question', teamId, snapshot.id, String(snapshot.data().title ?? 'Question'), String(snapshot.data().body ?? ''), `/knowledge?tab=questions&question=${encodeURIComponent(snapshot.id)}`)));
     videos.docs.filter((snapshot) => textMatches(tokens, snapshot.data().title, snapshot.data().description, snapshot.data().category)).forEach((snapshot) => records.push(result('Video', teamId, snapshot.id, String(snapshot.data().title ?? 'Video'), String(snapshot.data().description ?? ''), `/knowledge?tab=videos&video=${encodeURIComponent(snapshot.id)}`)));
-    const channelMap = new Map(channels.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
     const policyData = policy.data() ?? {};
-    messages.docs.filter((snapshot) => {
-      const message = snapshot.data();
-      const channel = channelMap.get(String(message.channelId));
-      return channel ? canAccessChannel(actor, channel, policyData) && textMatches(tokens, message.body) : false;
-    }).forEach((snapshot) => records.push(result('Message', teamId, snapshot.id, 'Team message', String(snapshot.data().body ?? ''), `/chat?channel=${encodeURIComponent(String(snapshot.data().channelId ?? ''))}&message=${encodeURIComponent(snapshot.id)}`)));
     if (policyData.fileSharing === 'teamOnly') {
-      files.docs.filter((snapshot) => snapshot.data().status === 'ready' && !['blocked', 'pending'].includes(String(snapshot.data().scanStatus)) && textMatches(tokens, snapshot.data().name)).forEach((snapshot) => records.push(result('File', teamId, snapshot.id, String(snapshot.data().name ?? 'Team file'), `${String(snapshot.data().contentType ?? 'File')} · ${Number(snapshot.data().sizeBytes ?? 0)} bytes`, `/coordination?file=${encodeURIComponent(snapshot.id)}`)));
+      files.docs.filter((snapshot) => snapshot.data().status === 'ready' && !['blocked', 'pending'].includes(String(snapshot.data().scanStatus)) && textMatches(tokens, snapshot.data().name)).forEach((snapshot) => records.push(result('File', teamId, snapshot.id, String(snapshot.data().name ?? 'Team file'), `${String(snapshot.data().contentType ?? 'File')} · ${Number(snapshot.data().sizeBytes ?? 0)} bytes`, `/files?file=${encodeURIComponent(snapshot.id)}`)));
     }
     const team = await db.doc(`teams/${teamId}`).get();
     if (team.exists && textMatches(tokens, team.data()?.name)) records.push(result('Team', teamId, teamId, String(team.data()?.name ?? 'Team'), 'Team workspace', '/hub'));

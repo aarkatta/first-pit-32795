@@ -7,7 +7,7 @@ import type { TeamRole } from './domain';
  * `users/{uid}` is readable only by its owner, which is the right default for a
  * product used by minors. The consequence is that the client cannot turn a
  * membership's `userId` into a name on its own, so every screen that shows a
- * person — the roster, task assignees, chat authors, score participants — would
+ * person — the roster, task assignees, score participants — would
  * otherwise render a raw Firebase UID. The `listTeamMembers` callable does the
  * join with the Admin SDK and returns only what a teammate may see.
  */

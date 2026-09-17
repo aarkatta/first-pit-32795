@@ -138,11 +138,73 @@
   border-bottom: 1px solid var(--mb-line-soft);
 }
 
+.monday .mb-milestone-band {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 22px 0 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eef2ec;
+  border: 1px solid #dfe5da;
+}
+
+.monday .mb-milestone-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #22302a;
+}
+
+.monday .mb-milestone-progress {
+  font-size: 12px;
+  font-weight: 650;
+  color: #4b5b50;
+}
+
+.monday .mb-outline {
+  margin-inline-end: 7px;
+  color: #8a978e;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 11px;
+}
+
+.monday .mb-import-item {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #d6dbd4;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  color: #2c3a31;
+  cursor: pointer;
+}
+
+.monday .mb-import-item:hover:not(:disabled) {
+  background: #f2f5f1;
+}
+
+.monday .mb-import-item:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.monday .tracker-tabs { margin-bottom: 14px; }
+.monday .tracker-tabs a { text-decoration: none; }
+
 .monday .mb-views {
   display: flex;
   gap: 2px;
 }
 
+.monday .mb-views a,
 .monday .mb-views button {
   display: inline-flex;
   align-items: center;
@@ -157,10 +219,12 @@
   cursor: pointer;
 }
 
+.monday .mb-views a:hover,
 .monday .mb-views button:hover {
   background: var(--mb-hover);
 }
 
+.monday .mb-views a.is-active,
 .monday .mb-views button.is-active {
   border-bottom-color: var(--mb-blue);
   color: var(--mb-ink);

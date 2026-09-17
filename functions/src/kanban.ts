@@ -7,11 +7,16 @@ import {
   getInput,
   isReplayOfOwnCreate,
   requireString,
+  requireText,
   requireTeamAdmin,
   requireTeamId,
   requireTeamMember,
   type TeamAdmin
 } from './phase2.js';
+import { DASHBOARD_AREAS } from './phase7.js';
+
+/** The judging areas a category may be tied to; the dashboard counts the same ids. */
+const AREA_IDS: readonly string[] = DASHBOARD_AREAS.map((area) => area.id);
 
 type KanbanRequest = CallableRequest<Record<string, unknown>>;
 
@@ -66,7 +71,8 @@ export function withBoardErrors<TRequest, TResult>(command: (request: TRequest) 
 export const MAX_PROJECTS_PER_TEAM = 10;
 export const MIN_COLUMNS_PER_PROJECT = 2;
 export const MAX_COLUMNS_PER_PROJECT = 8;
-export const MAX_CARDS_PER_COLUMN_PAGE = 50;
+export const MAX_CARDS_PER_COLUMN_PAGE = 150;
+export const MAX_CATEGORIES_PER_PROJECT = 20;
 export const ORDER_STEP = 1024;
 const MIGRATION_PAGE_SIZE = 200;
 
@@ -76,6 +82,28 @@ export type ProjectColumn = {
   color: string;
 };
 
+/**
+ * A board group, in the monday.com sense: the coach's own breakdown of the work
+ * ("Innovation project", "Build UI"), independent of the workflow columns.
+ *
+ * `areaId` optionally ties a category to one of the four FIRST LEGO League
+ * judging areas. The area itself still lives on each task as a label — that is
+ * what the dashboard counts — so the tie is a default for new cards, not a
+ * second source of truth.
+ *
+ * `goalId` is the work-breakdown parent: the milestone this package of work
+ * belongs to. A card created in the category inherits it, which is what keeps
+ * the milestone counters — maintained per task — in step with the tree. A card
+ * can still be pointed at a different milestone on its own.
+ */
+export type ProjectCategory = {
+  id: string;
+  name: string;
+  color: string;
+  areaId: string | null;
+  goalId: string | null;
+};
+
 export const DEFAULT_PROJECT_COLUMNS: ProjectColumn[] = [
   { id: 'todo', name: 'To Do', color: 'blue' },
   { id: 'inProgress', name: 'In Progress', color: 'purple' },
@@ -83,9 +111,9 @@ export const DEFAULT_PROJECT_COLUMNS: ProjectColumn[] = [
   { id: 'completed', name: 'Completed', color: 'green' }
 ];
 
-const COLUMN_COLORS = ['blue', 'purple', 'orange', 'green', 'slate', 'pink'] as const;
+export const COLUMN_COLORS = ['blue', 'purple', 'orange', 'green', 'slate', 'pink'] as const;
 
-function inputRecord(request: KanbanRequest) {
+export function inputRecord(request: KanbanRequest) {
   return request.data ?? {};
 }
 
@@ -102,21 +130,21 @@ function optionalId(value: unknown, label: string) {
   return requireString(value, label, 128);
 }
 
-function operationId(input: Record<string, unknown>, prefix: string) {
+export function operationId(input: Record<string, unknown>, prefix: string) {
   return `${prefix}_${requireString(input.operationId, 'Operation ID', 120)}`;
 }
 
-function operationRef(teamId: string, id: string) {
+export function operationRef(teamId: string, id: string) {
   return getFirestore().doc(`kanbanOperations/${teamId}_${id}`);
 }
 
-function entityId(input: Record<string, unknown>, key: string, prefix: string, fallback: string) {
+export function entityId(input: Record<string, unknown>, key: string, prefix: string, fallback: string) {
   if (input[key] !== undefined) return requireString(input[key], `${prefix} ID`, 128);
   if (input.operationId !== undefined) return `${prefix}_${requireString(input.operationId, 'Operation ID', 96)}`;
   return fallback;
 }
 
-function projectColumns(project: DocumentData): ProjectColumn[] {
+export function projectColumns(project: DocumentData): ProjectColumn[] {
   if (!Array.isArray(project.columns)) throw new HttpsError('failed-precondition', 'Project workflow is invalid.');
   return project.columns.map((column: unknown) => {
     if (!column || typeof column !== 'object') throw new HttpsError('failed-precondition', 'Project workflow is invalid.');
@@ -127,6 +155,56 @@ function projectColumns(project: DocumentData): ProjectColumn[] {
       color: COLUMN_COLORS.includes(record.color as typeof COLUMN_COLORS[number]) ? String(record.color) : 'slate'
     };
   });
+}
+
+/**
+ * Categories are optional: a board created before this feature has no
+ * `categories` field, and its cards carry no `categoryId`. Both read as empty
+ * rather than as an error, so no migration is needed.
+ */
+export function projectCategories(project: DocumentData): ProjectCategory[] {
+  if (project.categories === undefined || project.categories === null) return [];
+  if (!Array.isArray(project.categories)) throw new HttpsError('failed-precondition', 'Project categories are invalid.');
+  return project.categories.map((category: unknown) => {
+    if (!category || typeof category !== 'object') throw new HttpsError('failed-precondition', 'Project categories are invalid.');
+    const record = category as Record<string, unknown>;
+    return {
+      id: requireString(record.id, 'Category ID', 128),
+      name: requireText(record.name, 'Category name', 60),
+      color: COLUMN_COLORS.includes(record.color as typeof COLUMN_COLORS[number]) ? String(record.color) : 'slate',
+      areaId: typeof record.areaId === 'string' && AREA_IDS.includes(record.areaId) ? record.areaId : null,
+      goalId: typeof record.goalId === 'string' && record.goalId ? record.goalId : null
+    };
+  });
+}
+
+/** The milestone a category rolls up into, or null when it stands alone. */
+export function categoryGoalId(categories: ProjectCategory[], categoryId: string | null): string | null {
+  if (!categoryId) return null;
+  return categories.find((category) => category.id === categoryId)?.goalId ?? null;
+}
+
+/** Validates one caller-supplied category. `id` is absent for a new one. */
+function requireCategoryInput(value: unknown, index: number): { id: string | null; name: string; color: string; areaId: string | null; goalId: string | null } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpsError('invalid-argument', `Category ${index + 1} is invalid.`);
+  const record = value as Record<string, unknown>;
+  const areaId = record.areaId === undefined || record.areaId === null || record.areaId === '' ? null : requireString(record.areaId, 'Category judging area', 64);
+  if (areaId !== null && !AREA_IDS.includes(areaId)) throw new HttpsError('invalid-argument', 'Category judging area is not a known area.');
+  return {
+    id: record.id === undefined || record.id === null || record.id === '' ? null : requireString(record.id, 'Category ID', 128),
+    name: requireText(record.name, `Category ${index + 1} name`, 60),
+    color: COLUMN_COLORS.includes(record.color as typeof COLUMN_COLORS[number]) ? String(record.color) : 'slate',
+    areaId,
+    goalId: optionalId(record.goalId, 'Category milestone')
+  };
+}
+
+/** The category a card may carry: `null`, or one this project actually defines. */
+export function requireCategoryId(categories: ProjectCategory[], value: unknown): string | null {
+  const categoryId = optionalId(value, 'Category ID');
+  if (categoryId === null) return null;
+  if (!categories.some((category) => category.id === categoryId)) throw new HttpsError('not-found', 'Project category not found.');
+  return categoryId;
 }
 
 /**
@@ -148,7 +226,7 @@ export function nextProjectVersion(currentVersion: unknown, expectedVersion: unk
   return current + 1;
 }
 
-function requireProject(project: FirebaseFirestore.DocumentSnapshot, teamId: string) {
+export function requireProject(project: FirebaseFirestore.DocumentSnapshot, teamId: string) {
   const data = project.data();
   if (!project.exists || data?.teamId !== teamId || data.archived === true) {
     throw new HttpsError('not-found', 'Project not found in this team.');
@@ -162,7 +240,7 @@ function requireColumn(project: DocumentData, columnId: string) {
   return columns;
 }
 
-function statusForColumn(columnId: string, completedColumnId: string) {
+export function statusForColumn(columnId: string, completedColumnId: string) {
   if (columnId === completedColumnId) return 'completed';
   if (columnId === 'review') return 'review';
   if (columnId === 'inProgress') return 'inProgress';
@@ -370,8 +448,8 @@ export const createProject = async (request: KanbanRequest) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);
   const input = inputRecord(request);
-  const name = requireString(input.name, 'Project name', 80);
-  const description = input.description === undefined ? '' : requireString(input.description, 'Project description', 1000);
+  const name = requireText(input.name, 'Project name', 80);
+  const description = input.description === undefined ? '' : requireText(input.description, 'Project description', 1000);
   const db = getFirestore();
   const projectId = entityId(input, 'projectId', 'project', db.collection('projects').doc().id);
   const projectRef = db.doc(`projects/${projectId}`);
@@ -411,8 +489,8 @@ export const updateProject = async (request: KanbanRequest) => {
   const input = inputRecord(request);
   const projectId = requireString(input.projectId, 'Project ID', 128);
   const updates: Record<string, unknown> = {};
-  if (has(input, 'name')) updates.name = requireString(input.name, 'Project name', 80);
-  if (has(input, 'description')) updates.description = requireString(input.description, 'Project description', 1000);
+  if (has(input, 'name')) updates.name = requireText(input.name, 'Project name', 80);
+  if (has(input, 'description')) updates.description = requireText(input.description, 'Project description', 1000);
   if (!Object.keys(updates).length) throw new HttpsError('invalid-argument', 'No project changes were provided.');
   const db = getFirestore();
   await db.runTransaction(async (transaction) => {
@@ -556,6 +634,80 @@ export const removeProjectColumn = async (request: KanbanRequest) => {
   return { projectId, columnId, removed: true as const, version: committedVersion };
 };
 
+/**
+ * Add, rename, recolor, reorder, retag and remove board categories in one call.
+ *
+ * The whole list is replaced, like the `columns` array it sits beside, so the
+ * caller sends the order it wants and `expectedVersion` makes two coaches
+ * editing at once a conflict rather than a silent overwrite. A category that
+ * still has cards cannot be removed: moving those cards is the coach's
+ * decision, and doing it here would rewrite an unbounded number of tasks
+ * inside one transaction.
+ */
+export const updateProjectCategories = async (request: KanbanRequest) => {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const input = inputRecord(request);
+  const projectId = requireString(input.projectId, 'Project ID', 128);
+  if (!Array.isArray(input.categories)) throw new HttpsError('invalid-argument', 'Categories must be a list.');
+  if (input.categories.length > MAX_CATEGORIES_PER_PROJECT) {
+    throw new HttpsError('resource-exhausted', `A board can have at most ${MAX_CATEGORIES_PER_PROJECT} categories.`);
+  }
+  const requested = input.categories.map(requireCategoryInput);
+  const expectedVersion = input.expectedVersion;
+  const db = getFirestore();
+  let committedVersion = 1;
+  let categories: ProjectCategory[] = [];
+  await db.runTransaction(async (transaction) => {
+    await assertTeamAdminInTransaction(transaction, teamId, admin);
+    const ref = db.doc(`projects/${projectId}`);
+    const project = requireProject(await transaction.get(ref), teamId);
+    const current = projectCategories(project);
+    committedVersion = nextProjectVersion(project.version, expectedVersion);
+    const currentIds = new Set(current.map((category) => category.id));
+    for (const category of requested) {
+      if (category.id !== null && !currentIds.has(category.id)) throw new HttpsError('not-found', 'Project category not found.');
+    }
+    const keptIds = new Set(requested.map((category) => category.id).filter((id): id is string => id !== null));
+    if (keptIds.size !== requested.filter((category) => category.id !== null).length) {
+      throw new HttpsError('invalid-argument', 'Each category can appear only once.');
+    }
+    const removed = current.filter((category) => !keptIds.has(category.id));
+    const usage = await Promise.all(removed.map((category) => transaction.get(db.collection('tasks')
+      .where('teamId', '==', teamId)
+      .where('projectId', '==', projectId)
+      .where('categoryId', '==', category.id)
+      .limit(1))));
+    const blocked = removed.filter((_, index) => !usage[index].empty);
+    if (blocked.length) {
+      throw new HttpsError('failed-precondition', `Move every card out of ${blocked.map((category) => `"${category.name}"`).join(', ')} before removing it.`);
+    }
+    // Every milestone named must be a real goal of this team; a stale id would
+    // otherwise put a whole branch of the tree under nothing.
+    const goalIds = [...new Set(requested.map((category) => category.goalId).filter((goalId): goalId is string => Boolean(goalId)))];
+    const goals = await Promise.all(goalIds.map((goalId) => transaction.get(db.doc(`goals/${goalId}`))));
+    goals.forEach((snapshot, index) => {
+      if (!snapshot.exists || snapshot.data()?.teamId !== teamId) throw new HttpsError('not-found', `Milestone not found in this team: ${goalIds[index]}`);
+    });
+    categories = requested.map((category) => ({
+      id: category.id ?? db.collection('projects').doc().id,
+      name: category.name,
+      color: category.color,
+      areaId: category.areaId,
+      goalId: category.goalId
+    }));
+    transaction.update(ref, { categories, version: committedVersion, updatedAt: FieldValue.serverTimestamp() });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({
+      type: 'administrative.action',
+      actorUserId: admin.uid,
+      teamId,
+      targetResource: `projects/${projectId}`,
+      metadata: { action: 'kanban.categories.updated' }
+    }));
+  });
+  return { projectId, categories, version: committedVersion };
+};
+
 function stringList(value: unknown, label: string, maxItems: number, maxLength = 128) {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > maxItems) throw new HttpsError('invalid-argument', `${label} must be a bounded list.`);
@@ -568,13 +720,13 @@ export const createKanbanTask = async (request: KanbanRequest) => {
   const input = inputRecord(request);
   const projectId = requireString(input.projectId, 'Project ID', 128);
   const columnId = requireString(input.columnId, 'Column ID', 128);
-  const title = requireString(input.title, 'Task title', 160);
-  const description = input.description === undefined ? '' : requireString(input.description, 'Task description', 4000);
+  const title = requireText(input.title, 'Task title', 160);
+  const description = input.description === undefined ? '' : requireText(input.description, 'Task description', 4000);
   const priority = ['low', 'medium', 'high', 'urgent'].includes(String(input.priority ?? 'medium')) ? String(input.priority ?? 'medium') : 'medium';
   const assignedTo = optionalId(input.assignedTo, 'Assigned user ID');
   const watcherUserIds = stringList(input.watcherUserIds, 'Task watchers', 20);
   const labels = stringList(input.labels, 'Task labels', 20, 40);
-  const goalId = optionalId(input.goalId, 'Goal ID');
+  const requestedGoalId = has(input, 'goalId') ? optionalId(input.goalId, 'Goal ID') : undefined;
   const db = getFirestore();
   const taskId = entityId(input, 'taskId', 'task', db.collection('tasks').doc().id);
   const taskRef = db.doc(`tasks/${taskId}`);
@@ -591,6 +743,11 @@ export const createKanbanTask = async (request: KanbanRequest) => {
     if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: admin.uid }, 'Task')) return;
     const project = requireProject(projectSnapshot, teamId);
     requireColumn(project, columnId);
+    const projectCategoryList = projectCategories(project);
+    const categoryId = requireCategoryId(projectCategoryList, input.categoryId);
+    // The work-breakdown default: a card belongs to its category's milestone
+    // unless the caller pointed it somewhere else on purpose.
+    const goalId = requestedGoalId === undefined ? categoryGoalId(projectCategoryList, categoryId) : requestedGoalId;
     if (!columnHasCapacity(lastCards.size)) throw new HttpsError('resource-exhausted', 'This column is full. Archive completed work before adding more cards.');
     if (assignedTo) await assertTeamMemberInTransaction(transaction, teamId, assignedTo);
     for (const watcher of watcherUserIds) await assertTeamMemberInTransaction(transaction, teamId, watcher);
@@ -612,6 +769,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
       createdBy: admin.uid,
       projectId,
       columnId,
+      categoryId,
       orderKey,
       version: 1,
       title,
@@ -623,7 +781,10 @@ export const createKanbanTask = async (request: KanbanRequest) => {
       goalId,
       labels,
       checklist: [],
+      subtasks: [],
       attachmentFileIds: [],
+      startAt: null,
+      endAt: null,
       dueAt: null,
       completedAt: completed ? now : null,
       historyCount: 1,

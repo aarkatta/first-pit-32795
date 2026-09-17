@@ -13,14 +13,14 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Foundational decisions](#foundational-decisions)
 - [Identity, teams, and the authorization foundation](#identity-teams-and-the-authorization-foundation)
 - [Roles, safety, and the authorization contract](#roles-safety-and-the-authorization-contract)
-- [Coordination: tracker, goals, calendar, notifications, files](#coordination-tracker-goals-calendar-notifications-files)
+- [Coordination: tracker, goals, notifications, files](#coordination-tracker-goals-notifications-files)
 - [Kanban project management (Release 1.1)](#kanban-project-management-release-11)
-- [Chat and announcements](#chat-and-announcements)
+- [Chat and announcements (removed)](#chat-and-announcements-removed)
 - [Knowledge and polls](#knowledge-and-polls)
 - [Scorer and practice history](#scorer-and-practice-history)
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
 - [Authentication hardening](#authentication-hardening)
-- [Google Calendar and Google Chat integration](#google-calendar-and-google-chat-integration)
+- [Calendar and Google Calendar integration (removed)](#calendar-and-google-calendar-integration-removed)
 - [v1 launch hardening (2026-08-29)](#v1-launch-hardening-2026-08-29)
 - [Hardening and pilot release runbook](#hardening-and-pilot-release-runbook)
 
@@ -33,11 +33,11 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 
 ### MVP includes
 
-Dashboard, Questions, How-to Videos, Polls, Scorer, Chat, Roles, Tracker, Storage Area, Calendar, Notifications, Profile Customization, and core safety/admin controls.
+Dashboard, Questions, How-to Videos, Polls, Scorer, Roles, Tracker, Storage Area, Notifications, Profile Customization, and core safety/admin controls. Chat and the calendar were built and later removed; see their sections below.
 
 ### Explicitly deferred
 
-Public team discovery, public community feed, collaboration marketplace, full innovation-project workflow, advanced robot version/parts/maintenance logs, learning courses, external calendar synchronization, offline-first mode, large-scale reputation/social features, and features requiring unproven moderation capacity.
+Public team discovery, public community feed, collaboration marketplace, full innovation-project workflow, advanced robot version/parts/maintenance logs, learning courses, calendar and external calendar synchronization, team chat, offline-first mode, large-scale reputation/social features, and features requiring unproven moderation capacity.
 
 ### Release 1.1
 
@@ -61,7 +61,7 @@ Public showcases, team profiles, expanded Q&A community, learning paths, event d
 
 ### MVP completion test
 
-A coach can create a team, invite members, assign work, schedule an event, share a file, communicate safely, run a poll, and record/review a practice or match score from the Dashboard. Each action respects role permissions and produces the correct notifications and audit records.
+A coach can create a team, invite members, assign work, share a file, run a poll, and record/review a practice or match score from the Dashboard. Each action respects role permissions and produces the correct notifications and audit records.
 
 ---
 
@@ -242,9 +242,9 @@ status, assignment, evidence reference, action, escalation, and audit history.
 
 ---
 
-## Coordination: tracker, goals, calendar, notifications, files
+## Coordination: tracker, goals, notifications, files
 
-Phase 3 adds team-scoped Tracker, Goals, Calendar, Notifications, and Storage
+Phase 3 adds team-scoped Tracker, Goals, Notifications, and Storage
 capabilities on top of the Phase 1 authentication and Phase 2 membership/safety
 authorization model.
 
@@ -257,15 +257,14 @@ read only bounded team-scoped pages through Firestore rules and indexed queries.
 | --- | --- |
 | `tasks` | Tracker task state, assignment, checklist, labels, due date, and attachment IDs |
 | `goals` | Team goals and progress counters |
-| `events` | Recurring event master records |
-| `eventOccurrences` | Materialized, deterministic event occurrences for bounded calendar reads |
 | `notifications` | Recipient-isolated notifications with deterministic dedupe IDs |
 | `taskHistory` / `taskComments` | Append-only server-created task history and comments |
 | `fileMetadata` | Approved file name/type/size, Storage path, scan state, and task links |
 | `folders` | Reserved team-only file folder metadata |
 
-Release 1.1 extends this model with team-scoped `projects` records and adds
-`projectId`, `columnId`, `orderKey`, `version`, and `completedAt` to tasks. See
+Release 1.1 extends this model with team-scoped `projects` and
+`projectTemplates` records and adds `projectId`, `columnId`, `orderKey`,
+`version`, and `completedAt` to tasks. See
 the Kanban section below for the migration and card-movement
 authorization contract.
 
@@ -281,8 +280,8 @@ retries safe for task commands and assignment notifications.
   They cannot mutate or move unassigned tasks or tasks assigned to another
   member.
 - Parents and Mentors have team read access but cannot create or mutate tracker,
-  goal, calendar, or file records.
-- Coaches and Team Leaders manage tasks, goals, events, and uploads.
+  goal or file records.
+- Coaches and Team Leaders manage tasks, goals, and uploads.
 - Legacy project creation and task migration are controlled by Coaches and Team
   Leaders; other members cannot initiate or execute the migration.
 - Platform Admin claims receive operational read access; notification records
@@ -296,9 +295,56 @@ retries safe for task commands and assignment notifications.
 - Direct messaging and public discovery are not enabled by Phase 3. The stored
   Phase 2 policy remains the source of truth.
 
+### Work breakdown: milestones → categories → tasks → subtasks
+
+Since 2026-09-17 the tracker is a single tree rather than two parallel grouping
+dimensions:
+
+```
+1  Innovation project ready for the expert demo   milestone (a `goals` record)
+   1.1  Problem research                          category (work package on the board)
+        1.1.1  Define the problem                 task
+               1.1.1.1  Interview a user          subtask
+```
+
+A category carries an optional `goalId`, validated against this team's goals
+inside the same transaction that writes the category list. A card created in a
+category inherits that milestone, and moving a card to another category moves it
+to that category's milestone — unless the same edit names one explicitly, which
+is the deliberate per-card override. The milestone counters stay per task, so
+the existing transactional counting continues to work unchanged.
+
+Templates never carry a milestone: a milestone is this team's and this season's,
+and a stale one would point a seeded board at nothing. A category the importer
+invents starts with none until a coach places it.
+
+The table's default grouping is `milestone`, which renders each milestone as a
+band over its categories with outline numbers (1, 1.1, 1.1.1) and progress
+summed from every card beneath it. The UI calls these milestones throughout; the
+Firestore collection stays `goals`, because renaming it would mean migrating
+live data for no user-visible gain.
+
+### Goals (the `goals` collection)
+
+A goal is a team milestone with a title, description, target date, status
+(`active` / `completed` / `archived`) and two counters, `taskCount` and
+`completedTaskCount`. The counters are server-maintained: linking a card to a
+goal, completing it, relinking it to another goal, or unlinking it adjusts them
+inside the same transaction as the task write, so progress never needs its own
+bookkeeping.
+
+Until 2026-09-17 the client could only create a goal and list it. Nothing could
+link a task to one and nothing called `updateGoal`, so every goal sat at `0/0`
+and `active` forever, and the dashboard's "goals achieved" could never leave 0 —
+the same working-callable-with-no-way-in shape v1 hardening found for
+invitations and Q&A answers. The client now has all three: a Goal picker on the
+task card (`listActiveTeamGoals`, bounded and read only while a card is open), a
+Mark achieved / Reopen control that sends the goal's own version, and
+description and target date on the create form, with progress shown as a bar.
+
 ### Bounded queries and retry states
 
-Tasks, event occurrences, and notifications use 50-record limits and Firestore
+Tasks, goals, and notifications use 50-record limits and Firestore
 indexes. Task pagination uses a cursor (`startAfter`) rather than loading an
 entire season. The UI includes loading, empty, permission, offline, error, and
 retry states. Mutations send operation IDs where supported; notification IDs are
@@ -307,7 +353,7 @@ notifications.
 
 ### Explicit deferrals
 
-External calendar synchronization and full file version history are deferred.
+Full file version history is deferred.
 Current uploads are single-version metadata records with lifecycle states
 `pending`, `ready`, and `deleted`; a future phase can add version records and
 external provider adapters without changing the team authorization boundary.
@@ -325,16 +371,32 @@ workflow.
 ### Dependencies and boundaries
 
 - Phase 8 pilot gates remain the prerequisite for Release 1.1 deployment.
-- A team may have up to 10 active projects, each with 2–8 columns.
+- A team may have up to 10 active projects, each with 2–8 columns and up to 20
+  categories.
 - Projects remain private to one team and archived rather than deleted.
-- Dependencies, estimates, workload views, automations, recurring templates,
-  WIP limits, public projects, and dedicated innovation stages remain deferred.
+- A team may save up to 12 board templates, each carrying at most 40 cards.
+- Dependencies, estimates, workload views, automations, recurring task
+  templates, WIP limits, public projects, and dedicated innovation stages
+  remain deferred. Board templates seed a new board once; they do not stay
+  linked to the boards created from them.
 
 ### Implemented behavior
 
 - Multiple project boards with coach/team-leader creation and archival.
 - Configurable column names, ordering, colors, and a protected completion
-  designation. The completion column may change only while a board is empty.
+  designation, edited from the toolbar's Board setup panel (hidden until asked
+  for) rather than from a section always on the page. The completion column may change only while a board is empty.
+- **Categories** — the board's own grouping of the work, in the monday.com
+  sense, independent of the workflow columns. A category carries a name, a
+  colour, and optionally one of the four judging areas. `updateProjectCategories`
+  replaces the whole list in one coach-only call — add, rename, recolour, retag,
+  reorder and remove — under the same `expectedVersion` check column edits use,
+  and refuses to remove a category that still holds cards. A task carries
+  `categoryId`, validated against its own board, so a category id from another
+  board is a `not-found`. The judging area stays a task label, because that is
+  what the dashboard counts; a category's `areaId` is the default for cards
+  created in it, not a second source of truth. Boards written before categories
+  existed read as having none, so no migration was needed.
 - Ordered Kanban cards with pointer, touch, keyboard, and explicit select-menu
   movement controls.
 - Active students may move only cards assigned to them; coaches and team
@@ -343,11 +405,29 @@ workflow.
   mirrored client-side by `canMoveKanbanTask` in `KanbanBoard.tsx`.
 - Coach-managed task title, description, priority, assignment, labels, and due
   date details.
-- Two board views over the same data, toggled from the board toolbar: the
-  column Kanban view (`KanbanBoard.tsx`) and a Main Table view
-  (`src/features/kanban/BoardTable.tsx`) with status, person, priority,
-  timeline, label, and file columns plus per-group summary rows.
-- `src/features/kanban/BoardToolbar.tsx` owns view switching, grouping (by
+- **Subtasks** — up to 30 sub-items per card, stored in a `subtasks` array on
+  the task itself rather than as a second collection of cards. That keeps a
+  subtask edit atomic with its parent's `version`, keeps sub-items out of the
+  per-column card budget, and needs no new collection, rules block or index;
+  the trade-off is that a sub-item is not a board card and has no history of
+  its own. Each carries a title, `todo`/`inProgress`/`done` status, an optional
+  assignee and an optional due date. A coach edits the list (sent whole, with
+  `expectedVersion`); a student sends only `subtaskStatus`, which is accepted
+  when the card is assigned to them **or** the sub-item is, and which may not be
+  combined with any other field. In the table a card's row expands to show its
+  sub-items and carries a done/total badge.
+- Grouping by category is the monday-style default in the table view; empty
+  categories stay visible, and a "No category" group appears only when
+  something is in it. Category is also a table column and a filter.
+- One board screen: the Main Table (`src/features/kanban/BoardTable.tsx`) with
+  category, status, person, priority, timeline, label, and file columns plus
+  per-group summary rows. The separate Kanban column view and its Main
+  Table/Kanban tabs were removed — one screen carries the project-management
+  features, and grouping by status group gives the same column read with every
+  field still visible. Cards still change column through the Status cell and by
+  dragging rows between status groups.
+- `src/features/kanban/BoardToolbar.tsx` owns the New item, Import from Excel
+  and Board setup actions, grouping (by
   column, person, priority, due window, or label), sorting, column hiding, and
   bulk selection with bulk move. The grouping, sorting, and timeline maths live
   in `src/lib/board-view.ts`, which is pure and unit-tested.
@@ -355,18 +435,137 @@ workflow.
 - Live bounded column subscriptions, optimistic movement, conflict rollback,
   task history, audit records, goal completion counters, and deduplicated
   watcher/assignee notifications.
+- Board templates (`functions/src/kanban-templates.ts`) — **server-side only as
+  of 2026-09-17.** The `ProjectTemplates` panel, the New project form and the
+  archive control were removed from the Tracker page to keep it to one focused
+  screen; `listProjectTemplates`, `createProjectFromTemplate`,
+  `saveProjectAsTemplate`, `deleteProjectTemplate`, `createProject` and
+  `archiveProject` remain deployed and tested, so restoring the UI is a client
+  change. What the callables do: a coach starts a project from a
+  built-in preset or a template the team saved from an existing board, and can
+  save the current board — workflow, and optionally its cards — back as a team
+  template. Built-in presets cover robot game, innovation project, season plan,
+  and tournament prep as *process*; no template ships season content, for the
+  same reason the scorer ships only a starter rubric. Preset cards carry a
+  judging-area label (see the Dashboard section) so a seeded board feeds the
+  per-area progress bars immediately.
+- Spreadsheet task import (`functions/src/task-import.ts`, `TaskImportPanel`,
+  `spreadsheet-reader.ts` and `template-workbook.ts` in `src/features/kanban/`,
+  parsing rules in `src/lib/task-import.ts`): a coach uploads a `.xlsx` or
+  `.csv` with a header row. Recognised columns are Type, Title (required),
+  Description, Category, Area, Status, Priority, Assignee, Due date and Labels.
+  The file is parsed in the browser — `read-excel-file` and `papaparse`, both
+  loaded on demand — and previewed row by row. Only validated rows are sent to
+  `importProjectTasks`; the file itself never leaves the device.
+  - **Type** `Subtask` attaches a row to the task above it as a sub-item; a
+    subtask row with no task above it is refused rather than guessed at.
+  - **Category** is matched against the board's categories case-insensitively
+    and created inside the import transaction when it is new, so one file can
+    describe a season's structure as well as its work.
+  - **Status** names a board column, matched by name or id; an unmatched value
+    warns and falls back to the import's default column. Capacity is then
+    checked per target column rather than once against the default.
+  - **Assignee** is a display name or the address the member signs in with.
+    Matching happens in the `resolveImportAssignees` callable (coach-only)
+    because the address lives in Firebase Auth and `users/{uid}` is readable
+    only by its owner; only the resolved id and display name come back, and an
+    unknown or ambiguous value imports unassigned with the reason shown rather
+    than blocking the row.
+  - The **standard template** is a fixed file, `public/first-pit-task-template.xlsx`,
+    authored by `npm run template:build` from `scripts/data/fll-standard-task-list.json`
+    — the team's own 12-week, 48-task plan across Project Mgmt & Core Values,
+    Innovation Project, Robot Design and Robot Game. It is served statically, so
+    every team starts from the same sheet and ExcelJS stays a devDependency
+    rather than a ~937 KB browser download. `src/lib/task-template.test.ts`
+    parses the shipped file through the importer — including the sheet choice —
+    so a change to either side that breaks the round trip fails the build. A CSV starter file remains for
+    anyone who cannot open `.xlsx`.
+  - **Sheet choice**: a workbook rarely holds one sheet, and reading whichever
+    came first made the template's own instructions tab look like a file with no
+    Title column. `pickTaskSheet` takes the first sheet whose header row maps a
+    Title, falling back to the first sheet so a genuinely wrong file still gets
+    a useful error. The template also puts its plan sheet before the guide.
+  - The template's own column names are understood as they are: **Task
+    Description** is the title, **Notes** the description, **Task ID** is
+    recognised and skipped, **Week** becomes a `week-01` label (zero-padded so
+    it sorts), and plan statuses (Not Started, In Progress, Review, Done) map to
+    board columns. A sheet that names its categories after the judging areas —
+    as this one does — needs no Area column: `areaFromCategory` fills it in, so
+    dashboard area progress works straight after an import.
+  - One import is capped at 200 tasks: the bound is the 500-write transaction
+    budget rather than a single column page.
+
+### Free text may contain "/"
+
+`requireString` refuses "/" because it guards identifiers that become document
+path segments. That rule was applied to prose as well, which blocked ordinary
+task titles — three of the standard template's own 48 tasks, including "Start
+passive/active attachments". `requireText` (in `phase2.ts`) is the validator for
+free text: same trimming and length bounds, no "/" rule, and control characters
+still rejected. Titles, descriptions, comments, category, project, goal and
+template names use it; every identifier still uses `requireString`.
+
+### Planned dates
+
+A task carries `startAt`, `endAt` and `dueAt`: the planned window and the
+deadline, all optional. The table has a column for each (only the due date is
+toned by urgency — a plan is not a deadline), the card dialog edits all three,
+and the import reads Start date / End date / Due date columns. `timelineSpan`
+prefers the window and falls back to opened-to-due, which is what every card
+did before these fields existed, so boards written earlier render unchanged.
+
+### Status changes resolve against the board's workflow
+
+`updateTask` used to set a card's `columnId` to the status id outright. On a
+board with custom columns ("Building", "Testing") no such column exists, so a
+status change moved the card into a column nothing renders and it disappeared
+from the board. The status is now resolved against the card's own project:
+`completed` means that board's completion column, a status that names a real
+column moves the card there, and anything else records the status while the card
+stays put. The move also honours the per-column capacity check, which the old
+path skipped.
 
 ### Data and authorization model
 
 `projects` records contain `teamId`, project metadata, an ordered bounded column
-array, `completedColumnId`, and archival state. Tasks add `projectId`,
-`columnId`, numeric `orderKey`, integer `version`, and `completedAt`.
+array, an ordered bounded `categories` array, `completedColumnId`, and archival
+state. Tasks add `projectId`, `columnId`, `categoryId`, numeric `orderKey`,
+integer `version`, and `completedAt`. Removing a category checks for remaining
+cards through the `tasks (teamId, projectId, categoryId)` composite index.
 
 All mutations use callable Functions. Firestore rules allow active team members
 to read projects and tasks but deny direct writes. Card moves re-check current
 membership, project/team ownership, expected card version, adjacent card IDs,
 and target-column capacity inside a transaction. Movement notifications use
 operation-derived IDs so retries cannot create duplicates.
+
+`projectTemplates` records are team-scoped and hold the same validated column
+array a project holds, plus a bounded snapshot of cards (title, description,
+priority, labels, and column only — never assignments, due dates, or
+attachments, which would be stale or misdirected in a later season). Built-in
+presets have no documents: they live in server code, and `listProjectTemplates`
+is a read-only callable that serves both catalogues so the client never carries
+a second, drifting copy of the definitions. `createProjectFromTemplate` and
+`saveProjectAsTemplate` are coach/team-leader-only, carry idempotency receipts,
+and revalidate a template against the live project and card limits, so a
+template saved before a limit changed can never seed a board the workflow
+editor would then refuse to edit. Templates carry categories as well as
+columns, and a card whose category the template no longer defines seeds without
+one rather than failing the whole template. `deleteProjectTemplate` removes a team
+template; a built-in preset cannot be deleted. All three write audit records.
+
+`importProjectTasks` is coach/team-leader-only and treats uploaded rows as
+untrusted input. It re-validates every row with the same text validator task
+creation uses (which refuses `/`; the browser preview flags those rows up front),
+accepts only the four judging-area ids, and bounds one import to 50 rows — one
+column page — so the whole import is a single transaction and every imported
+card is visible without paging. Cards land in the requested column or the first
+column that is not the completion column, and the column's remaining capacity is
+checked inside the transaction. The idempotency receipt stores the created task
+ids, so a retried import replays its result instead of adding the rows twice.
+Each import writes task history for every card and one audit record. Spreadsheet
+size (1 MB), rows read (500), columns (20), and cell length are capped in the
+browser before anything is previewed.
 
 `ensureDefaultProject` is idempotent. It creates a deterministic Team Board and
 maps legacy `todo`, `inProgress`, `review`, and `completed` tasks into compatible
@@ -375,7 +574,7 @@ per-column counts make multi-page migration resumable without duplicate order
 keys or client-selected gaps.
 
 Project and card limits are enforced transactionally rather than only in the
-client. The same 50-card boundary used by live column subscriptions is checked
+client. The same 150-card boundary used by live column subscriptions is checked
 for legacy creation, Kanban creation, cross-column moves, and same-column
 reordering so a successful write cannot create a hidden 51st card.
 
@@ -383,7 +582,12 @@ reordering so a successful write cannot create a hidden 51st card.
 
 - Unit coverage passes for legacy mapping, ordering, bounded constants, query
   scoping, parsing, and callable routing.
-- Rules/emulator coverage proves project read isolation and direct-write denial.
+- Rules/emulator coverage proves project and template read isolation and
+  direct-write denial, and that only a coach or team leader can create from,
+  save, or delete a template.
+- `test:phase3-emulator` proves a coach import lands its rows with area label,
+  priority, and due date, that a retry replays rather than duplicates, and that
+  students, unknown areas, and unknown columns are refused.
 - Coach, student, mentor, and parent role behavior matches the authorization
   model above.
 - Concurrent stale moves fail with an explicit conflict and the client restores
@@ -395,6 +599,27 @@ reordering so a successful write cannot create a hidden 51st card.
 
 After these criteria pass, the next roadmap decision is whether Release 1.1
 should add recurring task templates or keep further planning features deferred.
+
+### Verification record — 17 September 2026
+
+Static checks and the Phase 3 / Release 1.1 emulator suite pass locally:
+
+- `npm run verify:static` — lint, typecheck, 438 tests across 55 files with
+  coverage, functions build, web build, release check
+- `npm run test:phase3-emulator` — board categories and their milestones,
+  subtask permissions, status-to-column resolution, the three planned dates,
+  slashes in free text, spreadsheet import with per-row columns, created
+  categories, resolved assignees and nested subtasks, and milestone counters
+  following a card between packages
+
+What shipped in this round, in order: board categories; subtasks; the
+spreadsheet import and its standard template; the work-breakdown tree
+(milestones → categories → tasks → subtasks) with outline numbering; start/end
+dates beside the deadline; and the split of the coordination page into tracker
+tabs plus separate Team files and Notifications screens. Deployment still
+requires `firebase deploy --only functions,firestore:indexes` — the new
+`updateProjectCategories` and `resolveImportAssignees` callables and the
+`tasks (teamId, projectId, categoryId)` index are not live yet.
 
 ### Verification record — 24 August 2026
 
@@ -420,17 +645,26 @@ accepted; this verification record does not substitute for those approvals.
 
 ---
 
-## Chat and announcements
+## Chat and announcements (removed)
 
-Phase 4 keeps communication inside active team memberships. `channels`, `messages`, and `announcements` are team-owned records. Team channels are readable by active members, coach channels by coaches/team leaders, and direct channels are only available when the stored policy is `coachesOnly` and all participants are coaches. There is no public chat or discovery path.
+Team chat shipped as Phase 4 and was **removed from the product**. The
+`channels`, `messages`, `announcements`, `announcementAcknowledgements`,
+`channelReads`, and `channelMutes` collections have no rules block any more, so
+the catch-all `match /{document=**} { allow read, write: if false; }` denies
+every client read of anything still stored in them. `functions/src/phase4.ts`,
+all fourteen chat callables, the nightly `enforceMessageRetention` schedule, the
+`/chat` page, and the chat branch of global search are gone.
 
-All writes go through callable Functions. Functions validate membership, channel visibility, policy, mentions, approved file metadata, participant roles, and bounded input sizes before writing. Message mutations are transactional and idempotent when callers provide stable IDs/operation IDs. Reactions are bounded per emoji, messages are soft-deleted, and `purgeExpiredMessages` applies the stored 30/90/365-day retention control.
+Two deliberate leftovers:
 
-Notifications are server-created with deterministic recipient/team/event keys. Mentions, replies, direct messages, and announcements therefore do not create duplicate notification storms. Read state and mute state are user-owned records. Reports use the Phase 2 moderation workflow and keep message content out of logs.
-
-Verification covers callable integration for channels, threads, reactions, mentions, notifications, announcements, acknowledgements, authorized search, reporting, read/mute state, direct-message policy, and attachment denial. Rules integration proves team, coach-only, direct, announcement, read-state, and forged-write isolation.
-
----
+- **Existing documents are not deleted.** Removing a feature is a code change;
+  purging a team's message history is a data decision with its own retention and
+  safeguarding consequences. The rules make the data unreachable, which is the
+  security-relevant half. Deleting it is a separate, explicit migration.
+- **`/chat` redirects to `/hub`.** Notifications already delivered to mailboxes
+  carry `/chat?channel=…` deep links, and `safeInternalRoute` no longer allows
+  that path, so both the router and the deep-link allowlist land the user on a
+  real page instead of a 404.
 
 ## Knowledge and polls
 
@@ -491,21 +725,67 @@ logs are intentionally out of scope.
 
 ## Dashboard, global search, and profile integration
 
+As of 2026-09-17 the coordination screen is split into separate routes rather
+than one stacked page. Four of them are the tracker, presented as tabs of one
+screen by `TrackerTabs` and absent from the sidebar, which carries only
+"Tracker": `/coordination` (the board), `/milestones` (the work-breakdown top
+level), `/import` (the spreadsheet import) and `/board-setup` (columns and
+categories). Import and board setup are coach-only, and read the team's single
+board through `useTeamBoard` rather than owning card subscriptions. They stay
+separate routes so each keeps its deep links — `?goal=`, `?task=` — and loads
+only its own records. `/files` and `/notifications` are their own sidebar
+destinations, since neither is project management. Each loads only its own records, so a team whose policy
+or rules deny one still gets the others, and the phone's four-slot bar carries
+Home, Team hub, Tracker and Milestones (Knowledge moved to the secondary menu).
+Search results for a milestone and a file now deep-link to `/milestones?goal=`
+and `/files?file=`; links stored before the split still resolve to the tracker.
+
 Phase 7 keeps the browser app as the team-scoped hub for the completed MVP
 modules. The Dashboard reads a bounded, server-authorized summary for the
 selected active team. Global search is a callable operation: it first resolves
 the caller's active memberships and then searches only team Questions, Videos,
-Messages, Files, Tasks, Goals, Events, Scores, and the team's own record.
+Files, Tasks, Goals, Scores, and the team's own record.
 Community/public discovery is intentionally excluded.
+
+### Dashboard analytics
+
+The Dashboard (`src/pages/HomePage.tsx`) is laid out as a season analytics
+view. Every figure comes from the one `getDashboard` callable, and every read
+behind it is bounded — count aggregations or small `limit`ed queries — so the
+cost does not grow with a team's season:
+
+- **Overall season progress** — task completion percentage, tasks complete,
+  goals achieved (`status == completed` count), and open tasks.
+- **Progress by area** — the four FIRST LEGO League judging areas
+  (`innovation-project`, `robot-design`, `robot-game`, `core-values`,
+  `DASHBOARD_AREAS` in `functions/src/phase7.ts`). A task belongs to an area when
+  it carries the area id as a label; two count aggregations per area give total
+  and completed. Labels rather than a new task field keep every existing task,
+  rule, and editor unchanged; built-in templates and the spreadsheet importer
+  apply them, and a coach can add one to any card.
+- **Top achievements** — derived, never stored: the best match and practice
+  totals among the recent sessions, then up to three most recently completed
+  goals. A team with neither sees an empty state, not placeholder awards.
+- **Upcoming tasks** — up to five open tasks with a due date, soonest first, so
+  overdue work leads. Tasks with no due date are excluded by the query.
+- **Score trend and latest scores** — the 12 most recent score sessions as a
+  single-series line chart (`src/features/dashboard/ScoreTrendChart.tsx`) with a
+  keyboard- and pointer-driven crosshair, a screen-reader readout, and a table
+  view of the same values, beside a table of the five newest.
+
+The chart geometry, percentages, and highlight copy live in
+`src/lib/dashboard-view.ts`, which is pure and unit-tested. The new queries need
+the `tasks (teamId, labels)`, `tasks (teamId, labels, status)`, and
+`goals (teamId, status, updatedAt desc)` composite indexes.
 
 ### Representative acceptance coverage
 
 The `test:phase7-emulator` workflow covers these representative paths:
 
 1. A coach creates a team and invites a student.
-2. The student receives a role-aware dashboard with team-scoped task data.
+2. The student receives a role-aware dashboard with team-scoped task data,
+   per-area progress from labelled tasks, upcoming due work, and the score trend.
 3. Assignment notifications appear in the selected team summary.
-4. A student can search authorized team messages.
 5. Team Questions are searchable only inside the active membership boundary.
 6. Published team How-to Videos appear in authorized search.
 7. Team records are returned with type labels and internal deep links.
@@ -573,18 +853,52 @@ minors. The only exits are verifying or signing out, and sign-out stays enabled
 offline so nobody is stranded.
 
 `user.reload()` mutates the existing `User` and fires no auth-state change, so
-the gate reloads the page once verification succeeds rather than pretending
-React would re-render.
+`refreshVerificationStatus` returns the new value and callers act on it; the
+gate navigates with a full page load once verification succeeds rather than
+pretending React would re-render.
 
 **This changes behavior for existing accounts:** anyone already signed in with
 an unverified password account meets the gate on their next protected
 navigation.
+
+### Closing the loop: `/auth/action`
+
+`AuthActionPage` (route `/auth/action`, deliberately outside `ProtectedRoute`)
+handles the `?mode=…&oobCode=…` links Firebase Auth mails out. It applies the
+code, then refreshes the signed-in session so the persisted
+`emailVerified: false` does not re-raise the gate on the very next route.
+
+Verification emails are sent with `actionCodeSettings` pointing at this route,
+carrying the destination path in `?next=`. That matters for an invitation: an
+invitee who verifies mid-flow returns to `/join?invite=…` rather than losing
+the deep link. When the origin is not an authorized domain — a per-branch
+preview — `sendVerification` retries without the continue URL, because losing
+the return trip beats losing verification.
+
+The handler covers `resetPassword`, `recoverEmail`, and `verifyAndChangeEmail`
+as well as `verifyEmail`. The console's action URL is one project-wide setting,
+so a handler that only knew `verifyEmail` would break password recovery the
+moment the console was pointed at it.
+
+The gate itself re-asks the server every few seconds while the tab is visible
+and on every focus, so a user who opens the link on their phone finds the
+desktop tab already through.
+
+The Auth emulator records out-of-band codes but never delivers mail. In
+emulator builds only, `latestVerificationLink` reads them from
+`/emulator/v1/projects/{projectId}/oobCodes` and the gate renders the link
+directly; without it local verification is a dead end.
 
 ### Provider configuration this depends on
 
 Email/Password and Google must both be enabled in the project's Authentication
 providers, and every origin serving the app — the Vercel production domain, any
 preview domain, and `localhost` — must be listed under Authorized domains.
+
+For the fully in-app path, set Authentication → Templates → "customize action
+URL" to `https://<production domain>/auth/action`. Without it the links still
+work — Firebase's hosted handler applies the code and then forwards to
+`/auth/action` as the continue URL, which picks the session up from there.
 `AuthPage` already maps `auth/operation-not-allowed`,
 `auth/configuration-not-found` and `auth/unauthorized-domain` to plain-language
 messages, so a missing provider surfaces as guidance rather than a stack trace.
@@ -592,91 +906,32 @@ This is console configuration; it cannot be asserted from the repository.
 
 ---
 
-## Google Calendar and Google Chat integration
+## Calendar and Google Calendar integration (removed)
 
-### Why the two halves are not symmetric
+The in-app calendar and the Google Calendar sync were **removed from the
+product** together. Gone: the `events` and `eventOccurrences` collections and
+their rules and indexes; `createEvent` / `updateEvent` / `deleteEvent`;
+recurrence validation and occurrence materialization in `phase3.ts`; the whole
+of `functions/src/google-calendar.ts` (OAuth consent, token exchange, encrypted
+refresh-token storage, two-way sync, the `syncGoogleCalendars` schedule, and the
+`/google/oauth/callback` route on the `api` function); `src/features/google/`;
+and the calendar section of the Tracker page.
 
-The product ask was "show Google Chat and Google Calendar inside First Pit".
-Calendar supports that; Chat does not, for two independent reasons:
+This also removed the only two Secret Manager dependencies in the codebase,
+`GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY`. Neither secret
+had ever been created in the production project, and because `defineSecret`
+bindings are resolved at deploy time, their absence aborted the whole
+`firebase deploy --only functions` run — which is why 18 functions, including
+the unrelated `listTeamMembers`, were missing from production while the rest
+appeared to deploy fine. With the bindings gone, a functions deploy no longer
+depends on any secret.
 
-- `chat.google.com` and `mail.google.com/chat` both serve
-  `X-Frame-Options: SAMEORIGIN`, so no embed is possible.
-- The Google Chat API requires a **Business or Enterprise Google Workspace
-  account** (`developers.google.com/workspace/chat/get-members`). FLL students,
-  parents and coaches are overwhelmingly on consumer `@gmail.com` accounts,
-  which cannot use it at all.
+`googleIntegrations`, `googleOAuthStates`, and `googleCalendarSync` lost their
+explicit `allow read, write: if false` blocks; the catch-all deny covers them,
+and `tests/firestore-rules-phase3.integration.mjs` asserts that for every role
+including a platform admin.
 
-`calendar.google.com/calendar/embed` sets no framing restriction and the
-Calendar API works for consumer accounts, so Calendar is a real integration and
-Chat is a hand-off link. First Pit's own chat therefore remains the messaging
-surface, which also keeps coach moderation, retention and parent visibility
-applicable — none of which survive a move to Google Chat.
-
-### Calendar: authorization model
-
-`functions/src/google-calendar.ts` owns the whole integration. It uses no Google
-SDK; token exchange and the Calendar REST API are plain `fetch` calls, which
-keeps cold start small and the validators unit-testable.
-
-Three collections, all `allow read, write: if false` — no client path at all:
-
-| Collection | Contents |
-| --- | --- |
-| `googleIntegrations/{userId}` | refresh token, cached access token, granted scopes, Google email |
-| `googleOAuthStates/{state}` | single-use CSRF state binding a consent redirect to the user who began it |
-| `googleCalendarSync/{teamId}` | which calendar mirrors the team, whose account drives it, the sync cursor |
-
-Refresh tokens are AES-256-GCM encrypted with `GOOGLE_TOKEN_ENCRYPTION_KEY`
-before they reach Firestore, so a database export is not a set of live Google
-credentials. Connection status reaches the UI through callables, never a direct
-read.
-
-The `/google/oauth/callback` route on the existing `api` function is
-unauthenticated by necessity — Google redirects a browser to it — and runs
-before `applyCors`, since a top-level navigation carries no `Origin` header. All
-trust rests on the single-use state document, which is consumed before the token
-exchange so a replayed callback cannot mint a second credential.
-
-### Calendar: two-way sync
-
-Correlation is by `extendedProperties.private.firstPitEventId` on the Google
-event plus `googleEventId` on the First Pit event. Conflict resolution is
-last-writer-wins on Google's own `updated` stamp, compared against the
-`googleSyncedAt` already applied.
-
-That comparison is what prevents the echo loop: a push records the `updated`
-value Google returns, so the same change coming back on the next pull is not
-strictly newer and is ignored. `googlePushPending` is the outbound work queue —
-`createEvent` and `updateEvent` set it, a successful push clears it — so an
-interrupted run resumes rather than re-pushing the calendar.
-
-Pull uses Google's `syncToken`; a `410` means the cursor aged out and is
-documented as "discard and full-sync", so it is handled rather than surfaced.
-Runs are bounded (`MAX_SYNC_EVENTS_PER_RUN`, `MAX_TEAMS_PER_SCHEDULED_RUN`).
-`syncGoogleCalendars` polls every 30 minutes; Google's push channels need a
-verified public HTTPS endpoint, which is a deployment concern the emulator
-cannot rehearse.
-
-A cancelled remote event deletes the local mirror only when `source === 'google'`.
-An event that originated in First Pit is kept and merely unlinked — the team owns
-its own record.
-
-### Configuration
-
-Server-side only; none of these may become `VITE_*` variables:
-`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
-`GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `APP_BASE_URL`.
-See `.env.production.example`. With none of them set the integration reports
-`failed-precondition` and the rest of the app is unaffected.
-
-### Event lifecycle gap this closed
-
-Events previously had `createEvent` and nothing else — no edit, no delete. Both
-now exist (`updateEvent`, `deleteEvent`) with the repo's optimistic-concurrency
-contract (`expectedVersion`) and idempotency receipts, because two-way sync is
-meaningless if an event can never change.
-
----
+The `/calendar` route still redirects to `/coordination` for old links.
 
 ## v1 launch hardening (2026-08-29)
 
@@ -703,14 +958,13 @@ A missing stored `version` is read as 1, so existing documents keep working.
 
 ### Safety contract corrections
 
-- **Parent visibility is now enforced.** `parentVisibility` was defined,
-  validated, and stored, but read by no authorization check: `canAccessChannel`
-  returned `true` unconditionally for team channels, so parents read the entire
-  team chat while the product promised the coach controlled that. Team-channel
-  access for role `parent` is now gated on the policy, deny-by-default, and
-  parents are neither notified about nor mentionable in a channel they cannot
-  read. The duplicated copy of that logic in `phase7.ts` was deleted in favour of
-  importing the phase-4 implementation so the two cannot drift again.
+- **Parent visibility was enforced for chat.** `parentVisibility` had been
+  defined, validated, and stored but read by no authorization check, so parents
+  could read the entire team chat while the product promised the coach
+  controlled it. That fix shipped, and the chat removal later retired the whole
+  code path along with the policy's only consumer. `parentVisibility` remains on
+  `teamPolicies` and is inert; the next feature that shows role-scoped content
+  should read it rather than reinventing the check.
 - **The file scan gate is now real.** `createFileMetadata` wrote
   `scanStatus: 'notConfigured'` once and nothing ever changed it, so the
   `blocked`/`clean` states were unreachable and `storage.rules` gated nothing.
@@ -767,6 +1021,17 @@ A missing stored `version` is read as 1, so existing documents keep working.
 
 ### Known follow-ups
 
+- **A category's judging area is not applied to cards created by hand.** The
+  dashboard counts a task toward an area when the task carries the area id as a
+  label. The importer and the built-in templates apply those labels; manual card
+  creation does not, so a category tied to an area does not move that area's bar
+  on its own. The Board setup copy promises it does. Either make creation and
+  category moves inherit the label the way they inherit the milestone, or change
+  the copy.
+- **The dashboard has no per-category progress.** "Progress by area" is the four
+  fixed judging areas; a team's own categories ("Experts Feedback") appear only
+  on the board. Adding them needs a count aggregation per `categoryId` and a
+  `tasks (teamId, categoryId, status)` index.
 - No antivirus/malware scanning runs behind `scanStatus`. The gate and the
   `blocked` state are real; wiring a scanner is a matter of setting
   `scanStatus` from a scanning service instead of from `completeFileUpload`.
@@ -781,7 +1046,7 @@ A missing stored `version` is read as 1, so existing documents keep working.
 This runbook is the release gate for the First Pit MVP. It keeps the pilot
 private, team-scoped, and reversible. It does not enable public team discovery,
 public community feeds, unsupervised student direct messaging, broad file
-access, external calendar sync, or innovation-project workflows.
+access or innovation-project workflows.
 
 ### Release checks
 
@@ -803,7 +1068,7 @@ The parser rejects emulator mode whenever Vite builds with `MODE=production`.
 
 ### Responsive and accessibility matrix
 
-Smoke-test the Dashboard, Auth, Team hub, Coordination, Chat, Knowledge,
+Smoke-test the Dashboard, Auth, Team hub, Coordination, Knowledge,
 Scorer, Search, Profile, and Team admin routes at:
 
 | Profile | Viewport | Required checks |

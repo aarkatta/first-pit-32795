@@ -23,6 +23,7 @@ const project: KanbanProject = {
     { id: 'todo', name: 'To Do', color: 'blue' },
     { id: 'completed', name: 'Completed', color: 'green' }
   ],
+  categories: [{ id: 'build', name: 'Build', color: 'blue', areaId: null, goalId: null }],
   completedColumnId: 'completed',
   archived: false
 };
@@ -39,8 +40,10 @@ function task(overrides: Partial<TrackerTask> = {}): TrackerTask {
     assignedTo: null,
     watcherUserIds: [],
     goalId: null,
+    categoryId: null,
     labels: [],
     checklist: [],
+    subtasks: [],
     attachmentFileIds: [],
     historyCount: 0,
     columnId: 'todo',
@@ -62,7 +65,8 @@ function renderBoard(overrides: Partial<Parameters<typeof BoardTable>[0]> = {}) 
     onCreate: vi.fn(),
     onOpen: vi.fn(),
     onMove: vi.fn(),
-    onPatch: vi.fn()
+    onPatch: vi.fn(),
+    onSubtaskStatus: vi.fn()
   };
   const props = {
     groups: groupBoardTasks(tasks, 'column', project, now),
@@ -76,12 +80,56 @@ function renderBoard(overrides: Partial<Parameters<typeof BoardTable>[0]> = {}) 
     disabled: false,
     selectedIds: new Set<string>(),
     focusGroupId: null,
+    actorUserId: 'zoe',
     ...handlers,
     ...overrides
   };
   render(<DndContext><BoardTable {...props} /></DndContext>);
   return handlers;
 }
+
+describe('BoardTable subtasks', () => {
+  const withSubtasks = task({
+    id: 'parent-1',
+    title: 'Build the team website',
+    assignedTo: 'ada',
+    subtasks: [
+      { id: 'sub-1', title: 'Build UI', status: 'done', assignedTo: 'ada', dueAt: null },
+      { id: 'sub-2', title: 'Create login screen', status: 'todo', assignedTo: 'zoe', dueAt: null }
+    ]
+  });
+
+  it('shows subtask progress and reveals the sub-items only once expanded', () => {
+    renderBoard({ groups: groupBoardTasks([withSubtasks], 'column', project, now) });
+    const toggle = screen.getByRole('button', { name: /Show 2 subtasks of Build the team website/ });
+    expect(toggle).toHaveTextContent('1/2');
+    expect(screen.queryByText('Create login screen')).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getByText('Build UI')).toBeInTheDocument();
+    expect(screen.getByText('Create login screen')).toBeInTheDocument();
+  });
+
+  it('lets the card assignee change a sub-item status without opening the card', () => {
+    const handlers = renderBoard({
+      groups: groupBoardTasks([withSubtasks], 'column', project, now),
+      canManage: false,
+      actorUserId: 'ada'
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Show 2 subtasks/ }));
+    fireEvent.change(screen.getByLabelText('Status for subtask Create login screen'), { target: { value: 'inProgress' } });
+    expect(handlers.onSubtaskStatus).toHaveBeenCalledWith(expect.objectContaining({ id: 'parent-1' }), 'sub-2', 'inProgress');
+  });
+
+  it('gives a teammate with no claim on the card or the sub-item no status control', () => {
+    renderBoard({
+      groups: groupBoardTasks([withSubtasks], 'column', project, now),
+      canManage: false,
+      actorUserId: 'someone-else'
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Show 2 subtasks/ }));
+    expect(screen.queryByLabelText('Status for subtask Build UI')).not.toBeInTheDocument();
+  });
+});
 
 describe('BoardTable groups', () => {
   it('renders one section per board column with its item count, including empty ones', () => {

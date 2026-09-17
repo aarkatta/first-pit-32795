@@ -35,7 +35,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   // Authenticated but unproven: a password account that never opened its
   // verification link gets the gate instead of the app.
   if (requiresEmailVerification(user)) {
-    return <EmailVerificationGate user={user!} auth={auth} online={online} />;
+    const next = `${location.pathname}${location.search}${location.hash}`;
+    return <EmailVerificationGate user={user!} auth={auth} online={online} next={next} />;
   }
 
   return children;

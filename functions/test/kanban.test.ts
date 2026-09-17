@@ -10,8 +10,12 @@ import {
   describeFirestoreFailure,
   legacyOrderKey,
   legacyTaskColumn,
+  categoryGoalId,
+  MAX_CATEGORIES_PER_PROJECT,
   nextProjectVersion,
   orderBetween,
+  projectCategories,
+  requireCategoryId,
   updateProject as updateProjectCommand,
   withBoardErrors
 } from '../src/kanban.js';
@@ -26,11 +30,12 @@ describe('Release 1.1 Kanban invariants', () => {
     expect(MAX_PROJECTS_PER_TEAM).toBe(10);
     expect(MIN_COLUMNS_PER_PROJECT).toBe(2);
     expect(MAX_COLUMNS_PER_PROJECT).toBe(8);
-    expect(MAX_CARDS_PER_COLUMN_PAGE).toBe(50);
-    expect(columnHasCapacity(49)).toBe(true);
-    expect(columnHasCapacity(50)).toBe(false);
-    expect(columnHasCapacity(50, true)).toBe(true);
-    expect(columnHasCapacity(51, true)).toBe(false);
+    expect(MAX_CARDS_PER_COLUMN_PAGE).toBe(150);
+    expect(MAX_CATEGORIES_PER_PROJECT).toBe(20);
+    expect(columnHasCapacity(149)).toBe(true);
+    expect(columnHasCapacity(150)).toBe(false);
+    expect(columnHasCapacity(150, true)).toBe(true);
+    expect(columnHasCapacity(151, true)).toBe(false);
   });
 
   it('maps every legacy tracker status without losing tasks', () => {
@@ -133,3 +138,52 @@ describe('Release 1.1 Kanban invariants', () => {
     await expect(call({ teamId: 'team-1', projectId: '../projects/other', name: 'Board' })).rejects.toThrow(/Project ID is invalid/i);
   });
 });
+
+describe('board categories', () => {
+  it('reads a board saved before categories existed as having none', () => {
+    expect(projectCategories({})).toEqual([]);
+    expect(projectCategories({ categories: null })).toEqual([]);
+  });
+
+  it('keeps the stored shape and drops an unknown judging area', () => {
+    const categories = projectCategories({
+      categories: [
+        { id: 'build', name: 'Build', color: 'blue', areaId: 'robot-design' },
+        { id: 'misc', name: 'Misc', color: 'not-a-colour', areaId: 'not-an-area' }
+      ]
+    });
+    expect(categories).toEqual([
+      { id: 'build', name: 'Build', color: 'blue', areaId: 'robot-design', goalId: null },
+      { id: 'misc', name: 'Misc', color: 'slate', areaId: null, goalId: null }
+    ]);
+  });
+
+  it('rejects a malformed category list rather than guessing', () => {
+    expect(() => projectCategories({ categories: 'build' })).toThrow(HttpsError);
+    expect(() => projectCategories({ categories: ['build'] })).toThrow(HttpsError);
+  });
+
+  it('reads the milestone a category rolls up into', () => {
+    const categories = projectCategories({
+      categories: [
+        { id: 'build', name: 'Build', color: 'blue', areaId: null, goalId: 'goal-1' },
+        { id: 'loose', name: 'Loose', color: 'slate', areaId: null }
+      ]
+    });
+    expect(categoryGoalId(categories, 'build')).toBe('goal-1');
+    expect(categoryGoalId(categories, 'loose')).toBeNull();
+    expect(categoryGoalId(categories, null)).toBeNull();
+    // A card in a category the board no longer defines belongs to no milestone
+    // rather than to a stale one.
+    expect(categoryGoalId(categories, 'deleted')).toBeNull();
+  });
+
+  it('accepts only a category the board actually defines', () => {
+    const categories = projectCategories({ categories: [{ id: 'build', name: 'Build', color: 'blue', areaId: null }] });
+    expect(requireCategoryId(categories, 'build')).toBe('build');
+    expect(requireCategoryId(categories, null)).toBeNull();
+    expect(requireCategoryId(categories, '')).toBeNull();
+    expect(() => requireCategoryId(categories, 'other-board-category')).toThrow(HttpsError);
+  });
+});
+

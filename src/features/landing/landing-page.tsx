@@ -1,11 +1,9 @@
 import {
   ArrowRight,
   BarChart3,
-  CalendarDays,
   Check,
   FolderLock,
   KanbanSquare,
-  MessageSquareLock,
   ShieldCheck,
   Trophy,
   Users,
@@ -68,7 +66,7 @@ const AUDIENCES: Audience[] = [
     id: 'coaches',
     label: 'Coaches',
     headline: 'Run the whole season from one place',
-    sub: 'Hand out tasks, approve new members, post announcements, and spot who is stuck. No more juggling group chats and spreadsheets.',
+    sub: 'Hand out tasks, approve new members, and spot who is stuck. No more juggling spreadsheets.',
     boardTitle: 'Season plan · Regional qualifier',
     groups: [
       {
@@ -77,7 +75,7 @@ const AUDIENCES: Audience[] = [
         rows: [
           { task: 'Approve 2 pending members', owner: 'CO', status: 'working', due: 'Nov 01', type: 'Team admin' },
           { task: 'Book practice table', owner: 'CO', status: 'done', due: 'Nov 02', type: 'Logistics' },
-          { task: 'Publish travel plan', owner: 'MK', status: 'stuck', due: 'Nov 03', type: 'Announcement' },
+          { task: 'Publish travel plan', owner: 'MK', status: 'stuck', due: 'Nov 03', type: 'Logistics' },
           { task: 'Robot design review', owner: 'CO', status: 'working', due: 'Nov 05', type: 'Mentoring' }
         ]
       },
@@ -122,15 +120,15 @@ const AUDIENCES: Audience[] = [
   {
     id: 'parents',
     label: 'Parents',
-    headline: 'Know what is happening, skip the group chat',
-    sub: 'You see the calendar, announcements, and polls the coach shares with families. Student conversations stay private.',
+    headline: 'Know what is happening, without the group chat',
+    sub: 'You see the schedule and the polls the coach shares with families. Student work stays private.',
     boardTitle: 'Family view · Upcoming',
     groups: [
       {
-        title: 'Calendar',
+        title: 'Coming up',
         tone: 'blue',
         rows: [
-          { task: 'Practice — Library room B', owner: 'CO', status: 'done', due: 'Nov 02', type: 'Event' },
+          { task: 'Practice — Library room B', owner: 'CO', status: 'done', due: 'Nov 02', type: 'Practice' },
           { task: 'Regional qualifier', owner: 'CO', status: 'working', due: 'Nov 16', type: 'Tournament' },
           { task: 'Team dinner', owner: 'MK', status: 'working', due: 'Nov 18', type: 'Social' }
         ]
@@ -225,7 +223,7 @@ function BoardPreview({ audience }: { audience: Audience }) {
         </div>
         <div className="mb-5 flex gap-4 border-b border-line pb-2 text-xs text-muted">
           <b className="relative font-semibold text-ink after:absolute after:-bottom-[9px] after:left-0 after:right-0 after:h-0.5 after:bg-blue">Main table</b>
-          <span>Calendar</span>
+          <span>Files</span>
           <span>Scores</span>
           <span>+</span>
         </div>
@@ -279,8 +277,8 @@ function BoardPreview({ audience }: { audience: Audience }) {
 
 const FEATURES = [
   { icon: KanbanSquare, title: 'Tracker', copy: 'Who is doing what, by when. Practice, build, and project work on one board.', tone: 'text-blue bg-blue/10' },
-  { icon: CalendarDays, title: 'Calendar', copy: 'Practices, tournaments, and deadlines in one calendar everyone can actually find.', tone: 'text-orange bg-orange/12' },
-  { icon: MessageSquareLock, title: 'Team chat', copy: 'Team channels and announcements the coach can moderate. Private messages stay off unless the team turns them on.', tone: 'text-purple bg-purple/12' },
+  { icon: Users, title: 'Roster & roles', copy: 'Invite students, mentors, and parents by role, approve who joins, and keep every change on the record.', tone: 'text-orange bg-orange/12' },
+  { icon: ShieldCheck, title: 'Safety controls', copy: 'Private by default, with moderation and reporting built in and a coach deciding what each role can see.', tone: 'text-purple bg-purple/12' },
   { icon: FolderLock, title: 'Storage area', copy: 'Files and photos that stay with the team, checked on upload, and shared only with the people who should see them.', tone: 'text-[#377229] bg-[#dcf1d0]' },
   { icon: Video, title: 'How-to videos', copy: 'A mentor explains it once on video, and every student can watch it again whenever they need to.', tone: 'text-blue bg-blue/10' },
   { icon: Vote, title: 'Polls & questions', copy: 'Make quick decisions with a poll, and keep the answers to good questions around for next season.', tone: 'text-orange bg-orange/12' },
@@ -291,7 +289,7 @@ const FEATURES = [
 const STEPS = [
   { n: '01', title: 'Create your team', copy: 'A coach sets up the team and decides the basics: who can see what, and who can message whom.' },
   { n: '02', title: 'Invite by role', copy: 'Students, mentors, and parents join only when they are invited. Every approval and role change is recorded.' },
-  { n: '03', title: 'Run the season', copy: 'Plan, practice, score, and talk in one place, from kickoff to the last tournament.' }
+  { n: '03', title: 'Run the season', copy: 'Plan, practice, and score in one place, from kickoff to the last tournament.' }
 ];
 
 const STATS = [
@@ -302,8 +300,8 @@ const STATS = [
 ];
 
 const FAQ = [
-  { q: 'Is First Pit safe for students under 13?', a: 'Yes. Teams are invite-only, nobody can search for your team, and private messages are off unless the coach turns them on. Invitations, role changes, and moderation are all logged and cannot be edited. Coaches decide what parents and students can see.' },
-  { q: 'Can parents see the chat?', a: 'Only if the coach allows it. By default, parents see the calendar, announcements, and polls, and never student conversations.' },
+  { q: 'Is First Pit safe for students under 13?', a: 'Yes. Teams are invite-only, nobody can search for your team, and private student information stays inside the team. Invitations, role changes, and moderation are all logged and cannot be edited. Coaches decide what parents and students can see.' },
+  { q: 'What can parents see?', a: 'Only what the coach allows. By default, parents see the team schedule and the polls shared with families, and never private student work.' },
   { q: 'Does it work on phones?', a: 'Yes. First Pit works in any phone browser, so it is just as usable at the pit table as it is at home. A native iOS app is on the way.' },
   { q: 'What does it cost?', a: 'Nothing during the pilot. No credit card, no ads, and we never sell your team\'s data.' },
   { q: 'Where is our data stored?', a: 'On Google Firebase. Each team\'s data is walled off from every other team, and uploads are checked for type and size before anyone can see them.' }
@@ -475,7 +473,7 @@ export function LandingPage() {
         <div className="mb-12 max-w-[42rem]" data-reveal>
           <Badge variant="blue" className="mb-4">Features</Badge>
           <h2 className="m-0 mb-4 font-display text-[clamp(32px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.03em] text-balance">Everything the team needs, in one place.</h2>
-          <p className="m-0 text-lg leading-relaxed text-ink-soft">The tracker, calendar, chat, files, polls, and scorer all know about each other, so nobody has to copy things between apps.</p>
+          <p className="m-0 text-lg leading-relaxed text-ink-soft">The tracker, files, questions, polls, and scorer all know about each other, so nobody has to copy things between apps.</p>
         </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature, index) => (

@@ -23,7 +23,11 @@ export async function bootstrapUserProfile(user: User): Promise<void> {
       const missingDefaults: Record<string, unknown> = {};
       if (typeof profile.displayName !== 'string' || !profile.displayName.trim()) missingDefaults.displayName = fallbackDisplayName(user);
       if (!Object.prototype.hasOwnProperty.call(profile, 'photoURL')) missingDefaults.photoURL = user.photoURL ?? null;
-      if (!Object.prototype.hasOwnProperty.call(profile, 'email')) missingDefaults.email = user.email ?? null;
+      // `email` is deliberately not backfilled here. The rules pin it to the
+      // value written at create time — `affectedKeys().hasOnly(['displayName',
+      // 'photoURL', 'updatedAt'])` — so including it turned every sign-in on a
+      // profile missing the field into a permission-denied that read to the
+      // user as "ask a coach". `updateProfileSettings` writes it server-side.
       if (Object.keys(missingDefaults).length) transaction.update(profileRef, { ...missingDefaults, updatedAt: serverTimestamp() });
     } else {
       transaction.set(profileRef, {

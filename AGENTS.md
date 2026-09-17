@@ -30,8 +30,10 @@ Firebase Realtime Database is not the default MVP datastore.
 
 ## Implementation Order
 
-The MVP and Release 1.1 are implemented. Read `docs/architecture.md` before
-starting work. The table below records the order the modules were built in and
+The MVP and Release 1.1 are implemented. Release 1.1 now covers the
+work-breakdown tracker — milestones, categories, tasks, subtasks, planned dates
+— and spreadsheet import from a standard template. Read `docs/architecture.md`
+before starting work. The table below records the order the modules were built in and
 their dependencies; it is history, not a queue.
 
 | Phase | Scope |
@@ -39,8 +41,7 @@ their dependencies; it is history, not a queue.
 | 0 | Product decisions, repository setup, Firebase emulators, CI, and app shell |
 | 1 | Authentication, profiles, teams, memberships, Firestore model, authorization, rules, audit foundation |
 | 2 | Roles, invitations, membership lifecycle, privacy, youth safety, reporting, and moderation |
-| 3 | Tracker, robot-practice coordination, Calendar, Notifications, and Storage Area |
-| 4 | Team Chat and announcements |
+| 3 | Tracker, robot-practice coordination, Notifications, and Storage Area |
 | 5 | Questions, How-to Videos, and Polls |
 | 6 | Scorer and practice/match history |
 | 7 | Dashboard, search, profile customization, and cross-module integration |
@@ -48,9 +49,12 @@ their dependencies; it is history, not a queue.
 
 Explicitly deferred from MVP: public team discovery, public community feed,
 collaboration marketplace, full innovation-project workflow, advanced robot
-version/parts/maintenance logs, learning courses, external calendar sync,
-offline-first mode, large-scale reputation features, and capabilities requiring
-unproven moderation capacity.
+version/parts/maintenance logs, learning courses, offline-first mode,
+large-scale reputation features, and capabilities requiring unproven moderation
+capacity. Team chat (channels, messages, announcements) and the calendar
+(events, recurrence, Google Calendar sync) were built and then **removed from
+the product**; their collections, rules, indexes and callables are gone, and the
+catch-all deny now covers any documents left behind.
 
 ## Repository Structure
 

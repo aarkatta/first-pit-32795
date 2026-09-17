@@ -38,6 +38,11 @@ import {
   reorderProjectColumns,
   updateProjectColumn,
   parseKanbanTask,
+  parseProjectTemplate,
+  createProjectFromTemplate,
+  deleteProjectTemplate,
+  listProjectTemplates,
+  saveProjectAsTemplate,
   subscribeProjectTasks
 } from './kanban-service';
 
@@ -197,5 +202,47 @@ describe('Kanban tracker migration', () => {
     const result = await ensureDefaultProject('team-1', { signal: controller.signal });
     expect(send).toHaveBeenCalledTimes(1);
     expect(result.complete).toBe(false);
+  });
+  it('routes every template mutation through a callable', async () => {
+    await createProjectFromTemplate({ teamId: 'team-1', operationId: 'op-1', templateId: 'builtin:robot-game', includeCards: true });
+    await saveProjectAsTemplate({ teamId: 'team-1', operationId: 'op-2', projectId: 'project-1', name: 'Our board' });
+    await deleteProjectTemplate('team-1', 'template-1');
+    expect(mocks.httpsCallable).toHaveBeenNthCalledWith(1, 'functions', 'createProjectFromTemplate');
+    expect(mocks.httpsCallable).toHaveBeenNthCalledWith(2, 'functions', 'saveProjectAsTemplate');
+    expect(mocks.httpsCallable).toHaveBeenNthCalledWith(3, 'functions', 'deleteProjectTemplate');
+  });
+
+  it('reads both template catalogues from the one callable that can serve them', async () => {
+    const send = vi.fn().mockResolvedValue({ data: {
+      builtIn: [{ id: 'builtin:robot-game', source: 'builtIn', name: 'Robot game', columns: [{ id: 'todo', name: 'To do', color: 'blue' }, { id: 'done', name: 'Done', color: 'green' }], completedColumnId: 'done', cards: [] }],
+      team: [{ id: 'saved-1', source: 'team', name: 'Our board', columns: [{ id: 'a', name: 'A', color: 'blue' }, { id: 'b', name: 'B', color: 'green' }], completedColumnId: 'b', cards: [{ columnId: 'a', title: 'Card' }] }]
+    } });
+    mocks.httpsCallable.mockReturnValue(send);
+    const catalogue = await listProjectTemplates('team-1');
+    expect(send).toHaveBeenCalledWith({ teamId: 'team-1' });
+    expect(catalogue.builtIn.map((template) => template.id)).toEqual(['builtin:robot-game']);
+    expect(catalogue.team[0].cards).toHaveLength(1);
+  });
+
+  it('survives a template payload that is missing or malformed', async () => {
+    mocks.httpsCallable.mockReturnValue(vi.fn().mockResolvedValue({ data: {} }));
+    await expect(listProjectTemplates('team-1')).resolves.toEqual({ builtIn: [], team: [] });
+    // A template with fewer than two columns could not seed an editable board.
+    expect(parseProjectTemplate({ id: 'x', columns: [{ id: 'a', name: 'A', color: 'blue' }] })).toBeNull();
+    expect(parseProjectTemplate({ columns: [] })).toBeNull();
+    expect(parseProjectTemplate('nope')).toBeNull();
+  });
+
+  it('drops template cards that name a column the template does not have', () => {
+    const template = parseProjectTemplate({
+      id: 'saved-1',
+      columns: [{ id: 'a', name: 'A', color: 'blue' }, { id: 'b', name: 'B', color: 'green' }],
+      completedColumnId: 'gone',
+      cards: [{ columnId: 'a', title: 'Keep' }, { columnId: 'gone', title: 'Drop' }, { columnId: 'b' }]
+    });
+    expect(template?.cards.map((card) => card.title)).toEqual(['Keep']);
+    // A completion column that no longer exists falls back to the last column.
+    expect(template?.completedColumnId).toBe('b');
+    expect(template?.source).toBe('team');
   });
 });

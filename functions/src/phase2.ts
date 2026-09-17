@@ -48,6 +48,28 @@ export function requireString(value: unknown, label: string, maxLength = 128): s
   return trimmed;
 }
 
+/**
+ * Free text a person writes: a task title, a description, a comment.
+ *
+ * `requireString` refuses "/" because it guards identifiers that end up in
+ * document paths. Applying that to prose was over-reach — "passive/active
+ * attachments" and "Robot Design / Build" are ordinary things for a coach to
+ * type, and the standard task template itself contains three of them. Control
+ * characters are still rejected, since nothing legitimate carries them and they
+ * corrupt exports and logs.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+
+export function requireText(value: unknown, label: string, maxLength = 4000): string {
+  if (typeof value !== 'string') throw new HttpsError('invalid-argument', `${label} is required.`);
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || CONTROL_CHARACTERS.test(trimmed)) {
+    throw new HttpsError('invalid-argument', `${label} is invalid.`);
+  }
+  return trimmed;
+}
+
 export function requireEmail(value: unknown): string {
   if (typeof value !== 'string') throw new HttpsError('invalid-argument', 'A valid email address is required.');
   const email = value.trim().toLowerCase();

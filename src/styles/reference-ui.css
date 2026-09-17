@@ -820,9 +820,14 @@ td {
 /* Release 1.1 Kanban project management. */
 .kanban-shell { display: grid; gap: 18px; min-width: 0; }.new-project-form label,
 .add-column-form label,
+.use-template-form label,
+.save-template-form label,
 .kanban-details-form label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 750; }
 .new-project-form input,
 .add-column-form input,
+.use-template-form input,
+.use-template-form select,
+.save-template-form input,
 .column-settings-list input,
 .column-settings-list select,
 .kanban-details-form input,
@@ -851,6 +856,64 @@ td {
 .kanban-card.drag-overlay { width: 270px; box-shadow: 0 18px 35px rgba(21,34,25,.2); transform: rotate(2deg); }
 .kanban-card-topline,
 .kanban-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.category-chip { padding: 4px 7px; border-radius: 5px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #3f4a52; background: #eef1f4; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-chip.color-blue { color: #14507d; background: #dbeafe; }
+.category-chip.color-purple { color: #4c1d95; background: #ede9fe; }
+.category-chip.color-orange { color: #9a4a06; background: #ffedd5; }
+.category-chip.color-green { color: #145c35; background: #dcfce7; }
+.category-chip.color-pink { color: #9d174d; background: #fce7f3; }
+.category-chip.color-slate { color: #334155; background: #e2e8f0; }
+.task-subtasks { margin-top: 18px; }
+.task-subtasks h3 { margin: 0 0 8px; font-size: 14px; }
+.subtask-editor, .subtask-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.subtask-editor li { display: grid; grid-template-columns: minmax(120px,1fr) auto auto auto auto; gap: 6px; align-items: center; }
+.subtask-editor input, .subtask-editor select { min-height: 34px; border: 1px solid #dce1da; border-radius: 7px; padding: 0 8px; background: #fff; }
+.subtask-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid #e6e9e4; border-radius: 8px; background: #fbfcfa; }
+.subtask-list .subtask-title { font-weight: 600; }
+.subtask-status { padding: 3px 7px; border-radius: 5px; font-size: 10px; font-weight: 700; background: #e9ede8; color: #4b5b50; }
+.subtask-status--inProgress { background: #ffead0; color: #9b5703; }
+.subtask-status--done { background: #dcfce7; color: #145c35; }
+.mb-subtask-toggle { display: inline-flex; gap: 4px; align-items: center; min-height: 26px; padding: 0 7px; border: 1px solid #dce1da; border-radius: 6px; background: #fff; font-size: 11px; color: #4b5b50; cursor: pointer; }
+.mb-subtask-toggle:hover { background: #f2f5f1; }
+.mb-row--subtask { background: #fbfcfa; }
+.mb-row--subtask .mb-td { color: #4b5b50; }
+.mb-subtask-rail { display: block; width: 3px; height: 100%; min-height: 22px; margin-inline-start: 10px; background: #e0e5de; border-radius: 2px; }
+.mb-item--subtask { padding-inline-start: 16px; }
+.mb-subtask-branch { color: #95a29a; }
+.mb-item-title--static { font-weight: 500; }
+@media (max-width: 720px) { .subtask-editor li { grid-template-columns: 1fr 1fr; } }
+
+.notification-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.notification-list > li > button { display: grid; gap: 3px; width: 100%; padding: 11px 13px; border: 1px solid #e6e9e4; border-radius: 10px; background: #fff; text-align: start; cursor: pointer; }
+.notification-list > li > button:hover:not(:disabled) { background: #f6f8f5; }
+.notification-list > li.is-unread > button { border-color: #cfe0d4; background: #f7fbf8; }
+.notification-title { display: flex; gap: 8px; align-items: center; font-weight: 650; color: #22302a; }
+.notification-dot { padding: 2px 7px; border-radius: 999px; background: #2f9e6b; color: #fff; font-size: 10px; font-weight: 700; }
+.notification-body { color: #5c6a60; }
+.notification-meta { color: #8a978e; font-size: 11px; }
+
+.goal-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.goal-item { padding: 12px; border: 1px solid #e6e9e4; border-radius: 10px; background: #fff; }
+.goal-item.is-complete { background: #f6faf7; border-color: #cfe6d7; }
+.goal-item__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.goal-item__description { margin: 4px 0 0; color: #5c6a60; font-size: 12px; }
+.goal-item__meta { margin: 6px 0 0; color: #5c6a60; font-size: 12px; }
+.goal-status { padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: #eef1ec; color: #4b5b50; }
+.goal-status--completed { background: #dcfce7; color: #145c35; }
+.goal-status--archived { background: #e2e8f0; color: #334155; }
+.goal-progress { margin-top: 8px; height: 7px; border-radius: 999px; background: #ecefe9; overflow: hidden; }
+.goal-progress > span { display: block; height: 100%; border-radius: 999px; background: #2f9e6b; transition: width .2s ease; }
+.goal-create { display: grid; gap: 8px; }
+
+.project-settings { margin: 0 0 16px; padding: 16px; border: 1px solid #e6e9e4; border-radius: 12px; background: #fff; }
+.project-settings > h3 { margin: 0 0 4px; font-size: 15px; }
+.project-settings h4 { margin: 14px 0 8px; font-size: 13px; }
+.project-settings > h4:first-of-type { margin-top: 10px; }
+
+.category-settings { margin-top: 18px; border-top: 1px solid #e6e9e4; padding-top: 14px; }
+.category-settings h4 { margin: 0 0 4px; font-size: 13px; }
+.settings-note { margin: 0 0 10px; color: #5c6a60; font-size: 12px; line-height: 1.5; }
+.category-settings .column-settings-list form { grid-template-columns: minmax(110px,1fr) auto auto 34px 34px auto auto; }
 .priority-chip { padding: 4px 6px; border-radius: 5px; color: #4b5b50; background: #e9ede8; font-size: 8px; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; }
 .priority-chip.priority-urgent { color: #a51d31; background: #ffe1e6; }
 .priority-chip.priority-high { color: #9b5703; background: #ffead0; }
@@ -877,6 +940,18 @@ td {
 .column-settings-list { display: grid; gap: 8px; margin: 14px 0; }
 .column-settings-list form { display: grid; grid-template-columns: minmax(120px,1fr) auto auto 34px 34px auto auto; align-items: center; gap: 6px; }
 .column-settings-list button { min-height: 34px; border: 1px solid #dce1da; border-radius: 7px; background: #fff; }
+.project-templates { border-top: 1px solid var(--line); padding-top: 12px; }
+.project-templates summary { cursor: pointer; font-size: 12px; font-weight: 800; }
+.use-template-form,
+.save-template-form { display: grid; gap: 10px; margin: 14px 0; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.save-template-form { border-bottom: 0; }
+.use-template-form button,
+.save-template-form button { justify-self: start; }
+.template-preview { display: grid; gap: 4px; margin: 0; color: var(--muted); font-size: 11px; }
+.template-columns { color: var(--ink); font-weight: 700; }
+.template-note { margin: 0; color: var(--muted); font-size: 11px; }
+.saved-template-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.saved-template-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; font-size: 12px; }
 .completed-choice { display: flex; align-items: center; gap: 5px; font-size: 10px; white-space: nowrap; }
 .danger-text { padding: 7px 9px; border: 0; color: #ac2f40; background: transparent; font-size: 11px; font-weight: 750; }
 .archive-project { justify-self: start; }
@@ -925,6 +1000,7 @@ td {
   .column-settings-list form > input { grid-column: 1 / -1; }
   .new-project-form,
 .add-column-form { display: grid; }
+  .saved-template-list li { grid-template-columns: minmax(0, 1fr) auto; }
   .details-grid { grid-template-columns: 1fr; }
 }
 

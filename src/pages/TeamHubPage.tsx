@@ -17,8 +17,7 @@ import { useOnlineStatus } from '@/lib/use-online-status';
  * went anywhere.
  */
 const WORKSPACE_LINKS = [
-  { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, calendar, and team files' },
-  { to: '/chat', label: 'Team chat', hint: 'Channels and announcements' },
+  { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, and team files' },
   { to: '/knowledge', label: 'Knowledge', hint: 'Questions, how-to videos, and polls' },
   { to: '/scorer', label: 'Scorer', hint: 'Practice and match scoring history' },
   { to: '/search', label: 'Search', hint: 'Find work across every module' },
@@ -211,7 +210,7 @@ export function TeamHubPage() {
           <span className="eyebrow">LEAVE THIS TEAM</span>
           <h3>Leave {teamName}</h3>
           <p>
-            Leaving removes your access to this team's tasks, files, chat, and scores. A coach has to invite you back.
+            Leaving removes your access to this team's tasks, files, and scores. A coach has to invite you back.
             {coachCount === 1 && isCoachOrLeader(activeTeam) ? ' You are currently the only coach, so transfer leadership before leaving.' : ''}
           </p>
           {confirmingLeave ? (

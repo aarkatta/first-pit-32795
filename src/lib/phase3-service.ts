@@ -14,6 +14,7 @@ import {
 import { getDownloadURL, ref, uploadBytesResumable, type FirebaseStorage } from 'firebase/storage';
 import { getFirebaseServices } from './firebase';
 import { call } from './callable';
+import type { SubtaskStatus, TeamGoal } from './domain';
 
 
 export type TaskMutationInput = {
@@ -36,14 +37,55 @@ export function createTask(input: TaskMutationInput) {
   return call<TaskMutationInput, { taskId: string }>('createTask', input);
 }
 
-export function updateTask(input: { teamId: string; taskId: string; operationId: string; expectedVersion?: number; status?: TaskMutationInput['status']; checklist?: TaskMutationInput['checklist']; comment?: string; title?: string; description?: string; priority?: TaskMutationInput['priority']; assignedTo?: string | null; watcherUserIds?: string[]; goalId?: string | null; labels?: string[]; dueAt?: string | null }) {
+export function updateTask(input: { teamId: string; taskId: string; operationId: string; expectedVersion?: number; status?: TaskMutationInput['status']; checklist?: TaskMutationInput['checklist']; comment?: string; title?: string; description?: string; priority?: TaskMutationInput['priority']; assignedTo?: string | null; watcherUserIds?: string[]; goalId?: string | null; labels?: string[]; dueAt?: string | null; startAt?: string | null; endAt?: string | null; categoryId?: string | null; subtasks?: SubtaskInput[]; subtaskStatus?: { id: string; status: SubtaskStatus } }) {
   return call<typeof input, { taskId: string; version: number }>('updateTask', input);
 }
+
+/**
+ * A coach sends the whole subtask list; a student sends only `subtaskStatus`,
+ * which is the one subtask field they may change on a card assigned to them or
+ * on a sub-item assigned to them.
+ */
+export type SubtaskInput = { id: string; title: string; status: SubtaskStatus; assignedTo?: string | null; dueAt?: string | null };
 
 /** A goal written before versions existed counts as version 1. */
 export function goalVersion(goal: { version?: number } | null | undefined): number {
   const version = Math.trunc(Number(goal?.version ?? 1));
   return Number.isSafeInteger(version) && version >= 1 ? version : 1;
+}
+
+/**
+ * Active goals for a team, bounded like every other board query. The board
+ * needs this so a card can be linked to a goal: the counters a goal shows are
+ * maintained from that link, and without it they stay at 0/0 forever.
+ */
+export async function listActiveTeamGoals(firestore: Firestore, teamId: string, max = 50): Promise<TeamGoal[]> {
+  const snapshot = await getDocs(query(
+    collection(firestore, 'goals'),
+    where('teamId', '==', teamId),
+    where('status', '==', 'active'),
+    orderBy('updatedAt', 'desc'),
+    limit(max)
+  ));
+  return snapshot.docs.map((document) => parseTeamGoal(document.id, document.data() as Record<string, unknown>));
+}
+
+export function parseTeamGoal(id: string, data: Record<string, unknown>): TeamGoal {
+  const version = Math.trunc(Number(data.version ?? 1));
+  return {
+    id,
+    teamId: String(data.teamId ?? ''),
+    createdBy: String(data.createdBy ?? ''),
+    title: String(data.title ?? 'Untitled goal'),
+    description: String(data.description ?? ''),
+    status: ['active', 'completed', 'archived'].includes(String(data.status)) ? data.status as TeamGoal['status'] : 'active',
+    dueAt: data.dueAt ?? null,
+    taskCount: Math.max(0, Number(data.taskCount ?? 0)),
+    completedTaskCount: Math.max(0, Number(data.completedTaskCount ?? 0)),
+    version: Number.isSafeInteger(version) && version >= 1 ? version : 1,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt
+  };
 }
 
 export function createGoal(input: { teamId: string; goalId?: string; operationId: string; title: string; description?: string; dueAt?: string | null }) {
@@ -59,18 +101,6 @@ export function createGoal(input: { teamId: string; goalId?: string; operationId
  */
 export function updateGoal(input: { teamId: string; goalId: string; operationId: string; expectedVersion: number; title?: string; description?: string; status?: 'active' | 'completed' | 'archived'; dueAt?: string | null }) {
   return call<typeof input, { goalId: string; version: number }>('updateGoal', input);
-}
-
-export function createEvent(input: { teamId: string; eventId?: string; operationId: string; title: string; description?: string; startsAt: string; endsAt: string; location?: string | null; eventType?: 'meeting' | 'practice' | 'competition' | 'deadline' | 'reminder'; recurrence?: { frequency: 'weekly' | 'monthly'; interval: number; count?: number; until?: string }; reminderMinutes?: number[]; linkedTaskIds?: string[] }) {
-  return call<typeof input, { eventId: string; recurring: boolean }>('createEvent', input);
-}
-
-export function updateEvent(input: { teamId: string; eventId: string; operationId: string; expectedVersion: number; title?: string; description?: string; startsAt?: string; endsAt?: string; location?: string | null; eventType?: 'meeting' | 'practice' | 'competition' | 'deadline' | 'reminder'; reminderMinutes?: number[]; linkedTaskIds?: string[] }) {
-  return call<typeof input, { eventId: string; version: number }>('updateEvent', input);
-}
-
-export function deleteEvent(teamId: string, eventId: string) {
-  return call<{ teamId: string; eventId: string }, { eventId: string; occurrencesRemoved: number; removedFromGoogle: boolean }>('deleteEvent', { teamId, eventId });
 }
 
 export function markNotificationRead(teamId: string, notificationId: string) {

@@ -169,91 +169,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/teamPolicies/$(teamId)).data.fileSharing == 'teamOnly';
     }
 
-    function isCoach(teamId) {
-      return isTeamAdmin(teamId);
-    }
-
-    // Mirrors parentsCanReadTeamContent in functions/src/phase4.ts. The client
-    // reads channels and messages straight from Firestore, so enforcing this
-    // only in the callables would leave the read path wide open: a missing or
-    // malformed policy keeps parents out, matching DEFAULT_TEAM_POLICY.
-    function parentsCanReadTeamContent(teamId) {
-      return exists(/databases/$(database)/documents/teamPolicies/$(teamId))
-        && get(/databases/$(database)/documents/teamPolicies/$(teamId)).data.parentVisibility == 'teamMembers';
-    }
-
-    function isTeamParent(teamId) {
-      return isActiveMember(teamId)
-        && get(membershipPath(teamId, request.auth.uid)).data.role == 'parent';
-    }
-
-    function canReadTeamVisibleContent(teamId) {
-      return isTeamParent(teamId) ? parentsCanReadTeamContent(teamId) : true;
-    }
-
-    function directMessagingEnabled(teamId) {
-      return exists(/databases/$(database)/documents/teamPolicies/$(teamId))
-        && get(/databases/$(database)/documents/teamPolicies/$(teamId)).data.directMessaging == 'coachesOnly';
-    }
-
-    function canReadChannel(data) {
-      return data.teamId is string
-        && data.archived == false
-        && isActiveMember(data.teamId)
-        && ((data.visibility == 'team' && canReadTeamVisibleContent(data.teamId))
-          || (data.visibility == 'coaches' && isCoach(data.teamId))
-          || (data.visibility == 'direct'
-            && directMessagingEnabled(data.teamId)
-            && isCoach(data.teamId)
-            && data.participantUserIds.hasAny([request.auth.uid])));
-    }
-
-    function canReadMessage(data) {
-      return data.teamId is string
-        && data.channelId is string
-        && get(/databases/$(database)/documents/channels/$(data.channelId)).data.archived == false
-        && isActiveMember(data.teamId)
-        && ((data.visibility == 'team' && canReadTeamVisibleContent(data.teamId))
-          || (data.visibility == 'coaches' && isCoach(data.teamId))
-          || (data.visibility == 'direct'
-            && directMessagingEnabled(data.teamId)
-            && isCoach(data.teamId)
-            && data.participantUserIds.hasAny([request.auth.uid])));
-    }
-
-    match /channels/{channelId} {
-      allow get, list: if canReadChannel(resource.data);
-      allow create, update, delete: if false;
-    }
-
-    match /messages/{messageId} {
-      allow get, list: if canReadMessage(resource.data);
-      allow create, update, delete: if false;
-    }
-
-    match /announcements/{announcementId} {
-      allow get, list: if isActiveMember(resource.data.teamId)
-        && exists(/databases/$(database)/documents/channels/$(resource.data.channelId))
-        && get(/databases/$(database)/documents/channels/$(resource.data.channelId)).data.teamId == resource.data.teamId
-        && canReadChannel(get(/databases/$(database)/documents/channels/$(resource.data.channelId)).data);
-      allow create, update, delete: if false;
-    }
-
-    match /announcementAcknowledgements/{acknowledgementId} {
-      allow get, list: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create, update, delete: if false;
-    }
-
-    match /channelReads/{readId} {
-      allow get, list: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create, update, delete: if false;
-    }
-
-    match /channelMutes/{muteId} {
-      allow get, list: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create, update, delete: if false;
-    }
-
     match /tasks/{taskId} {
       allow get, list: if isPlatformAdmin() || (signedIn() && hasTeamFields(resource.data) && isActiveMember(resource.data.teamId));
       allow create, update, delete: if false;
@@ -264,17 +179,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /projectTemplates/{templateId} {
+      allow get, list: if isPlatformAdmin() || (signedIn() && hasTeamFields(resource.data) && isActiveMember(resource.data.teamId));
+      allow create, update, delete: if false;
+    }
+
     match /goals/{goalId} {
-      allow get, list: if isPlatformAdmin() || (signedIn() && hasTeamFields(resource.data) && isActiveMember(resource.data.teamId));
-      allow create, update, delete: if false;
-    }
-
-    match /events/{eventId} {
-      allow get, list: if isPlatformAdmin() || (signedIn() && hasTeamFields(resource.data) && isActiveMember(resource.data.teamId));
-      allow create, update, delete: if false;
-    }
-
-    match /eventOccurrences/{occurrenceId} {
       allow get, list: if isPlatformAdmin() || (signedIn() && hasTeamFields(resource.data) && isActiveMember(resource.data.teamId));
       allow create, update, delete: if false;
     }
@@ -421,23 +331,6 @@ service cloud.firestore {
     }
 
     match /phase6Operations/{operationId} {
-      allow read, write: if false;
-    }
-
-    // Google integration state is Admin SDK only, with no client path at all.
-    // A refresh token is a live credential for a person's calendar and the
-    // OAuth state document is the CSRF defence for the callback, so neither is
-    // ever readable by a signed-in client. Connection status and the team sync
-    // settings reach the UI through callables, which can redact.
-    match /googleIntegrations/{userId} {
-      allow read, write: if false;
-    }
-
-    match /googleOAuthStates/{state} {
-      allow read, write: if false;
-    }
-
-    match /googleCalendarSync/{teamId} {
       allow read, write: if false;
     }
 

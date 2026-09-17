@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
+  authEmailSender: vi.fn(() => 'noreply@first-pit.firebaseapp.com'),
   signInWithEmail: vi.fn(),
   signUpWithEmail: vi.fn(),
   signInWithGoogle: vi.fn(),
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
 vi.mock('@/lib/auth', () => ({
+  authEmailSender: mocks.authEmailSender,
   signInWithEmail: mocks.signInWithEmail,
   signUpWithEmail: mocks.signUpWithEmail,
   signInWithGoogle: mocks.signInWithGoogle,
@@ -125,6 +127,31 @@ describe('AuthPage', () => {
     expect(screen.getByText(/recovery email has been sent/i)).toBeInTheDocument();
   });
 
+  // Sending testers to "ask a coach" over a denied profile write cost a whole QA
+  // round: the account is seconds old and belongs to no team, so there is no
+  // team access to check. The Firebase code has to travel with the message.
+  it('names the real failure when the profile write is denied', async () => {
+    mocks.bootstrapUserProfile.mockRejectedValue(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }));
+
+    expect(await screen.findByText(/could not save your private profile \(permission-denied\)/i)).toBeTruthy();
+    expect(screen.queryByText(/ask a coach/i)).toBeNull();
+  });
+
+  it('points a password recovery at the spam folder and at Google accounts', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'recover@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send recovery email' }));
+
+    const notice = await screen.findByText(/recovery email has been sent/i);
+    expect(notice.textContent).toContain('spam or junk folder');
+    expect(notice.textContent).toContain('noreply@first-pit.firebaseapp.com');
+    expect(notice.textContent).toMatch(/no password to reset/i);
+  });
+
   it('shows a plain-language auth error', async () => {
     mocks.signInWithEmail.mockRejectedValue(new Error('auth/invalid-credential'));
     renderPage();
@@ -160,7 +187,7 @@ describe('AuthPage', () => {
 
     expect(await screen.findByText(/account was created, but the verification email could not be sent/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user));
+    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/hub'));
     expect(mocks.bootstrapUserProfile).toHaveBeenCalledWith(user);
     expect(mocks.signUpWithEmail).toHaveBeenCalledTimes(1);
   });
@@ -171,7 +198,7 @@ describe('AuthPage', () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Resend verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user));
+    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/hub'));
     expect(screen.getByRole('status')).toHaveTextContent(/new verification email has been sent/i);
   });
 });

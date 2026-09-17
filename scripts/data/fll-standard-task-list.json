@@ -1,0 +1,396 @@
+{
+  "source": "FLL_Project_Plan_Task_List.xlsx, supplied by the team 2026-09-17",
+  "sheetName": "FLL Project Plan",
+  "categories": [
+    "Project Mgmt & Core Values",
+    "Innovation Project",
+    "Robot Design",
+    "Robot Game"
+  ],
+  "rows": [
+    {
+      "taskId": "FLL-W01-01",
+      "week": 1,
+      "category": "Project Mgmt & Core Values",
+      "title": "Establish roles; set goals; review rubrics",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W01-02",
+      "week": 1,
+      "category": "Innovation Project",
+      "title": "Brainstorm problems; unpack season theme",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W01-03",
+      "week": 1,
+      "category": "Robot Design",
+      "title": "Sort parts; build basic drive bases",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W01-04",
+      "week": 1,
+      "category": "Robot Game",
+      "title": "Build mission models; review rulebook",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W02-05",
+      "week": 2,
+      "category": "Project Mgmt & Core Values",
+      "title": "Create team contract; practice teamwork",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W02-06",
+      "week": 2,
+      "category": "Innovation Project",
+      "title": "Select 1-2 problems; identify experts",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W02-07",
+      "week": 2,
+      "category": "Robot Design",
+      "title": "Test base chassis stability",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W02-08",
+      "week": 2,
+      "category": "Robot Game",
+      "title": "Select initial missions; map routes",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W03-09",
+      "week": 3,
+      "category": "Project Mgmt & Core Values",
+      "title": "Discuss \"Inclusion\" & \"Discovery\"",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W03-10",
+      "week": 3,
+      "category": "Innovation Project",
+      "title": "Finalize problem; research existing solutions",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W03-11",
+      "week": 3,
+      "category": "Robot Design",
+      "title": "Start passive/active attachments",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W03-12",
+      "week": 3,
+      "category": "Robot Game",
+      "title": "Write pseudocode; basic navigation",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W04-13",
+      "week": 4,
+      "category": "Project Mgmt & Core Values",
+      "title": "Appoint weekly PM; team-building",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W04-14",
+      "week": 4,
+      "category": "Innovation Project",
+      "title": "Brainstorm solutions; schedule interview",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W04-15",
+      "week": 4,
+      "category": "Robot Design",
+      "title": "Standardize attachment mechanisms",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W04-16",
+      "week": 4,
+      "category": "Robot Game",
+      "title": "Program first 2-3 missions on mat",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W05-17",
+      "week": 5,
+      "category": "Project Mgmt & Core Values",
+      "title": "Review goals; practice Gracious Professionalism",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W05-18",
+      "week": 5,
+      "category": "Innovation Project",
+      "title": "Select final solution; draft design",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W05-19",
+      "week": 5,
+      "category": "Robot Design",
+      "title": "Add sensors (color, gyro) to robot",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W05-20",
+      "week": 5,
+      "category": "Robot Game",
+      "title": "Implement line following/gyro turns",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W06-21",
+      "week": 6,
+      "category": "Project Mgmt & Core Values",
+      "title": "Mid-season check-in; balance workload",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W06-22",
+      "week": 6,
+      "category": "Innovation Project",
+      "title": "Conduct expert interview; gather feedback",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W06-23",
+      "week": 6,
+      "category": "Robot Design",
+      "title": "Refine base robot based on sensors",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W06-24",
+      "week": 6,
+      "category": "Robot Game",
+      "title": "Combine missions into a single run",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W07-25",
+      "week": 7,
+      "category": "Project Mgmt & Core Values",
+      "title": "Discuss \"Impact\" & \"Innovation\"",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W07-26",
+      "week": 7,
+      "category": "Innovation Project",
+      "title": "Modify solution based on feedback",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W07-27",
+      "week": 7,
+      "category": "Robot Design",
+      "title": "Finalize attachments; outline presentation",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W07-28",
+      "week": 7,
+      "category": "Robot Game",
+      "title": "Program secondary missions (aim for 5-6)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W08-29",
+      "week": 8,
+      "category": "Project Mgmt & Core Values",
+      "title": "Start preparing for judging format",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W08-30",
+      "week": 8,
+      "category": "Innovation Project",
+      "title": "Plan 5-min presentation; assign parts",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W08-31",
+      "week": 8,
+      "category": "Robot Design",
+      "title": "Create one-page Executive Summary",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W08-32",
+      "week": 8,
+      "category": "Robot Game",
+      "title": "Run 2.5-min timed matches",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W09-33",
+      "week": 9,
+      "category": "Project Mgmt & Core Values",
+      "title": "Practice Core Values Q&A",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W09-34",
+      "week": 9,
+      "category": "Innovation Project",
+      "title": "Draft & rehearse Project presentation",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W09-35",
+      "week": 9,
+      "category": "Robot Design",
+      "title": "Practice explaining code & design",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W09-36",
+      "week": 9,
+      "category": "Robot Game",
+      "title": "Fix unreliable code; optimize transitions",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W10-37",
+      "week": 10,
+      "category": "Project Mgmt & Core Values",
+      "title": "Share journey (Outreach)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W10-38",
+      "week": 10,
+      "category": "Innovation Project",
+      "title": "Finalize props; time the presentation",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W10-39",
+      "week": 10,
+      "category": "Robot Design",
+      "title": "Print clean, commented code copies",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W10-40",
+      "week": 10,
+      "category": "Robot Game",
+      "title": "Back-to-back timed runs; finalize order",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W11-41",
+      "week": 11,
+      "category": "Project Mgmt & Core Values",
+      "title": "Full mock judging session",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W11-42",
+      "week": 11,
+      "category": "Innovation Project",
+      "title": "Polish delivery (eye contact, volume)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W11-43",
+      "week": 11,
+      "category": "Robot Design",
+      "title": "Articulate iteration (what failed/worked)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W11-44",
+      "week": 11,
+      "category": "Robot Game",
+      "title": "Freeze code; focus on consistency",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W12-45",
+      "week": 12,
+      "category": "Project Mgmt & Core Values",
+      "title": "Pack toolkit; finalize consent forms",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W12-46",
+      "week": 12,
+      "category": "Innovation Project",
+      "title": "Final run-throughs; pack prototype",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W12-47",
+      "week": 12,
+      "category": "Robot Design",
+      "title": "Charge robot; backup code on USB",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FLL-W12-48",
+      "week": 12,
+      "category": "Robot Game",
+      "title": "Light practice; celebrate the journey!",
+      "status": "Not Started",
+      "notes": ""
+    }
+  ]
+}

@@ -23,7 +23,8 @@ const navItems = [
   { to: '/', label: 'Home', icon: '⌂', mobile: true },
   { to: '/hub', label: 'Team hub', icon: '▤', mobile: true },
   { to: '/coordination', label: 'Tracker', icon: '▦', mobile: true },
-  { to: '/chat', label: 'Chat', icon: '◌', mobile: true },
+  { to: '/files', label: 'Team files', icon: '🗎' },
+  { to: '/notifications', label: 'Notifications', icon: '◔' },
   { to: '/knowledge', label: 'Knowledge', icon: '?', mobile: true },
   { to: '/scorer', label: 'Scorer', icon: '◫' },
   { to: '/search', label: 'Search', icon: '⌕' },
@@ -42,13 +43,17 @@ function getBrandMark(appName: string) {
  * in its `<h1>` and in `document.title` — as Home.
  */
 const routeLabels: { to: string; label: string }[] = [
+  // Tabs of the tracker rather than destinations of their own, so they carry a
+  // page title without a navigation entry.
+  { to: '/milestones', label: 'Milestones' },
+  { to: '/import', label: 'Import tasks' },
+  { to: '/board-setup', label: 'Board setup' },
   { to: '/profile', label: 'Profile & settings' },
   { to: '/settings', label: 'Profile & settings' },
   { to: '/teams/new', label: 'Create a team' },
   { to: '/join', label: 'Join a team' },
   { to: '/auth', label: 'Sign in' },
   { to: '/tracker', label: 'Tracker' },
-  { to: '/calendar', label: 'Tracker' }
 ];
 
 function pageLabel(pathname: string) {

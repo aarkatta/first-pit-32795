@@ -1,4 +1,4 @@
-const allowedRoutes = new Set(['/hub', '/coordination', '/chat', '/knowledge', '/scorer', '/admin', '/search', '/profile']);
+const allowedRoutes = new Set(['/hub', '/coordination', '/milestones', '/import', '/board-setup', '/files', '/notifications', '/knowledge', '/scorer', '/admin', '/search', '/profile']);
 
 /** Accept only internal, known routes so notification data cannot redirect outside the app. */
 export function safeInternalRoute(value: unknown) {

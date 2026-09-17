@@ -50,7 +50,7 @@ describe('AppShell route and canonical profile metadata', () => {
   });
 
   it('switches teams, hides admin for students, and signs out once', async () => {
-    render(<MemoryRouter initialEntries={['/chat']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Chat content</p></AppShell></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/knowledge']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Knowledge content</p></AppShell></MemoryRouter>);
     expect(screen.queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team' }), { target: { value: 'team-2' } });
     expect(setActiveTeamId).toHaveBeenCalledWith('team-2');
@@ -58,7 +58,7 @@ describe('AppShell route and canonical profile metadata', () => {
     await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
   });
 
-  it('keeps five primary mobile destinations and exposes all permitted secondary actions', () => {
+  it('keeps four primary mobile destinations and exposes all permitted secondary actions', () => {
     mocks.useTeamContext.mockReturnValue({
       teams: [
         { teamId: 'team-1', role: 'student', status: 'active', team: { name: 'Robotics' } },
@@ -69,12 +69,18 @@ describe('AppShell route and canonical profile metadata', () => {
     });
     render(<MemoryRouter initialEntries={['/scorer']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Scorer content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
-    expect(within(primary).getAllByRole('link')).toHaveLength(5);
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Team hub', '▦Tracker', '◌Chat', '?Knowledge']);
+    expect(within(primary).getAllByRole('link')).toHaveLength(4);
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Team hub', '▦Tracker', '?Knowledge']);
 
     fireEvent.click(screen.getByLabelText('Open workspace menu'));
     const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
     expect(within(secondary).getByRole('link', { name: 'Scorer' })).toBeInTheDocument();
+    expect(within(secondary).getByRole('link', { name: 'Team files' })).toBeInTheDocument();
+    expect(within(secondary).getByRole('link', { name: 'Notifications' })).toBeInTheDocument();
+    // Milestones, Import tasks and Board setup are tabs of the tracker, not
+    // destinations of their own.
+    expect(within(secondary).queryByRole('link', { name: 'Milestones' })).not.toBeInTheDocument();
+    expect(within(secondary).queryByRole('link', { name: 'Board setup' })).not.toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'Search' })).toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'Team admin' })).toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'Profile & settings' })).toBeInTheDocument();
