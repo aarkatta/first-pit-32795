@@ -78,6 +78,26 @@ describe('JoinTeamPage', () => {
     expect(await screen.findByText('Team team-1')).toBeInTheDocument();
   });
 
+  it('refreshes a stale pre-verification token once before refusing the invitation', async () => {
+    const getIdToken = vi.fn().mockResolvedValue('fresh');
+    mocks.useAuth.mockReturnValue({ user: { email: 'student@example.com', emailVerified: true, getIdToken } });
+    mocks.getDoc
+      .mockRejectedValueOnce(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }))
+      .mockResolvedValueOnce(invitationSnapshot());
+    renderPage();
+    expect(await screen.findByRole('button', { name: /accept and join as student/i })).toBeInTheDocument();
+    expect(getIdToken).toHaveBeenCalledWith(true);
+  });
+
+  it('names the signed-in address when the invitation belongs to another one', async () => {
+    const getIdToken = vi.fn().mockResolvedValue('fresh');
+    mocks.useAuth.mockReturnValue({ user: { email: 'someone-else@example.com', emailVerified: true, getIdToken } });
+    mocks.getDoc.mockRejectedValue(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+    renderPage();
+    expect(await screen.findByText(/you are signed in as someone-else@example.com/i)).toBeInTheDocument();
+    expect(getIdToken).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a revoked invitation in plain language', async () => {
     mocks.useAuth.mockReturnValue({ user: { email: 'student@example.com', emailVerified: true } });
     mocks.getDoc.mockImplementation((reference: { collection: string }) =>

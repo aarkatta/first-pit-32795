@@ -129,9 +129,15 @@ export function resendVerificationEmail(user: User, next?: string | null): Promi
  * `reload()` mutates the `User` in place and writes it back to persistence,
  * but fires no auth state change, so callers have to act on the return value
  * rather than waiting for a re-render.
+ *
+ * `reload()` does NOT refresh the ID token, and Firestore rules and callables
+ * read `email_verified` from the token. Without a forced refresh a newly
+ * verified invitee keeps a `false` claim for up to an hour and cannot read
+ * their own invitation.
  */
 export async function refreshVerificationStatus(user: User): Promise<boolean> {
   await user.reload();
+  if (user.emailVerified) await user.getIdToken(true);
   return user.emailVerified;
 }
 

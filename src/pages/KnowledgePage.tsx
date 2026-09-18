@@ -6,15 +6,17 @@ import { getFirebaseServices } from '@/lib/firebase';
 import { useTeamContext } from '@/lib/team-context';
 import { canEditKnowledge, type Answer, type Question, type Video, type VideoCategory } from '@/lib/domain';
 import { getRequestState, type RequestState } from '@/lib/request-state';
-import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, createQuestionComment, createVideo, getPollResults, getQuestionTarget, getVideoTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionComments, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, recordVideoWatch, searchQuestions, searchVideos, toggleSavedQuestion, toggleVideoFavorite, updateVideoPublication, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type QuestionComment, type ThreadQuestion } from '@/lib/phase5-service';
+import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, createVideo, getPollResults, getQuestionTarget, getVideoTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, recordVideoWatch, searchQuestions, searchVideos, toggleSavedQuestion, toggleVideoFavorite, updateVideoPublication, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type ThreadQuestion } from '@/lib/phase5-service';
 import { createReport } from '@/lib/phase2-service';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { toDate } from '@/lib/dates';
+import { KNOWLEDGE_RESOURCES } from '@/lib/knowledge-resources';
 import { createOperationId as createResourceId } from '@/lib/ids';
 
-type Tab = 'questions' | 'videos' | 'polls';
-const tabs: Tab[] = ['questions', 'videos', 'polls'];
+type Tab = 'questions' | 'videos' | 'polls' | 'resources';
+const tabs: Tab[] = ['questions', 'videos', 'polls', 'resources'];
+const isTab = (value: string | null): value is Tab => tabs.includes(value as Tab);
 const categories: VideoCategory[] = ['Drivetrain', 'Programming', 'CAD', 'Electronics', 'Autonomous', 'Pit Tips'];
 
 type QuestionThread = {
@@ -22,9 +24,6 @@ type QuestionThread = {
   answers: Answer[];
   answerCursor: KnowledgeCursor | null;
   answerHasMore: boolean;
-  comments: QuestionComment[];
-  commentCursor: KnowledgeCursor | null;
-  commentHasMore: boolean;
 };
 
 function displayDate(value: unknown) {
@@ -41,7 +40,7 @@ export function KnowledgePage() {
   const teamId = activeTeam?.teamId ?? null;
   const [tab, setTab] = useState<Tab>(() => {
     const requested = searchParams.get('tab');
-    return requested === 'videos' || requested === 'polls' ? requested : 'questions';
+    return isTab(requested) ? requested : 'questions';
   });
   const [queryText, setQueryText] = useState('');
   const [scope, setScope] = useState<'team' | 'community'>('team');
@@ -71,7 +70,6 @@ export function KnowledgePage() {
   const [threadStatus, setThreadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [threadError, setThreadError] = useState<unknown>(null);
   const [answerDraft, setAnswerDraft] = useState('');
-  const [commentDraft, setCommentDraft] = useState('');
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [targetMismatch, setTargetMismatch] = useState<'question' | 'video' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -86,7 +84,6 @@ export function KnowledgePage() {
   const contextRef = useRef('');
   const questionOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const answerOperation = useRef<{ fingerprint: string; id: string } | null>(null);
-  const commentOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const videoOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const pollOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const reportOperation = useRef<{ fingerprint: string; id: string } | null>(null);
@@ -156,12 +153,9 @@ export function KnowledgePage() {
     setThreadStatus('loading');
     setThreadError(null);
     try {
-      const [answerPage, commentPage] = await Promise.all([
-        listQuestionAnswers(firestore, question),
-        listQuestionComments(firestore, question)
-      ]);
+      const answerPage = await listQuestionAnswers(firestore, question);
       if (generation !== threadGeneration.current || contextRef.current !== threadContext) return;
-      setThread({ questionId: question.id, answers: answerPage.answers, answerCursor: answerPage.cursor, answerHasMore: answerPage.hasMore, comments: commentPage.comments, commentCursor: commentPage.cursor, commentHasMore: commentPage.hasMore });
+      setThread({ questionId: question.id, answers: answerPage.answers, answerCursor: answerPage.cursor, answerHasMore: answerPage.hasMore });
       setThreadStatus('ready');
     } catch (error) {
       if (generation !== threadGeneration.current || contextRef.current !== threadContext) return;
@@ -196,7 +190,6 @@ export function KnowledgePage() {
     threadGeneration.current += 1;
     questionOperation.current = null;
     answerOperation.current = null;
-    commentOperation.current = null;
     videoOperation.current = null;
     pollOperation.current = null;
     reportOperation.current = null;
@@ -221,7 +214,6 @@ export function KnowledgePage() {
     setThreadStatus('idle');
     setThreadError(null);
     setAnswerDraft('');
-    setCommentDraft('');
     setPersonalStatus(user ? 'loading' : 'ready');
     setPersonalError(null);
     setPollStatus(teamId ? 'loading' : 'idle');
@@ -289,7 +281,7 @@ export function KnowledgePage() {
   }, [teamId]);
   useEffect(() => {
     const requested = searchParams.get('tab');
-    if (requested === 'questions' || requested === 'videos' || requested === 'polls') setTab(requested);
+    if (isTab(requested)) setTab(requested);
   }, [searchParams]);
   useEffect(() => {
     const questionId = searchParams.get('question');
@@ -404,7 +396,6 @@ export function KnowledgePage() {
     setExpandedQuestionId(question.id);
     setThread(null);
     setAnswerDraft('');
-    setCommentDraft('');
     void loadThread(question);
   }
 
@@ -421,23 +412,6 @@ export function KnowledgePage() {
       answerOperation.current = null;
       setAnswerDraft('');
       setQuestions((current) => current.map((entry) => entry.id === question.id ? { ...entry, answerCount: entry.answerCount + 1 } : entry));
-      await loadThread(question);
-    });
-  }
-
-  function submitComment(event: FormEvent<HTMLFormElement>, question: Question) {
-    event.preventDefault();
-    if (!commentDraft.trim()) return;
-    const actionContext = contextKey;
-    const fingerprint = JSON.stringify([question.id, commentDraft.trim()]);
-    const commentId = commentOperation.current?.fingerprint === fingerprint ? commentOperation.current.id : createResourceId('comment');
-    commentOperation.current = { fingerprint, id: commentId };
-    void run(async () => {
-      await createQuestionComment({ questionId: question.id, body: commentDraft, operationId: commentId });
-      if (contextRef.current !== actionContext) return;
-      commentOperation.current = null;
-      setCommentDraft('');
-      setQuestions((current) => current.map((entry) => entry.id === question.id ? { ...entry, commentCount: entry.commentCount + 1 } : entry));
       await loadThread(question);
     });
   }
@@ -471,15 +445,6 @@ export function KnowledgePage() {
       const page = await listQuestionAnswers(firestore, question, cursor);
       setThread((current) => current && current.questionId === question.id
         ? { ...current, answers: [...current.answers, ...page.answers.filter((answer) => !current.answers.some((entry) => entry.id === answer.id))], answerCursor: page.cursor, answerHasMore: page.hasMore }
-        : current);
-    });
-  }
-
-  function loadMoreComments(question: ThreadQuestion, cursor: KnowledgeCursor) {
-    void run(async () => {
-      const page = await listQuestionComments(firestore, question, cursor);
-      setThread((current) => current && current.questionId === question.id
-        ? { ...current, comments: [...current.comments, ...page.comments.filter((comment) => !current.comments.some((entry) => entry.id === comment.id))], commentCursor: page.cursor, commentHasMore: page.hasMore }
         : current);
     });
   }
@@ -536,7 +501,7 @@ export function KnowledgePage() {
   return (
     <div className="page-stack">
       {!online ? <StatePanel variant="offline" title="You are offline" message="Questions, videos, and polls may be stale. Posting and voting need a connection." /> : null}
-      <section className="search-hero"><div><span className="eyebrow light">KNOWLEDGE & DECISIONS</span><h3>Learn, ask, decide.</h3><p>Questions, how-to videos, and polls stay inside their authorized team or explicitly shared scope.</p></div>{tab !== 'polls' ? <form onSubmit={submitSearch}><label htmlFor="knowledge-search">Search {tab}<input id="knowledge-search" value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder={`Search ${tab} by keyword`} /></label><label>Scope<select aria-label="Visibility scope" value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="team" disabled={!teamId}>Current team</option><option value="community">Shared library</option></select></label><button type="submit" disabled={busy || !queryText.trim()}>Search</button></form> : null}</section>
+      <section className="search-hero"><div><span className="eyebrow light">KNOWLEDGE & DECISIONS</span><h3>Learn, ask, decide.</h3><p>Questions, how-to videos, polls, and trusted FLL resources. Team content stays inside its authorized team or explicitly shared scope.</p></div>{tab === 'questions' || tab === 'videos' ? <form onSubmit={submitSearch}><label htmlFor="knowledge-search">Search {tab}<input id="knowledge-search" value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder={`Search ${tab} by keyword`} /></label><label>Scope<select aria-label="Visibility scope" value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="team" disabled={!teamId}>Current team</option><option value="community">Shared library</option></select></label><button type="submit" disabled={busy || !queryText.trim()}>Search</button></form> : null}</section>
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} /> : null}
       {targetMismatch ? <KnowledgeTargetMismatch targetType={targetMismatch} /> : null}
       {personalStatus === 'loading' ? <StatePanel variant="loading" title="Loading your knowledge library" message="Fetching saved questions, favorite videos, and watch history." /> : null}
@@ -550,33 +515,30 @@ export function KnowledgePage() {
           : visibleQuestions.length === 0 ? <StatePanel variant="empty" title={listMode === 'search' ? 'No questions matched that search' : 'No team questions yet'} message={listMode === 'search' ? 'Try a different keyword, or clear the search to see the most recent team questions.' : 'Ask the first question above and your team can answer it here.'} actionLabel={listMode === 'search' ? 'Show recent questions' : undefined} onAction={listMode === 'search' ? () => void refreshQuestions() : undefined} />
           : <section className="feed-list">
             {listMode === 'search' ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => void refreshQuestions()}>Show recent questions</button> : null}
-            {visibleQuestions.map((question) => <article id={`question-${question.id}`} tabIndex={-1} key={question.id}>
+            {visibleQuestions.map((question) => <article id={`question-${question.id}`} className={expandedQuestionId === question.id ? 'question-card--open' : undefined} tabIndex={-1} key={question.id}>
               <span className="eyebrow">{question.category} · {question.status} · {displayDate(question.createdAt)}</span>
               <strong>{question.title}</strong>
               <p>{question.body}</p>
               <p className="muted">Asked by {authorName(question.createdBy)} · {question.tags.join(' · ') || 'No tags'} · {question.answerCount} answer{question.answerCount === 1 ? '' : 's'} · {question.voteCount} helpful</p>
               <div>
-                <button type="button" aria-expanded={expandedQuestionId === question.id} aria-controls={`thread-${question.id}`} disabled={busy} onClick={() => toggleThread(question)}>{expandedQuestionId === question.id ? 'Hide answers' : 'Answers & comments'}</button>
+                <button type="button" aria-expanded={expandedQuestionId === question.id} aria-controls={`thread-${question.id}`} disabled={busy} onClick={() => toggleThread(question)}>{expandedQuestionId === question.id ? 'Hide answers' : 'Answers'}</button>
                 <button type="button" disabled={busy || !online} onClick={() => submitVote(question)}>{votedQuestionIds.has(question.id) ? 'Helpful ✓' : 'Mark helpful'}</button>
                 <button type="button" disabled={busy} onClick={() => void run(async () => { await toggleSavedQuestion(question.id); })}>{savedQuestionIds.includes(question.id) ? 'Saved' : 'Save question'}</button>
                 <button type="button" disabled={busy || !question.teamId} onClick={() => reportKnowledgeContent(question.teamId ?? '', `questions/${question.id}`, 'knowledge-content', 'Reported from Questions.')}>Report</button>
               </div>
-              {expandedQuestionId === question.id ? <div id={`thread-${question.id}`} className="stack">
-                {threadStatus === 'loading' ? <StatePanel variant="loading" title="Loading answers" message="Fetching the answers and comments on this question." /> : null}
+              {expandedQuestionId === question.id ? <div id={`thread-${question.id}`} className="question-thread">
+                {threadStatus === 'loading' ? <StatePanel variant="loading" title="Loading answers" message="Fetching the answers to this question." /> : null}
                 {threadStatus === 'error' ? <StatePanel {...getRequestState(threadError, online)} title="Answers could not load" actionLabel="Retry answers" onAction={() => void loadThread(question)} /> : null}
                 {threadStatus === 'ready' && thread && thread.questionId === question.id ? <>
-                  <span className="eyebrow">ANSWERS</span>
-                  {thread.answers.length === 0 ? <p className="empty-inline">No answers yet. Post the first one.</p> : thread.answers.map((answer) => <article className="card" key={answer.id}>
-                    <p className="eyebrow">{answer.accepted ? 'ACCEPTED ANSWER · ' : ''}{authorName(answer.createdBy)} · {displayDate(answer.createdAt)}</p>
-                    <p>{answer.body}</p>
-                    {!answer.accepted && (question.createdBy === user.uid || canManage) ? <button className="text-button" type="button" disabled={busy || !online} onClick={() => submitAcceptAnswer(question, answer.id)}>Accept this answer</button> : null}
-                  </article>)}
+                  {thread.answers.length === 0 ? <p className="question-thread__empty">No answers yet. Post the first one.</p> : <ol className="question-thread__answers" aria-label="Answers">
+                    {[...thread.answers].sort((a, b) => Number(b.accepted) - Number(a.accepted)).map((answer) => <li className={`question-thread__answer${answer.accepted ? ' question-thread__answer--accepted' : ''}`} key={answer.id}>
+                      <span className="question-thread__meta">{answer.accepted ? '✓ Accepted answer · ' : ''}{authorName(answer.createdBy)} · {displayDate(answer.createdAt)}</span>
+                      <p>{answer.body}</p>
+                      {!answer.accepted && (question.createdBy === user.uid || canManage) ? <button className="text-button" type="button" disabled={busy || !online} onClick={() => submitAcceptAnswer(question, answer.id)}>Accept this answer</button> : null}
+                    </li>)}
+                  </ol>}
                   {thread.answerHasMore && thread.answerCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreAnswers(question, thread.answerCursor!)}>Load more answers</button> : null}
-                  <form className="form-stack" onSubmit={(event) => submitAnswer(event, question)}><label>Your answer<textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} maxLength={8000} required /></label><button className="button" type="submit" disabled={busy || !online || !answerDraft.trim()}>Post answer</button></form>
-                  <span className="eyebrow">COMMENTS</span>
-                  {thread.comments.length === 0 ? <p className="empty-inline">No comments yet.</p> : thread.comments.map((comment) => <p key={comment.id} className="muted">{authorName(comment.createdBy)} · {displayDate(comment.createdAt)} — {comment.body}</p>)}
-                  {thread.commentHasMore && thread.commentCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreComments(question, thread.commentCursor!)}>Load more comments</button> : null}
-                  <form className="form-stack" onSubmit={(event) => submitComment(event, question)}><label>Add a comment<input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} maxLength={2000} required /></label><button className="button button--ghost" type="submit" disabled={busy || !online || !commentDraft.trim()}>Post comment</button></form>
+                  <form className="question-thread__form" onSubmit={(event) => submitAnswer(event, question)}><label htmlFor={`answer-${question.id}`}>Your answer</label><textarea id={`answer-${question.id}`} value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} maxLength={8000} rows={3} required /><button className="button" type="submit" disabled={busy || !online || !answerDraft.trim()}>Post answer</button></form>
                 </> : null}
               </div> : null}
             </article>)}
@@ -587,6 +549,7 @@ export function KnowledgePage() {
       {tab === 'videos' ? <section id="knowledge-panel-videos" role="tabpanel" aria-labelledby="knowledge-tab-videos" tabIndex={0} className="stack"><article className="card"><p className="eyebrow">Video catalog</p><p className="muted">Required categories: {categories.join(' · ')}. Captions and transcript availability are shown before watching.</p>{canManage ? <form className="form-stack" onSubmit={submitVideo}><label>Title<input value={newVideo.title} onChange={(event) => setNewVideo({ ...newVideo, title: event.target.value })} required /></label><label>Description<textarea value={newVideo.description} onChange={(event) => setNewVideo({ ...newVideo, description: event.target.value })} required /></label><label>Category<select value={newVideo.category} onChange={(event) => setNewVideo({ ...newVideo, category: event.target.value as VideoCategory })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label>External source URL<input type="url" value={newVideo.externalUrl} onChange={(event) => setNewVideo({ ...newVideo, externalUrl: event.target.value })} required /></label><button className="button" type="submit" disabled={busy}>Add draft video</button></form> : null}</article>{visibleVideos.length === 0 ? <p className="empty-inline">Search for a video by title, category, or skill.</p> : visibleVideos.map((video) => <article id={`video-${video.id}`} tabIndex={-1} className="card" key={video.id}><p className="eyebrow">{video.category} · {video.publicationStatus}</p><h2>{video.title}</h2><p>{video.description}</p><p className="muted">Source: {video.sourceAttribution} · {video.captionTracks.length ? `${video.captionTracks.length} caption/transcript track(s)` : 'No captions listed'}</p><div className="hero-actions">{video.externalUrl ? <a className="button" href={video.externalUrl} target="_blank" rel="noreferrer" onClick={() => void run(() => recordVideoWatch(video.id))}>Watch video</a> : <button className="button" type="button" onClick={() => void run(() => recordVideoWatch(video.id))}>Record watch</button>}<button className="button button--ghost" type="button" disabled={busy} onClick={() => void run(() => toggleVideoFavorite(video.id))}>{favoriteVideoIds.includes(video.id) ? 'Favorited' : 'Favorite'}</button>{canManage && video.teamId === teamId ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => void run(() => updateVideoPublication(video.id, video.publicationStatus === 'published' ? 'unpublished' : 'published'))}>{video.publicationStatus === 'published' ? 'Unpublish' : 'Publish'}</button> : null}<button className="text-button" type="button" disabled={busy || !video.teamId} onClick={() => reportKnowledgeContent(video.teamId ?? '', `videos/${video.id}`, 'knowledge-video', 'Reported from How-to Videos.')}>Report</button></div></article>)}</section> : null}
 
       {tab === 'polls' ? <div id="knowledge-panel-polls" role="tabpanel" aria-labelledby="knowledge-tab-polls" tabIndex={0}><section className="feature-panel"><span className="eyebrow">CREATE A TEAM POLL</span><h3>Make a team decision</h3><p>Anonymous poll results remain hidden until close.</p><form className="form-stack" onSubmit={submitPoll}><label>Question<input value={newPoll.question} onChange={(event) => setNewPoll({ ...newPoll, question: event.target.value })} required /></label><label>Choices<textarea value={newPoll.options} onChange={(event) => setNewPoll({ ...newPoll, options: event.target.value })} /></label><label>Expires at<input type="datetime-local" value={newPoll.expiresAt} onChange={(event) => setNewPoll({ ...newPoll, expiresAt: event.target.value })} /></label><label className="checkbox-label"><input type="checkbox" checked={newPoll.anonymous} onChange={(event) => setNewPoll({ ...newPoll, anonymous: event.target.checked })} /> Anonymous votes · results after close</label><button className="button" type="submit" disabled={busy || !teamId}>Create poll</button></form></section>{pollStatus === 'loading' ? <StatePanel variant="loading" title="Loading team polls" message="Checking current poll visibility and result permissions." /> : polls.length === 0 ? <StatePanel variant="empty" title="No team polls yet" message="Create a private poll to collect a team decision." /> : <section className="feed-list">{polls.map((poll) => <PollCard key={poll.id} poll={poll} result={pollResults[poll.id] ?? (poll.resultsVisible && poll.optionVoteCounts ? { totalVotes: poll.totalVotes ?? 0, optionVoteCounts: poll.optionVoteCounts, anonymous: poll.anonymous } : null)} busy={busy} canManage={canManage} submitted={votedPollIds.has(poll.id)} onClose={() => { const actionContext = contextKey; void run(async () => { await closePoll(poll.id); if (contextRef.current === actionContext) await refreshPolls(); }); }} onVote={async (selectedOptionIds) => { const actionContext = contextKey; return run(async () => { await votePoll({ pollId: poll.id, selectedOptionIds }); if (contextRef.current !== actionContext) return; setVotedPollIds((current) => new Set(current).add(poll.id)); await refreshPolls(); }); }} onResults={() => { const actionContext = contextKey; void run(async () => { const result = await getPollResults(poll.id); if (contextRef.current === actionContext) setPollResults((current) => ({ ...current, [poll.id]: result })); }); }} />)}</section>}</div> : null}
+      {tab === 'resources' ? <section id="knowledge-panel-resources" role="tabpanel" aria-labelledby="knowledge-tab-resources" tabIndex={0}><p className="muted">Trusted FIRST LEGO League links for the season. Each opens in a new tab.</p><div className="feed-list">{KNOWLEDGE_RESOURCES.map((resource) => <article key={resource.id}><span className="eyebrow">RESOURCE</span><strong>{resource.title}</strong><p>{resource.description}</p><div><a className="button button--ghost" href={resource.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${resource.title} (opens in a new tab)`}>Open ↗</a></div></article>)}</div></section> : null}
       <p className="muted">{watchedVideoIds.length ? `${watchedVideoIds.length} recently watched video record(s) saved to your account.` : 'Recently watched videos will appear here after playback.'}</p>
     </div>
   );
