@@ -10,4 +10,11 @@ describe('ScorerPage', () => {
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
+
+  it('announces manage scoring as coming soon, with no controls yet', () => {
+    render(<ScorerPage />);
+    expect(screen.getByRole('heading', { name: 'Manage scoring' })).toBeInTheDocument();
+    expect(screen.getByText(/this feature is coming soon/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
 });

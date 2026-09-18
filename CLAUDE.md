@@ -174,8 +174,9 @@ coach shares the `/join?invite=<id>` link themselves.
 - `src/lib/domain.ts` holds shared domain types/role unions. Note `TeamRole` on the
   client includes `teamLeader`; `functions/src/phase2.ts` `TEAM_ROLES` is the
   *assignable* set and excludes it.
-- Navigation (`AppShell.tsx`): sidebar Home, Manage team, Tracker, Team files,
-  Knowledge, Scorer; top bar online status + notification bell. **Manage team**
+- Navigation (`AppShell.tsx`): sidebar Home, Tracker, Scorer, Knowledge base,
+  Manage team, View profile, Sign out (Team files has no entry; it is reached
+  from task cards); top bar online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is the team overview for everyone plus, for
   coaches/team leaders, the `TeamAdminPage` sections below it; `/hub`, `/admin`
   and `/team/admin` redirect there. Search, State lab and Emulators pages were

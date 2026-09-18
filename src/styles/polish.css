@@ -104,6 +104,28 @@
   transform: scale(0.98);
 }
 
+.sidebar-nav__button {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-nav__button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.profile-button--static,
+.profile-button--static:hover {
+  background: transparent;
+  box-shadow: none;
+}
+
 .topbar {
   height: 72px;
   padding: 12px 34px;

@@ -1,14 +1,14 @@
 import {
   ArrowRight,
   BarChart3,
+  BookOpen,
   Check,
   FolderLock,
   KanbanSquare,
   ShieldCheck,
   Trophy,
   Users,
-  Vote,
-  Video
+  Vote
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
@@ -94,7 +94,7 @@ const AUDIENCES: Audience[] = [
     id: 'mentors',
     label: 'Mentors',
     headline: 'Help the team without handing out your number',
-    sub: 'Answer questions, post quick how-to videos, and look over builds in a space the coach moderates. Everything stays inside the team.',
+    sub: 'Answer questions, point the team to trusted FLL resources, and look over builds in a space the coach moderates. Everything stays inside the team.',
     boardTitle: 'Knowledge base · Robot game',
     groups: [
       {
@@ -107,11 +107,11 @@ const AUDIENCES: Audience[] = [
         ]
       },
       {
-        title: 'How-to videos',
+        title: 'Resources',
         tone: 'acid',
         rows: [
-          { task: 'PID line follower in 8 min', owner: 'MN', status: 'done', due: 'Oct 20', type: 'Video' },
-          { task: 'Mission 07 strategy', owner: 'MN', status: 'working', due: 'Nov 04', type: 'Video' }
+          { task: 'Prime Lessons: PID line follower', owner: 'MN', status: 'done', due: 'Oct 20', type: 'Link' },
+          { task: 'BIOGLOW missions video', owner: 'MN', status: 'working', due: 'Nov 04', type: 'Link' }
         ]
       }
     ],
@@ -275,12 +275,37 @@ function BoardPreview({ audience }: { audience: Audience }) {
   );
 }
 
+// Store marks: paths from simple-icons (CC0); the marks themselves are Apple's
+// and Google's trademarks. Badges only announce the apps, so they are not links.
+const APPLE_PATH = 'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701';
+const GOOGLE_PLAY_PARTS = [
+  { fill: '#FFC900', d: 'M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594z' },
+  { fill: '#00A0FF', d: 'M1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924z' },
+  { fill: '#00D66F', d: 'M13.544 10.989l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973z' },
+  { fill: '#F53349', d: 'M13.544 13.056l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z' }
+];
+
+function StoreBadge({ store }: { store: 'apple' | 'google' }) {
+  const apple = store === 'apple';
+  return (
+    <li className="inline-flex min-w-[190px] items-center gap-3 rounded-xl border border-[#3a3a3a] bg-[#111] px-4 py-2.5 text-white shadow-float">
+      <svg viewBox="0 0 24 24" className="size-8 shrink-0" aria-hidden="true">
+        {apple ? <path fill="#fff" d={APPLE_PATH} /> : GOOGLE_PLAY_PARTS.map((part) => <path key={part.fill} fill={part.fill} d={part.d} />)}
+      </svg>
+      <span className="grid leading-none">
+        <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-white/80">{apple ? 'Coming soon to the' : 'Coming soon to'}</span>
+        <span className="mt-1 text-[21px] font-semibold tracking-[-0.01em]">{apple ? 'App Store' : 'Google Play'}</span>
+      </span>
+    </li>
+  );
+}
+
 const FEATURES = [
   { icon: KanbanSquare, title: 'Tracker', copy: 'Who is doing what, by when. Practice, build, and project work on one board.', tone: 'text-blue bg-blue/10' },
   { icon: Users, title: 'Roster & roles', copy: 'Invite students, mentors, and parents by role, approve who joins, and keep every change on the record.', tone: 'text-orange bg-orange/12' },
   { icon: ShieldCheck, title: 'Safety controls', copy: 'Private by default, with moderation and reporting built in and a coach deciding what each role can see.', tone: 'text-purple bg-purple/12' },
   { icon: FolderLock, title: 'Storage area', copy: 'Files and photos that stay with the team, checked on upload, and shared only with the people who should see them.', tone: 'text-[#377229] bg-[#dcf1d0]' },
-  { icon: Video, title: 'How-to videos', copy: 'A mentor explains it once on video, and every student can watch it again whenever they need to.', tone: 'text-blue bg-blue/10' },
+  { icon: BookOpen, title: 'Resources', copy: 'Trusted FLL links in one place: season materials, tutorials, SPIKE Prime lessons, and the missions video.', tone: 'text-blue bg-blue/10' },
   { icon: Vote, title: 'Polls & questions', copy: 'Make quick decisions with a poll, and keep the answers to good questions around for next season.', tone: 'text-orange bg-orange/12' },
   { icon: Trophy, title: 'Scorer', copy: 'Open the official FIRST scoresheet in one click and score each run against this season\'s missions.', tone: 'text-[#886417] bg-[#ffeebd]' },
   { icon: BarChart3, title: 'Dashboard', copy: 'Your day at a glance: what is assigned to you, what is coming up, and how each judging area is progressing.', tone: 'text-purple bg-purple/12' }
@@ -446,6 +471,11 @@ export function LandingPage() {
               </Button>
             </div>
             <p className="mt-5 text-[15px] text-muted">No public profiles. Invite-only. Made with young teams in mind.</p>
+            {/* Not links: there is no store listing yet. */}
+            <ul className="m-0 mt-6 flex list-none flex-wrap items-center gap-3 p-0" aria-label="Mobile apps coming soon">
+              <StoreBadge store="apple" />
+              <StoreBadge store="google" />
+            </ul>
           </div>
 
           <div className="relative flex justify-center lg:justify-end">

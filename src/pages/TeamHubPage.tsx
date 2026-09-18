@@ -19,7 +19,7 @@ import { useOnlineStatus } from '@/lib/use-online-status';
  */
 const WORKSPACE_LINKS = [
   { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, and team files' },
-  { to: '/knowledge', label: 'Knowledge', hint: 'Questions, how-to videos, and polls' },
+  { to: '/knowledge', label: 'Knowledge', hint: 'Questions, polls, and FLL resources' },
   { to: '/scorer', label: 'Scorer', hint: 'Official FIRST robot game scoresheet' },
   { to: '/profile', label: 'Profile & settings', hint: 'Your account and notification choices' }
 ];
