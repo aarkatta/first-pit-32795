@@ -1193,6 +1193,12 @@ and profile compositions. */
 .team-number-form input { width: 140px; min-height: 36px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px; background: #fff; color: var(--ink); }
 .team-hero .team-number-form button { padding: 8px 12px; font-size: 12px; }
 .team-hero .team-number-form .button--ghost { background: rgba(255, 255, 255, 0.1); color: #f6faf7; box-shadow: none; }
+/* Beat `.button--ghost:hover` (polish.css), which turns the background near-white
+   and would leave this white label invisible on the dark banner. */
+.team-hero .team-number-edit:hover:not(:disabled),
+.team-hero .team-number-edit:focus-visible,
+.team-hero .team-number-form .button--ghost:hover:not(:disabled),
+.team-hero .team-number-form .button--ghost:focus-visible { background: rgba(255, 255, 255, 0.18); border-color: transparent; color: #fff; box-shadow: none; }
 
 .member-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
 .member-grid article { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 25px 18px; border: 1px solid var(--line); border-radius: 15px; background: #fff; text-align: center; }
