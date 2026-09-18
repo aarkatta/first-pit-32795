@@ -112,7 +112,12 @@ template (`npm run template:build`), so edit it there, once.
 - **Tracker task editors** are coaches, team leaders **and students**
   (`TASK_EDITOR_ROLES` / `requireTaskEditor`): they add, edit and move any task.
   Mentors and parents view the board.
-- Client mirrors for UI only: `isCoachOrLeader`, `canEditTasks`,
+- **Knowledge editors** are coaches, team leaders, **mentors and students**
+  (`KNOWLEDGE_EDITOR_ROLES` / `requireKnowledgeEditor`, `phase2.ts`): they
+  publish and unpublish team videos (and see drafts), close team polls, and
+  accept an answer on any team question. Parents still ask, answer, comment,
+  vote and create polls. Early sight of poll results stays coach/team-leader.
+- Client mirrors for UI only: `isCoachOrLeader`, `canEditTasks`, `canEditKnowledge`,
   `canCreateTeams`, `mayOfferTeamCreation` in `src/lib/domain.ts`. The server
   re-checks every one; hiding a control is never the authorization.
 

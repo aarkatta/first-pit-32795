@@ -110,16 +110,21 @@ describe('Phase 5 client service contracts', () => {
     expect(mocks.limit).toHaveBeenCalledWith(26);
 
     mocks.getDocs.mockResolvedValueOnce({ docs: [{ id: 'answer-1', data: () => ({ questionId: 'question-1', body: 'Answer', accepted: true }) }] });
-    await expect(listQuestionAnswers('db' as never, 'question-1')).resolves.toEqual(expect.objectContaining({
+    await expect(listQuestionAnswers('db' as never, { id: 'question-1', teamId: 'team-1', visibility: 'team' })).resolves.toEqual(expect.objectContaining({
       hasMore: false,
       answers: [expect.objectContaining({ id: 'answer-1', accepted: true })]
     }));
+    // The rules gate answers on the question's team, so the query must pin it.
+    expect(mocks.where).toHaveBeenCalledWith('teamId', '==', 'team-1');
+    expect(mocks.where).toHaveBeenCalledWith('visibility', '==', 'team');
 
     mocks.getDocs.mockResolvedValueOnce({ docs: [{ id: 'comment-1', data: () => ({ questionId: 'question-1', body: 'Comment' }) }] });
-    await expect(listQuestionComments('db' as never, 'question-1', questionDocs[24] as never)).resolves.toEqual(expect.objectContaining({
+    await expect(listQuestionComments('db' as never, { id: 'question-1', teamId: null, visibility: 'community' }, questionDocs[24] as never)).resolves.toEqual(expect.objectContaining({
       comments: [expect.objectContaining({ id: 'comment-1', body: 'Comment' })]
     }));
     expect(mocks.startAfter).toHaveBeenCalledWith(questionDocs[24]);
+    expect(mocks.where).toHaveBeenCalledWith('teamId', '==', null);
+    expect(mocks.where).toHaveBeenCalledWith('visibility', '==', 'community');
   });
 
   it('resolves saved question titles and drops a denied chunk', async () => {

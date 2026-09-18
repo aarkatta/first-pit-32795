@@ -13,9 +13,12 @@ try {
     const db = context.firestore();
     await setDoc(doc(db, `memberships/${teamId}_student-1`), { teamId, userId: 'student-1', role: 'student', status: 'active' });
     await setDoc(doc(db, `memberships/${teamId}_coach-1`), { teamId, userId: 'coach-1', role: 'coach', status: 'active' });
+    await setDoc(doc(db, `memberships/${teamId}_parent-1`), { teamId, userId: 'parent-1', role: 'parent', status: 'active' });
     await setDoc(doc(db, `questions/team-private`), { id: 'team-private', teamId, visibility: 'team', moderationStatus: 'published', title: 'Private programming', searchTokens: ['programming'] });
     await setDoc(doc(db, `questions/community-public`), { id: 'community-public', teamId: null, visibility: 'community', moderationStatus: 'published', title: 'Community programming', searchTokens: ['programming'] });
     await setDoc(doc(db, `answers/community-answer`), { id: 'community-answer', teamId: null, visibility: 'community', moderationStatus: 'published', questionId: 'community-public' });
+    await setDoc(doc(db, `answers/team-answer`), { id: 'team-answer', teamId, visibility: 'team', moderationStatus: 'published', questionId: 'team-private' });
+    await setDoc(doc(db, `questionComments/team-comment`), { id: 'team-comment', teamId, visibility: 'team', moderationStatus: 'published', questionId: 'team-private' });
     await setDoc(doc(db, `questionComments/community-comment`), { id: 'community-comment', teamId: null, visibility: 'community', moderationStatus: 'published', questionId: 'community-public' });
     await setDoc(doc(db, `videos/team-video`), { id: 'team-video', teamId, visibility: 'team', publicationStatus: 'published', title: 'Private CAD', searchTokens: ['cad'] });
     await setDoc(doc(db, `videos/team-draft`), { id: 'team-draft', teamId, visibility: 'team', publicationStatus: 'draft', createdBy: 'coach-1', title: 'Draft CAD', searchTokens: ['cad'] });
@@ -27,6 +30,7 @@ try {
 
   const student = env.authenticatedContext('student-1').firestore();
   const coach = env.authenticatedContext('coach-1').firestore();
+  const parent = env.authenticatedContext('parent-1').firestore();
   const outsider = env.authenticatedContext('outsider').firestore();
   const unauthenticated = env.unauthenticatedContext().firestore();
   const teamQuestionQuery = query(collection(student, 'questions'), where('teamId', '==', teamId), where('visibility', '==', 'team'), where('moderationStatus', '==', 'published'));
@@ -42,8 +46,20 @@ try {
   await assertFails(getDoc(doc(unauthenticated, 'videos/community-video')));
   await assertFails(getDoc(doc(outsider, 'videos/team-video')));
   await assertSucceeds(getDoc(doc(outsider, 'videos/community-video')));
-  await assertFails(getDoc(doc(student, 'videos/team-draft')));
+  // Students and mentors publish team videos, so they read drafts; parents do not.
+  await assertSucceeds(getDoc(doc(student, 'videos/team-draft')));
   await assertSucceeds(getDoc(doc(coach, 'videos/team-draft')));
+  await assertFails(getDoc(doc(parent, 'videos/team-draft')));
+  // A thread query must pin the question's team and visibility, which the rules
+  // gate on; filtering by questionId alone is refused for every member.
+  const threadQuery = (db, name, scope) => query(collection(db, name), where('questionId', '==', scope.questionId), where('teamId', '==', scope.teamId), where('visibility', '==', scope.visibility), where('moderationStatus', '==', 'published'));
+  for (const name of ['answers', 'questionComments']) {
+    await assertSucceeds(getDocs(threadQuery(student, name, { questionId: 'team-private', teamId, visibility: 'team' })));
+    await assertSucceeds(getDocs(threadQuery(parent, name, { questionId: 'team-private', teamId, visibility: 'team' })));
+    await assertSucceeds(getDocs(threadQuery(outsider, name, { questionId: 'community-public', teamId: null, visibility: 'community' })));
+    await assertFails(getDocs(threadQuery(outsider, name, { questionId: 'team-private', teamId, visibility: 'team' })));
+    await assertFails(getDocs(query(collection(student, name), where('questionId', '==', 'team-private'), where('moderationStatus', '==', 'published'))));
+  }
   await assertFails(getDoc(doc(student, 'polls/team-poll')));
   await assertFails(getDoc(doc(outsider, 'polls/team-poll')));
   await assertFails(getDocs(query(collection(student, 'polls'), where('teamId', '==', teamId))));

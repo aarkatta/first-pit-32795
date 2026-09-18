@@ -736,7 +736,8 @@ Phase 5 stores Questions, How-to Videos, and Polls in top-level Firestore collec
   content is available only to signed-in users. This deny-first boundary does
   not approve public or anonymous access.
 - Global question/video search is callable-only and adds `visibility == community` and `teamId == null` constraints. Team search requires an active membership and adds the team visibility constraints.
-- Firestore rules independently enforce those visibility conditions for direct reads and list queries.
+- Firestore rules independently enforce those visibility conditions for direct reads and list queries. Rules are not filters, so a list query must itself pin the fields a rule reads: answer and comment threads filter on the parent question's `teamId` and `visibility` as well as `questionId` (`threadConstraints` in `src/lib/phase5-service.ts`). Until 2026-09-18 they filtered on `questionId` alone and every member got "permission denied".
+- Knowledge management — publishing/unpublishing team videos (and reading drafts), closing team polls, and accepting an answer on someone else's question — is open to coaches, team leaders, mentors and students (`KNOWLEDGE_EDITOR_ROLES`, and `isKnowledgeEditor` in `firestore.rules`). Parents ask, answer, comment, vote and create polls. Seeing poll results before a poll's `resultsVisibility` allows stays coach/team-leader, so anonymous results are not exposed early to students.
 - Poll votes, saved questions, favorites, and watch history are written only through callable functions. Personal records are readable only by their owner; anonymous vote records are never directly readable.
 
 ### Records and safety

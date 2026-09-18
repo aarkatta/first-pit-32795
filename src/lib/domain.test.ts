@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canEditKnowledge,
   canEditTasks,
   hasTeamRole,
   isAuthenticatedUser,
@@ -66,6 +67,13 @@ describe('domain authorization helpers', () => {
     expect(canEditTasks({ role: 'mentor', status: 'active' })).toBe(false);
     expect(canEditTasks({ role: 'parent', status: 'active' })).toBe(false);
     expect(canEditTasks(null)).toBe(false);
+  });
+
+  it('lets coaches, team leaders, mentors and students manage Knowledge, and not parents', () => {
+    for (const role of ['coach', 'teamLeader', 'mentor', 'student'] as const) expect(canEditKnowledge({ role, status: 'active' })).toBe(true);
+    expect(canEditKnowledge({ role: 'mentor', status: 'suspended' })).toBe(false);
+    expect(canEditKnowledge({ role: 'parent', status: 'active' })).toBe(false);
+    expect(canEditKnowledge(null)).toBe(false);
   });
 
   it('treats Platform Admin as a separate full-access claim', () => {

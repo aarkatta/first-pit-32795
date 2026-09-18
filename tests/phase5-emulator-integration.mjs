@@ -86,6 +86,20 @@ await call('recordVideoWatch', student.idToken, { videoId: video.videoId, progre
 await readDocument(`videoFavorites/${student.localId}_${video.videoId}`, student.idToken);
 await readDocument(`videoWatchHistory/${student.localId}_${video.videoId}`, student.idToken);
 
+// Knowledge management is open to coaches, team leaders, mentors and students;
+// parents keep asking, answering and voting but cannot publish, close or accept.
+const studentVideo = await call('createVideo', student.idToken, { videoId: `student-video-${suffix}`, teamId, visibility: 'team', category: 'Programming', title: 'Student line follower', description: 'How our line follower works.', externalUrl: 'https://example.com/line', sourceAttribution: 'Team library' });
+await callFails('updateVideoPublication', parent.idToken, { videoId: studentVideo.videoId, publicationStatus: 'published' });
+await call('updateVideoPublication', student.idToken, { videoId: studentVideo.videoId, publicationStatus: 'published' });
+const parentOwnedPoll = await call('createPoll', parent.idToken, { pollId: `parent-owned-poll-${suffix}`, teamId, question: 'Snack rota?', options: ['Yes', 'No'] });
+await callFails('closePoll', parent.idToken, { pollId: parentOwnedPoll.pollId });
+await call('closePoll', student.idToken, { pollId: parentOwnedPoll.pollId });
+const coachQuestion = await call('createQuestion', coach.idToken, { questionId: `coach-question-${suffix}`, teamId, visibility: 'team', title: 'Which gear ratio?', body: 'For the lift arm.', category: 'Programming' });
+const parentAnswer = await call('createAnswer', parent.idToken, { questionId: coachQuestion.questionId, answerId: `parent-answer-${suffix}`, body: 'Try 1:3.' });
+await call('createQuestionComment', parent.idToken, { questionId: coachQuestion.questionId, body: 'Following.' });
+await callFails('acceptAnswer', parent.idToken, { questionId: coachQuestion.questionId, answerId: parentAnswer.answerId });
+await call('acceptAnswer', student.idToken, { questionId: coachQuestion.questionId, answerId: parentAnswer.answerId });
+
 const poll = await call('createPoll', coach.idToken, { pollId: `poll-${suffix}`, teamId, question: 'Which practice slot works?', options: ['Saturday', 'Sunday'], anonymous: true, resultsVisibility: 'afterClose', expiresAt: new Date(Date.now() + 3600000).toISOString() });
 const notificationId = globalThis.Buffer.from(`${student.localId}_${teamId}_poll:${poll.pollId}:published`).toString('base64url');
 await readDocument(`notifications/${notificationId}`, student.idToken);

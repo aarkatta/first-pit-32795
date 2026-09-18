@@ -4,9 +4,9 @@ import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
 import { getFirebaseServices } from '@/lib/firebase';
 import { useTeamContext } from '@/lib/team-context';
-import { isCoachOrLeader, type Answer, type Question, type Video, type VideoCategory } from '@/lib/domain';
+import { canEditKnowledge, type Answer, type Question, type Video, type VideoCategory } from '@/lib/domain';
 import { getRequestState, type RequestState } from '@/lib/request-state';
-import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, createQuestionComment, createVideo, getPollResults, getQuestionTarget, getVideoTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionComments, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, recordVideoWatch, searchQuestions, searchVideos, toggleSavedQuestion, toggleVideoFavorite, updateVideoPublication, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type QuestionComment } from '@/lib/phase5-service';
+import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, createQuestionComment, createVideo, getPollResults, getQuestionTarget, getVideoTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionComments, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, recordVideoWatch, searchQuestions, searchVideos, toggleSavedQuestion, toggleVideoFavorite, updateVideoPublication, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type QuestionComment, type ThreadQuestion } from '@/lib/phase5-service';
 import { createReport } from '@/lib/phase2-service';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -90,7 +90,7 @@ export function KnowledgePage() {
   const videoOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const pollOperation = useRef<{ fingerprint: string; id: string } | null>(null);
   const reportOperation = useRef<{ fingerprint: string; id: string } | null>(null);
-  const canManage = isCoachOrLeader(activeTeam);
+  const canManage = canEditKnowledge(activeTeam);
   const contextKey = `${user?.uid ?? ''}:${teamId ?? ''}`;
   const savedQuestionKey = savedQuestionIds.join(',');
   contextRef.current = contextKey;
@@ -150,18 +150,18 @@ export function KnowledgePage() {
     }
   }, [firestore, teamId, user?.uid]);
 
-  const loadThread = useCallback(async (questionId: string) => {
+  const loadThread = useCallback(async (question: ThreadQuestion) => {
     const threadContext = contextRef.current;
     const generation = ++threadGeneration.current;
     setThreadStatus('loading');
     setThreadError(null);
     try {
       const [answerPage, commentPage] = await Promise.all([
-        listQuestionAnswers(firestore, questionId),
-        listQuestionComments(firestore, questionId)
+        listQuestionAnswers(firestore, question),
+        listQuestionComments(firestore, question)
       ]);
       if (generation !== threadGeneration.current || contextRef.current !== threadContext) return;
-      setThread({ questionId, answers: answerPage.answers, answerCursor: answerPage.cursor, answerHasMore: answerPage.hasMore, comments: commentPage.comments, commentCursor: commentPage.cursor, commentHasMore: commentPage.hasMore });
+      setThread({ questionId: question.id, answers: answerPage.answers, answerCursor: answerPage.cursor, answerHasMore: answerPage.hasMore, comments: commentPage.comments, commentCursor: commentPage.cursor, commentHasMore: commentPage.hasMore });
       setThreadStatus('ready');
     } catch (error) {
       if (generation !== threadGeneration.current || contextRef.current !== threadContext) return;
@@ -405,7 +405,7 @@ export function KnowledgePage() {
     setThread(null);
     setAnswerDraft('');
     setCommentDraft('');
-    void loadThread(question.id);
+    void loadThread(question);
   }
 
   function submitAnswer(event: FormEvent<HTMLFormElement>, question: Question) {
@@ -421,7 +421,7 @@ export function KnowledgePage() {
       answerOperation.current = null;
       setAnswerDraft('');
       setQuestions((current) => current.map((entry) => entry.id === question.id ? { ...entry, answerCount: entry.answerCount + 1 } : entry));
-      await loadThread(question.id);
+      await loadThread(question);
     });
   }
 
@@ -438,7 +438,7 @@ export function KnowledgePage() {
       commentOperation.current = null;
       setCommentDraft('');
       setQuestions((current) => current.map((entry) => entry.id === question.id ? { ...entry, commentCount: entry.commentCount + 1 } : entry));
-      await loadThread(question.id);
+      await loadThread(question);
     });
   }
 
@@ -462,23 +462,23 @@ export function KnowledgePage() {
       await acceptAnswer({ questionId: question.id, answerId });
       if (contextRef.current !== actionContext) return;
       setQuestions((current) => current.map((entry) => entry.id === question.id ? { ...entry, status: 'solved' } : entry));
-      await loadThread(question.id);
+      await loadThread(question);
     });
   }
 
-  function loadMoreAnswers(questionId: string, cursor: KnowledgeCursor) {
+  function loadMoreAnswers(question: ThreadQuestion, cursor: KnowledgeCursor) {
     void run(async () => {
-      const page = await listQuestionAnswers(firestore, questionId, cursor);
-      setThread((current) => current && current.questionId === questionId
+      const page = await listQuestionAnswers(firestore, question, cursor);
+      setThread((current) => current && current.questionId === question.id
         ? { ...current, answers: [...current.answers, ...page.answers.filter((answer) => !current.answers.some((entry) => entry.id === answer.id))], answerCursor: page.cursor, answerHasMore: page.hasMore }
         : current);
     });
   }
 
-  function loadMoreComments(questionId: string, cursor: KnowledgeCursor) {
+  function loadMoreComments(question: ThreadQuestion, cursor: KnowledgeCursor) {
     void run(async () => {
-      const page = await listQuestionComments(firestore, questionId, cursor);
-      setThread((current) => current && current.questionId === questionId
+      const page = await listQuestionComments(firestore, question, cursor);
+      setThread((current) => current && current.questionId === question.id
         ? { ...current, comments: [...current.comments, ...page.comments.filter((comment) => !current.comments.some((entry) => entry.id === comment.id))], commentCursor: page.cursor, commentHasMore: page.hasMore }
         : current);
     });
@@ -563,7 +563,7 @@ export function KnowledgePage() {
               </div>
               {expandedQuestionId === question.id ? <div id={`thread-${question.id}`} className="stack">
                 {threadStatus === 'loading' ? <StatePanel variant="loading" title="Loading answers" message="Fetching the answers and comments on this question." /> : null}
-                {threadStatus === 'error' ? <StatePanel {...getRequestState(threadError, online)} title="Answers could not load" actionLabel="Retry answers" onAction={() => void loadThread(question.id)} /> : null}
+                {threadStatus === 'error' ? <StatePanel {...getRequestState(threadError, online)} title="Answers could not load" actionLabel="Retry answers" onAction={() => void loadThread(question)} /> : null}
                 {threadStatus === 'ready' && thread && thread.questionId === question.id ? <>
                   <span className="eyebrow">ANSWERS</span>
                   {thread.answers.length === 0 ? <p className="empty-inline">No answers yet. Post the first one.</p> : thread.answers.map((answer) => <article className="card" key={answer.id}>
@@ -571,11 +571,11 @@ export function KnowledgePage() {
                     <p>{answer.body}</p>
                     {!answer.accepted && (question.createdBy === user.uid || canManage) ? <button className="text-button" type="button" disabled={busy || !online} onClick={() => submitAcceptAnswer(question, answer.id)}>Accept this answer</button> : null}
                   </article>)}
-                  {thread.answerHasMore && thread.answerCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreAnswers(question.id, thread.answerCursor!)}>Load more answers</button> : null}
+                  {thread.answerHasMore && thread.answerCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreAnswers(question, thread.answerCursor!)}>Load more answers</button> : null}
                   <form className="form-stack" onSubmit={(event) => submitAnswer(event, question)}><label>Your answer<textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} maxLength={8000} required /></label><button className="button" type="submit" disabled={busy || !online || !answerDraft.trim()}>Post answer</button></form>
                   <span className="eyebrow">COMMENTS</span>
                   {thread.comments.length === 0 ? <p className="empty-inline">No comments yet.</p> : thread.comments.map((comment) => <p key={comment.id} className="muted">{authorName(comment.createdBy)} · {displayDate(comment.createdAt)} — {comment.body}</p>)}
-                  {thread.commentHasMore && thread.commentCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreComments(question.id, thread.commentCursor!)}>Load more comments</button> : null}
+                  {thread.commentHasMore && thread.commentCursor ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => loadMoreComments(question, thread.commentCursor!)}>Load more comments</button> : null}
                   <form className="form-stack" onSubmit={(event) => submitComment(event, question)}><label>Add a comment<input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} maxLength={2000} required /></label><button className="button button--ghost" type="submit" disabled={busy || !online || !commentDraft.trim()}>Post comment</button></form>
                 </> : null}
               </div> : null}

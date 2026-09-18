@@ -433,6 +433,16 @@ export function canEditTasks(
   return hasTeamRole(membership, ['coach', 'teamLeader', 'student']);
 }
 
+/**
+ * Managing Knowledge content: publishing team videos, closing polls, accepting
+ * answers. Mirrors `KNOWLEDGE_EDITOR_ROLES` in `functions/src/phase2.ts`.
+ */
+export function canEditKnowledge(
+  membership: Pick<Membership, 'role' | 'status'> | null | undefined
+): boolean {
+  return hasTeamRole(membership, ['coach', 'teamLeader', 'mentor', 'student']);
+}
+
 export type AuthorizationClaims = { platformAdmin?: boolean };
 
 export type Permission =
