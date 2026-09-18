@@ -5,7 +5,8 @@
  * This runs at authoring time, not in the app: the workbook is committed to
  * `public/` and served as a static file, so no spreadsheet library ships to the
  * browser and every team starts from the same sheet. Re-run it after editing
- * `scripts/data/fll-standard-task-list.json`:
+ * `functions/src/data/fll-standard-task-list.json` — the same list seeds a new
+ * team's first board, so it lives where the deployed functions can read it:
  *
  *   npm run template:build
  *
@@ -19,7 +20,7 @@ import { dirname, join } from 'node:path';
 import ExcelJS from 'exceljs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = JSON.parse(readFileSync(join(here, 'data', 'fll-standard-task-list.json'), 'utf8'));
+const source = JSON.parse(readFileSync(join(here, '..', 'functions', 'src', 'data', 'fll-standard-task-list.json'), 'utf8'));
 const output = join(here, '..', 'public', 'first-pit-task-template.xlsx');
 
 const HEADERS = ['Task ID', 'Week', 'Category', 'Task Description', 'Assignee', 'Status', 'Notes', 'Type', 'Priority', 'Start date', 'End date', 'Due date'];

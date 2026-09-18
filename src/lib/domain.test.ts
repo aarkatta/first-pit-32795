@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canEditTasks,
   hasTeamRole,
   isAuthenticatedUser,
   isCoachOrLeader,
@@ -45,7 +46,9 @@ describe('domain authorization helpers', () => {
 
   it.each([
     ['student', 'task.updateAssignedFields', true],
-    ['student', 'task.create', false],
+    ['student', 'task.create', true],
+    ['mentor', 'task.create', false],
+    ['parent', 'task.create', false],
     ['parent', 'task.updateAssignedFields', false],
     ['mentor', 'event.manage', false],
     ['coach', 'task.create', true],
@@ -53,6 +56,16 @@ describe('domain authorization helpers', () => {
     ['teamLeader', 'file.upload', true]
   ] as const)('maps Phase 3 access for %s', (role, permission, allowed) => {
     expect(canRole(role, permission)).toBe(allowed);
+  });
+
+  it('lets coaches, team leaders and students edit tracker tasks, and no one else', () => {
+    expect(canEditTasks({ role: 'coach', status: 'active' })).toBe(true);
+    expect(canEditTasks({ role: 'teamLeader', status: 'active' })).toBe(true);
+    expect(canEditTasks({ role: 'student', status: 'active' })).toBe(true);
+    expect(canEditTasks({ role: 'student', status: 'suspended' })).toBe(false);
+    expect(canEditTasks({ role: 'mentor', status: 'active' })).toBe(false);
+    expect(canEditTasks({ role: 'parent', status: 'active' })).toBe(false);
+    expect(canEditTasks(null)).toBe(false);
   });
 
   it('treats Platform Admin as a separate full-access claim', () => {

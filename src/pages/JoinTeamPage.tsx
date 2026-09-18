@@ -161,7 +161,7 @@ export function JoinTeamPage() {
     if (!invitation) return;
     void run(async () => {
       await acceptInvitation(invitation.id);
-      navigate('/hub', { replace: true });
+      navigate('/team', { replace: true });
     });
   }
 

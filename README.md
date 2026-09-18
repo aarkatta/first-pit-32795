@@ -19,8 +19,9 @@ and the release runbook.
 - Firebase Authentication with sign-in, sign-up, sign-out, recovery, and protected routes
 - Firebase client bootstrap with emulator support, invoked from `src/main.tsx`
 - Team context and switcher backed by active Firestore memberships
-- Server-side team creation with baseline policies, settings, and audit logging
-- Team administration for invitations, join approvals, role assignment, membership lifecycle, and leadership transfer
+- Server-side team creation with baseline policies, settings, and audit logging — limited to coach and mentor accounts (account type chosen once at sign-up)
+- Manage team: one page with the team overview for everyone and, for coaches and team leaders, administration — invite links (shared by the coach; no invitation email is sent), join approvals, role assignment, membership lifecycle, and leadership transfer
+- A notification bell in the top bar with a live unread count and the latest notifications
 - Deny-first safety policies for messaging, file sharing, parent visibility, and private discoverability
 - Privacy defaults with mandatory safety notifications for least-exposing profiles
 - Server-created reports, moderation queue records, and immutable administrative audit events
@@ -30,6 +31,7 @@ and the release runbook.
 - A work-breakdown tracker: milestones → categories → tasks → subtasks, numbered (1, 1.1, 1.1.1), with progress rolling up at every level
 - One board screen — a grouped, sortable, filterable table with status, person, category, priority, start/end/due dates, timeline, labels and files — plus accessible card movement, conflict detection, and role-scoped controls
 - Tracker tabs for Board, Milestones, Import tasks and Board setup, so project management lives in one place
+- A new team's board starts pre-filled with the standard season plan's categories and tasks; coaches, team leaders and students add and edit tasks, mentors and parents view
 - A standard 12-week, 48-task FLL template (`public/first-pit-task-template.xlsx`, rebuilt by `npm run template:build`) that teams edit and upload back
 - Spreadsheet import with a row-by-row preview: categories created on the fly, statuses matched to board columns, assignees resolved server-side by name or email, subtasks nested under their task
 - Team milestones with server-maintained progress counters, achieved/reopen state, and dashboard highlights

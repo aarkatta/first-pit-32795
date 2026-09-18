@@ -15,6 +15,9 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
 vi.mock('@/lib/team-context', () => ({ useTeamContext: mocks.useTeamContext }));
 vi.mock('@/lib/firebase', () => ({ getFirebaseServices: mocks.getFirebaseServices }));
 vi.mock('firebase/firestore', () => ({ doc: mocks.doc, onSnapshot: mocks.onSnapshot }));
+vi.mock('./NotificationBell', () => ({
+  NotificationBell: ({ teamId, userId }: { teamId: string; userId: string }) => <button type="button">{`Bell ${teamId} ${userId}`}</button>
+}));
 
 import { AppShell } from './AppShell';
 
@@ -51,7 +54,9 @@ describe('AppShell route and canonical profile metadata', () => {
 
   it('switches teams, hides admin for students, and signs out once', async () => {
     render(<MemoryRouter initialEntries={['/knowledge']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Knowledge content</p></AppShell></MemoryRouter>);
+    // Administration is a coach-only tab inside Manage team, not a sidebar entry.
     expect(screen.queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Manage team' })).toHaveLength(2);
     fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team' }), { target: { value: 'team-2' } });
     expect(setActiveTeamId).toHaveBeenCalledWith('team-2');
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -70,19 +75,21 @@ describe('AppShell route and canonical profile metadata', () => {
     render(<MemoryRouter initialEntries={['/scorer']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Scorer content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(within(primary).getAllByRole('link')).toHaveLength(4);
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Team hub', '▦Tracker', '?Knowledge']);
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Manage team', '▦Tracker', '?Knowledge']);
 
     fireEvent.click(screen.getByLabelText('Open workspace menu'));
     const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
     expect(within(secondary).getByRole('link', { name: 'Scorer' })).toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'Team files' })).toBeInTheDocument();
-    expect(within(secondary).getByRole('link', { name: 'Notifications' })).toBeInTheDocument();
+    // Notifications moved to the top-bar bell.
+    expect(within(secondary).queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bell team-2 user-1' })).toBeInTheDocument();
     // Milestones, Import tasks and Board setup are tabs of the tracker, not
     // destinations of their own.
     expect(within(secondary).queryByRole('link', { name: 'Milestones' })).not.toBeInTheDocument();
     expect(within(secondary).queryByRole('link', { name: 'Board setup' })).not.toBeInTheDocument();
-    expect(within(secondary).getByRole('link', { name: 'Search' })).toBeInTheDocument();
-    expect(within(secondary).getByRole('link', { name: 'Team admin' })).toBeInTheDocument();
+    expect(within(secondary).queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();
+    expect(within(secondary).queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'Profile & settings' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team from mobile menu' }), { target: { value: 'team-1' } });
     expect(setActiveTeamId).toHaveBeenCalledWith('team-1');
@@ -118,12 +125,11 @@ describe('AppShell route and canonical profile metadata', () => {
     expect(document.title).toBe('Not found | First Pit');
   });
 
-  it('shows the development-only surfaces to signed-in members in a dev build', () => {
-    render(<MemoryRouter initialEntries={['/hub']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Hub content</p></AppShell></MemoryRouter>);
+  it('lists only product destinations: no State lab, Emulators or Search', () => {
+    render(<MemoryRouter initialEntries={['/team']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Team content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    // The filter used to be inverted: these appeared only to signed-out visitors.
-    expect(within(primary).getByRole('link', { name: 'State lab' })).toBeInTheDocument();
-    expect(within(primary).getByRole('link', { name: 'Emulators' })).toBeInTheDocument();
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Manage team', '▦Tracker', '🗎Team files', '?Knowledge', '◫Scorer']);
+    expect(screen.queryByRole('link', { name: 'Search team workspace' })).not.toBeInTheDocument();
   });
 
   it('keeps public auth content outside the workspace shell while signed out', () => {

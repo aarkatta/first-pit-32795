@@ -72,22 +72,9 @@ export type DashboardResult = {
   };
 };
 
-export type GlobalSearchResult = {
-  type: string;
-  teamId: string;
-  recordId: string;
-  title: string;
-  snippet: string;
-  deepLink: string;
-};
-
 
 export function getDashboard(teamId: string) {
   return call<{ teamId: string }, DashboardResult>('getDashboard', { teamId });
-}
-
-export function globalSearch(input: { query: string; teamId?: string }) {
-  return call<typeof input, { query: string; results: GlobalSearchResult[]; teamIds: string[] }>('globalSearch', input);
 }
 
 export function requestAccountDeletion() {

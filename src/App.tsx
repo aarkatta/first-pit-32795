@@ -13,7 +13,6 @@ const AuthActionPage = lazy(() => import('@/pages/AuthActionPage').then((module)
 const AuthPage = lazy(() => import('@/pages/AuthPage').then((module) => ({ default: module.AuthPage })));
 const CoordinationPage = lazy(() => import('@/pages/CoordinationPage').then((module) => ({ default: module.CoordinationPage })));
 const CreateTeamPage = lazy(() => import('@/pages/CreateTeamPage').then((module) => ({ default: module.CreateTeamPage })));
-const EmulatorPage = lazy(() => import('@/pages/EmulatorPage').then((module) => ({ default: module.EmulatorPage })));
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage').then((module) => ({ default: module.JoinTeamPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })));
 const BoardSetupPage = lazy(() => import('@/pages/BoardSetupPage').then((module) => ({ default: module.BoardSetupPage })));
@@ -25,21 +24,11 @@ const KnowledgePage = lazy(() => import('@/pages/KnowledgePage').then((module) =
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const ScorerPage = lazy(() => import('@/pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
-const SearchPage = lazy(() => import('@/pages/SearchPage').then((module) => ({ default: module.SearchPage })));
-const StatusLabPage = lazy(() => import('@/pages/StatusLabPage').then((module) => ({ default: module.StatusLabPage })));
-const TeamAdminPage = lazy(() => import('@/pages/TeamAdminPage').then((module) => ({ default: module.TeamAdminPage })));
-const TeamHubPage = lazy(() => import('@/pages/TeamHubPage').then((module) => ({ default: module.TeamHubPage })));
+const ManageTeamPage = lazy(() => import('@/pages/ManageTeamPage').then((module) => ({ default: module.ManageTeamPage })));
 
 type AppRoutesProps = {
   clientEnv?: ClientEnv;
 };
-
-/**
- * `/states` is a QA catalogue of every UI state and `/emulators` documents the
- * local Firebase setup. Neither is product surface, so they only exist in a
- * development build — a production visitor gets the normal not-found page.
- */
-const devToolsEnabled = import.meta.env.DEV;
 
 function CoordinationAlias() {
   const location = useLocation();
@@ -73,8 +62,12 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
                 Unprotected on purpose: the link opens in whatever browser the
                 recipient reads mail in, usually with no session. */}
             <Route path="/auth/action" element={<AuthActionPage />} />
-            <Route path="/hub" element={<ProtectedRoute><TeamHubPage /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><TeamAdminPage /></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><ManageTeamPage /></ProtectedRoute>} />
+            {/* The team hub and team admin merged into Manage team; bookmarks,
+                emails and stored notifications still carry the old paths. */}
+            <Route path="/team/admin" element={<Navigate to="/team" replace />} />
+            <Route path="/hub" element={<Navigate to="/team" replace />} />
+            <Route path="/admin" element={<Navigate to="/team" replace />} />
             <Route path="/coordination" element={<ProtectedRoute><CoordinationPage /></ProtectedRoute>} />
             <Route path="/board-setup" element={<ProtectedRoute><BoardSetupPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><ImportTasksPage /></ProtectedRoute>} />
@@ -83,22 +76,21 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
             <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
             <Route path="/knowledge" element={<ProtectedRoute><KnowledgePage /></ProtectedRoute>} />
             <Route path="/scorer" element={<ProtectedRoute><ScorerPage /></ProtectedRoute>} />
-            <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+            {/* Search was removed from the product; old links land on Home. */}
+            <Route path="/search" element={<Navigate to="/" replace />} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/tracker" element={<CoordinationAlias />} />
             {/* Chat and the calendar were removed from the product, but
                 notifications already delivered to a mailbox still carry their
-                deep links. Landing on the team hub beats a not-found page. */}
+                deep links. Landing on Manage team beats a not-found page. */}
             <Route path="/calendar" element={<CoordinationAlias />} />
-            <Route path="/chat" element={<Navigate to="/hub" replace />} />
+            <Route path="/chat" element={<Navigate to="/team" replace />} />
             <Route path="/teams/new" element={<ProtectedRoute><CreateTeamPage /></ProtectedRoute>} />
             {/* Invitation acceptance, reached from an emailed `/join?invite=<id>` link.
                 ProtectedRoute round-trips the full deep link through `/auth?next=…`,
                 so a signed-out invitee keeps the invitation id across sign-in. */}
             <Route path="/join" element={<ProtectedRoute><JoinTeamPage /></ProtectedRoute>} />
-            {devToolsEnabled ? <Route path="/states" element={<StatusLabPage />} /> : null}
-            {devToolsEnabled ? <Route path="/emulators" element={<EmulatorPage clientEnv={runtimeEnv} />} /> : null}
             <Route path="/home" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

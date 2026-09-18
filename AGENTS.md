@@ -53,7 +53,8 @@ version/parts/maintenance logs, learning courses, offline-first mode,
 large-scale reputation features, and capabilities requiring unproven moderation
 capacity. Team chat (channels, messages, announcements) and the calendar
 (events, recurrence, Google Calendar sync) were built and then **removed from
-the product**; their collections, rules, indexes and callables are gone, and the
+the product**, as were the Search page and the development-only State lab and
+Emulators pages (2026-09-17); their collections, rules, indexes and callables are gone, and the
 catch-all deny now covers any documents left behind.
 
 ## Repository Structure
@@ -101,6 +102,14 @@ different equivalent layout. Do not create duplicate app structures.
 - Parent visibility, direct messaging, discoverability, file sharing, and
   membership approval must be controlled by explicit team policy. Do not invent
   unsafe defaults.
+- Only coach and mentor accounts may create a team. The account type is
+  self-declared once at sign-up and written only by the server; anyone who is a
+  student or parent on any team is refused regardless (decision of 2026-09-17).
+- Tracker tasks may be added and edited by coaches, team leaders and students;
+  mentors and parents are read-only there. Board setup, import, templates and
+  all team administration stay with coaches and team leaders.
+- Invitations are shared as links by the coach; the product sends no invitation
+  email. Adding email delivery is a product decision, not a default.
 
 ## Coding Conventions
 

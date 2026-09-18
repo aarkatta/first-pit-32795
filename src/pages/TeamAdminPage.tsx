@@ -76,6 +76,20 @@ const AUDIT_LIMIT = 100;
 const INVITATION_STATUSES: InvitationStatus[] = ['pending', 'accepted', 'revoked', 'expired'];
 const MODERATION_STATUSES: ModerationStatus[] = ['open', 'investigating', 'resolved', 'dismissed'];
 
+function inviteLink(invitationId: string) {
+  return `${window.location.origin}/join?invite=${encodeURIComponent(invitationId)}`;
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    if (!navigator.clipboard) return false;
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseInvitation(id: string, data: Record<string, unknown>): InvitationRow {
   return {
     id,
@@ -252,21 +266,21 @@ export function TeamAdminPage() {
   function submitInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!teamId) return;
+    const invitee = email;
     void run(async () => {
-      await createInvitation(teamId, email, inviteRole);
+      const { invitationId } = await createInvitation(teamId, invitee, inviteRole);
       setEmail('');
-      setNotice(`Invitation sent to ${email}. Share the invite link so they can accept it.`);
+      // First Pit does not send email, so the coach has to deliver the link.
+      // Saying "sent" here used to make coaches wait for an email that never came.
+      const link = inviteLink(invitationId);
+      const copied = await copyToClipboard(link);
+      setNotice(`Invitation created for ${invitee}. No email is sent — ${copied ? 'the invite link is copied to your clipboard; ' : ''}send them this link: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
     });
   }
 
   async function copyInviteLink(invitationId: string) {
-    const link = `${window.location.origin}/join?invite=${encodeURIComponent(invitationId)}`;
-    try {
-      await navigator.clipboard?.writeText(link);
-      setNotice(`Invite link copied: ${link}`);
-    } catch {
-      setNotice(`Invite link: ${link}`);
-    }
+    const link = inviteLink(invitationId);
+    setNotice(await copyToClipboard(link) ? `Invite link copied: ${link}` : `Invite link: ${link}`);
   }
 
   if (!user || !teamId) return <StatePanel variant="empty" title="Choose a team" message="Team administration becomes available after you join or create a team." />;
@@ -276,36 +290,29 @@ export function TeamAdminPage() {
 
   return (
     <div className="page-stack">
-      <section className="team-hero">
+      {/* A section of Manage team, below the overview: the team banner and the
+          offline notice are already on the page above. */}
+      <div className="section-heading" id="administration">
         <div>
-          <span className="eyebrow light">TEAM ADMINISTRATION</span>
-          <h3>{activeTeam?.team?.name ?? 'Your team'}</h3>
-          <p>Manage the private roster, invitations, safety settings, reports, and audit history.</p>
+          <span className="eyebrow">TEAM ADMINISTRATION</span>
+          <h3>Roster, invitations and safety</h3>
+          <p>{online ? 'Only coaches and team leaders see this section.' : 'Read-only while offline: invitations, role changes and policy updates are disabled.'}</p>
         </div>
-        <button type="button" onClick={() => document.getElementById('invite-member')?.focus()}>＋ Invite member</button>
-      </section>
-      {!online ? (
-        <StatePanel
-          variant="offline"
-          title="You are offline"
-          message="Administration is read-only until the connection returns. Invitations, role changes, and policy updates are disabled."
-          actionLabel="Try again"
-          onAction={() => void refresh()}
-        />
-      ) : null}
+        <button className="button button--ghost" type="button" onClick={() => document.getElementById('invite-member')?.focus()}>＋ Invite member</button>
+      </div>
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
       {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => setNotice(null)} /> : null}
       <section className="split-panels">
         <article className="feature-panel">
           <span className="eyebrow">INVITE A MEMBER</span>
           <h3>Grow the private roster</h3>
-          <p>Invitations are email-bound and expire. Team discovery stays private.</p>
+          <p>Create an invite link for someone's email address, then send it to them yourself — First Pit does not email invitations. Links expire after 7 days. Team discovery stays private.</p>
           <form className="form-stack" onSubmit={submitInvite}>
             <label>Email<input id="invite-member" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
             <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)}><option value="student">Student</option><option value="parent">Parent</option><option value="mentor">Mentor</option><option value="coach">Coach</option></select></label>
-            <button className="button" type="submit" disabled={locked}>{busy ? 'Sending…' : 'Send invitation'}</button>
+            <button className="button" type="submit" disabled={locked}>{busy ? 'Creating…' : 'Create invite link'}</button>
           </form>
-          <p><small>Invitees accept at <code>/join</code>. They must verify their email address first.</small></p>
+          <p><small>The invitee opens the link, signs in with that same email address and verifies it, then accepts. Pending links stay under Invitations, with <strong>Copy link</strong>.</small></p>
         </article>
         <article className="feature-panel">
           <span className="eyebrow">SAFETY DEFAULTS</span>

@@ -2,6 +2,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StatePanel } from './StatePanel';
+import { NotificationBell } from './NotificationBell';
 import { useAuth } from '@/lib/auth-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
@@ -15,22 +16,13 @@ type AppShellProps = {
   appTagline: string;
 };
 
-/** `/states` and `/emulators` are development-only surfaces; `App.tsx` registers them the same way. */
-const devToolsEnabled = import.meta.env.DEV;
-const devOnlyRoutes = new Set(['/states', '/emulators']);
-
 const navItems = [
   { to: '/', label: 'Home', icon: '⌂', mobile: true },
-  { to: '/hub', label: 'Team hub', icon: '▤', mobile: true },
+  { to: '/team', label: 'Manage team', icon: '▤', mobile: true },
   { to: '/coordination', label: 'Tracker', icon: '▦', mobile: true },
   { to: '/files', label: 'Team files', icon: '🗎' },
-  { to: '/notifications', label: 'Notifications', icon: '◔' },
   { to: '/knowledge', label: 'Knowledge', icon: '?', mobile: true },
-  { to: '/scorer', label: 'Scorer', icon: '◫' },
-  { to: '/search', label: 'Search', icon: '⌕' },
-  { to: '/admin', label: 'Team admin', icon: '◇' },
-  { to: '/states', label: 'State lab', icon: '□' },
-  { to: '/emulators', label: 'Emulators', icon: '⚙' }
+  { to: '/scorer', label: 'Scorer', icon: '◫' }
 ];
 
 function getBrandMark(appName: string) {
@@ -48,6 +40,8 @@ const routeLabels: { to: string; label: string }[] = [
   { to: '/milestones', label: 'Milestones' },
   { to: '/import', label: 'Import tasks' },
   { to: '/board-setup', label: 'Board setup' },
+  // Reached from the top-bar bell rather than the navigation.
+  { to: '/notifications', label: 'Notifications' },
   { to: '/profile', label: 'Profile & settings' },
   { to: '/settings', label: 'Profile & settings' },
   { to: '/teams/new', label: 'Create a team' },
@@ -55,6 +49,17 @@ const routeLabels: { to: string; label: string }[] = [
   { to: '/auth', label: 'Sign in' },
   { to: '/tracker', label: 'Tracker' },
 ];
+
+/**
+ * The tracker's board is a wide table, so its screens use the full width beside
+ * the sidebar instead of the centred reading column the other pages use. All
+ * four tabs share it so the tab bar does not jump when switching between them.
+ */
+const wideRoutes = ['/coordination', '/milestones', '/import', '/board-setup', '/tracker'];
+
+function isWideRoute(pathname: string) {
+  return wideRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 function pageLabel(pathname: string) {
   if (pathname === '/' || pathname === '/home') return 'Home';
@@ -71,13 +76,8 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const [profile, setProfile] = useState<{ displayName: string; photoURL: string | null } | null>(null);
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const isAdmin = isCoachOrLeader(teams.find((team) => team.teamId === activeTeamId));
-  const visibleItems = navItems.filter((item) => {
-    if (devOnlyRoutes.has(item.to) && !devToolsEnabled) return false;
-    if (item.to === '/admin' && !isAdmin) return false;
-    return true;
-  });
-  const mobileItems = visibleItems.filter((item) => item.mobile);
-  const secondaryItems = visibleItems.filter((item) => !item.mobile);
+  const mobileItems = navItems.filter((item) => item.mobile);
+  const secondaryItems = navItems.filter((item) => !item.mobile);
   const currentPageLabel = pageLabel(location.pathname);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
         ) : null}
 
         <nav className="sidebar-nav" aria-label="Primary">
-          {visibleItems.map((item) => (
+          {navItems.map((item) => (
             <NavLink key={item.to} className="sidebar-nav__link" to={item.to} end={item.to === '/'}>
               <span aria-hidden="true">{item.icon}</span>{item.label}
             </NavLink>
@@ -171,7 +171,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
           </div>
           <div className="top-actions">
             <span className={`connection-status connection-status--${online ? 'online' : 'offline'}`}><i aria-hidden="true" />{online ? 'Online' : 'Offline'}</span>
-            {authStatus === 'authenticated' ? <Link className="top-action" to="/search" aria-label="Search team workspace">⌕</Link> : null}
+            {authStatus === 'authenticated' && user && activeTeamId ? <NotificationBell teamId={activeTeamId} userId={user.uid} online={online} /> : null}
             {authStatus === 'authenticated' ? <details className="mobile-secondary-nav" ref={mobileMenuRef}>
               <summary className="top-action" aria-label="Open workspace menu"><span aria-hidden="true">☰</span></summary>
               <div className="mobile-secondary-nav__panel">
@@ -187,7 +187,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
           </div>
         </header>
 
-        <main className="app-main" id="main-content" tabIndex={-1}>
+        <main className={`app-main${isWideRoute(location.pathname) ? ' app-main--wide' : ''}`} id="main-content" tabIndex={-1}>
           {signOutState ? <StatePanel {...signOutState} actionLabel="Try again" onAction={() => void handleSignOut()} autoFocus /> : null}
           {children}
         </main>

@@ -5,6 +5,8 @@ import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
 import { authEmailSender, completeGoogleRedirect, isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
 import { bootstrapUserProfile } from '@/lib/profile';
+import { setAccountType } from '@/lib/account-type';
+import { ACCOUNT_TYPE_OPTIONS, type AccountType } from '@/lib/domain';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
@@ -58,6 +60,7 @@ export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accountType, setAccountTypeChoice] = useState<AccountType | ''>('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
@@ -74,7 +77,7 @@ export function AuthPage() {
     completeGoogleRedirect(auth)
       .then((credential) => {
         if (!active || !credential) return;
-        navigate(new URLSearchParams(location.search).get('next') || '/hub', { replace: true });
+        navigate(new URLSearchParams(location.search).get('next') || '/team', { replace: true });
       })
       .catch((redirectError: unknown) => {
         if (!active || isDismissedPopup(redirectError)) return;
@@ -96,7 +99,7 @@ export function AuthPage() {
         {needsVerification && user ? (
           <button className="button secondary" type="button" onClick={() => void resendForSignedInUser(user)}>Resend verification email</button>
         ) : null}
-        <Link className="button" to="/hub">Open team hub</Link>
+        <Link className="button" to="/team">Open your team</Link>
       </section>
     );
   }
@@ -122,6 +125,9 @@ export function AuthPage() {
 
     try {
       await bootstrapUserProfile(user);
+      // Best effort: a type that fails to save here is asked for again on the
+      // Create team page, the one place it matters.
+      if (mode === 'signUp' && accountType) await setAccountType(accountType).catch(() => undefined);
       setPendingProfileUser(null);
       return true;
     } catch (profileError) {
@@ -147,7 +153,7 @@ export function AuthPage() {
   }
 
   function destination() {
-    return new URLSearchParams(location.search).get('next') || '/hub';
+    return new URLSearchParams(location.search).get('next') || '/team';
   }
 
   /** Google sign-in covers both modes: Firebase creates the account on first use. */
@@ -200,7 +206,7 @@ export function AuthPage() {
       } else if (mode === 'signUp') {
         const credential = await signUpWithEmail(auth, email, password);
         setPendingProfileUser(credential.user);
-        if (await bootstrapPendingProfile(credential.user)) navigate('/hub', { replace: true });
+        if (await bootstrapPendingProfile(credential.user)) navigate('/team', { replace: true });
       } else {
         await sendPasswordRecovery(auth, email);
         // Testers reported the recovery mail as never sent; it was in their spam
@@ -247,7 +253,7 @@ export function AuthPage() {
         .then(async () => {
           setPendingVerificationUser(null);
           setPendingProfileUser(currentUser);
-          if (await bootstrapPendingProfile(currentUser)) navigate('/hub', { replace: true });
+          if (await bootstrapPendingProfile(currentUser)) navigate('/team', { replace: true });
         })
         .catch(() => {
           setRequestState({
@@ -262,7 +268,7 @@ export function AuthPage() {
     if (pendingProfileUser) {
       setRequestState(null);
       void bootstrapPendingProfile(pendingProfileUser).then((ready) => {
-        if (ready) navigate('/hub', { replace: true });
+        if (ready) navigate('/team', { replace: true });
       });
       return;
     }
@@ -309,6 +315,15 @@ export function AuthPage() {
         {requestState ? <StatePanel {...requestState} actionLabel="Try again" onAction={retryAuthentication} autoFocus /> : null}
         {message ? <StatePanel variant="success" title="Check your inbox" message={message} /> : null}
         <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+        {mode === 'signUp' && !pendingProfileUser && !pendingVerificationUser ? (
+          <label>I am a
+            <select value={accountType} onChange={(event) => setAccountTypeChoice(event.target.value as AccountType | '')} required>
+              <option value="">Choose…</option>
+              {ACCOUNT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <small>Coaches and mentors can create a team; students and parents join by invitation. You choose this once.</small>
+          </label>
+        ) : null}
         {mode !== 'recover' ? <label>Password<input type="password" autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /></label> : null}
         <button className="submit-button" type="submit" disabled={busy} aria-label={busy ? 'Working' : pendingVerificationUser ? 'Retry verification email' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'}>{busy ? 'Working…' : pendingVerificationUser ? 'Retry verification email' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'} <span aria-hidden="true">→</span></button>
         {mode !== 'recover' && !pendingProfileUser && !pendingVerificationUser ? (

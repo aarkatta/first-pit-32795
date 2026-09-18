@@ -4,7 +4,8 @@ import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
 import { formatDateLabel } from '@/lib/dates';
 import { listTeamMembers, type TeamMember } from '@/lib/directory';
-import { isCoachOrLeader } from '@/lib/domain';
+import { isCoachOrLeader, mayOfferTeamCreation } from '@/lib/domain';
+import { useAccountType } from '@/lib/account-type';
 import { leaveTeam } from '@/lib/phase2-service';
 import { useTeamContext } from '@/lib/team-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
@@ -20,7 +21,6 @@ const WORKSPACE_LINKS = [
   { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, and team files' },
   { to: '/knowledge', label: 'Knowledge', hint: 'Questions, how-to videos, and polls' },
   { to: '/scorer', label: 'Scorer', hint: 'Practice and match scoring history' },
-  { to: '/search', label: 'Search', hint: 'Find work across every module' },
   { to: '/profile', label: 'Profile & settings', hint: 'Your account and notification choices' }
 ];
 
@@ -30,6 +30,8 @@ export function TeamHubPage() {
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const teamId = activeTeam?.teamId ?? null;
+  const account = useAccountType(user?.uid);
+  const mayCreateTeam = mayOfferTeamCreation(account.accountType, teams);
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [rosterStatus, setRosterStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -68,7 +70,7 @@ export function TeamHubPage() {
         setConfirmingLeave(false);
         // The membership subscription drops the team on its own; land the user
         // somewhere that reflects the change immediately.
-        navigate('/hub', { replace: true });
+        navigate('/team', { replace: true });
       })
       .catch((leaveError: unknown) => {
         // The server refuses to let the last active coach leave. That message is
@@ -95,7 +97,7 @@ export function TeamHubPage() {
             <h3>No active team memberships yet.</h3>
             <p>Your account only sees teams where an authorized active membership exists.</p>
           </div>
-          <Link className="button" to="/teams/new">＋ Create a team</Link>
+          {mayCreateTeam ? <Link className="button" to="/teams/new">＋ Create a team</Link> : <Link className="button" to="/join">Accept an invitation</Link>}
         </section>
         <section className="split-panels">
           <article className="feature-panel">
@@ -104,12 +106,20 @@ export function TeamHubPage() {
             <p>Open the invitation link a coach sent you, or paste the invitation ID to accept it.</p>
             <Link className="button button--ghost" to="/join">Accept an invitation</Link>
           </article>
-          <article className="feature-panel">
-            <span className="eyebrow">START FRESH</span>
-            <h3>Create your own team</h3>
-            <p>A new team starts private, invite-only, and with you as its coach.</p>
-            <Link className="button button--ghost" to="/teams/new">Create a team</Link>
-          </article>
+          {mayCreateTeam ? (
+            <article className="feature-panel">
+              <span className="eyebrow">START FRESH</span>
+              <h3>Create your own team</h3>
+              <p>A new team starts private, invite-only, and with you as its coach. Coach and mentor accounts can create teams.</p>
+              <Link className="button button--ghost" to="/teams/new">Create a team</Link>
+            </article>
+          ) : (
+            <article className="feature-panel">
+              <span className="eyebrow">NO INVITATION YET?</span>
+              <h3>Ask your coach</h3>
+              <p>Students and parents join a team through an invite link from its coach. Ask them to create one for your email address.</p>
+            </article>
+          )}
         </section>
       </div>
     );
@@ -133,7 +143,7 @@ export function TeamHubPage() {
             {createdLabel ? ` · created ${createdLabel}` : ''}
           </p>
         </div>
-        <Link className="button" to="/teams/new">＋ Create another team</Link>
+        {mayCreateTeam ? <Link className="button" to="/teams/new">＋ Create another team</Link> : null}
       </section>
 
       {!online ? (
@@ -174,7 +184,8 @@ export function TeamHubPage() {
               onAction={() => void loadRoster()}
             />
           ) : null}
-          {rosterStatus === 'ready' && members.length > 0 ? (
+          {/* Coaches get the full roster in the administration section below. */}
+          {rosterStatus === 'ready' && members.length > 0 && !isCoachOrLeader(activeTeam) ? (
             <div>
               {members.slice(0, 8).map((member) => (
                 <span key={member.userId}>{member.displayName} · {member.role}</span>
@@ -184,9 +195,6 @@ export function TeamHubPage() {
           ) : null}
           {rosterStatus === 'ready' && members.length === 0 ? (
             <p><small>You are the only person on this team so far.</small></p>
-          ) : null}
-          {isCoachOrLeader(activeTeam) ? (
-            <div className="form-actions"><Link className="button button--ghost" to="/admin">Manage roster and invitations</Link></div>
           ) : null}
         </article>
         <article className="feature-panel">

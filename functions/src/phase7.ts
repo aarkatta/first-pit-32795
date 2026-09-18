@@ -21,12 +21,21 @@ function textMatches(tokens: string[], ...values: unknown[]) {
   return tokens.every((token) => text.includes(token));
 }
 
-function publicRecord(snapshot: FirebaseFirestore.QueryDocumentSnapshot, fields: string[]) {
-  const data = snapshot.data();
+/**
+ * Picks the named fields for a callable response. A callable encodes a
+ * Firestore `Timestamp` as a bare `{_seconds, _nanoseconds}` object the client
+ * cannot read as a date, so timestamps leave here as ISO strings.
+ */
+export function pickPublicFields(id: string, data: DocumentData, fields: string[]) {
   return fields.reduce<Record<string, unknown>>((result, field) => {
-    if (data[field] !== undefined) result[field] = data[field];
+    const value = data[field];
+    if (value !== undefined) result[field] = value instanceof Timestamp ? value.toDate().toISOString() : value;
     return result;
-  }, { id: snapshot.id });
+  }, { id });
+}
+
+function publicRecord(snapshot: FirebaseFirestore.QueryDocumentSnapshot, fields: string[]) {
+  return pickPublicFields(snapshot.id, snapshot.data(), fields);
 }
 
 function result(type: string, teamId: string, recordId: string, title: string, snippet: string, deepLink: string) {
@@ -254,7 +263,7 @@ export const globalSearch = async (request: Phase7Request) => {
       files.docs.filter((snapshot) => snapshot.data().status === 'ready' && !['blocked', 'pending'].includes(String(snapshot.data().scanStatus)) && textMatches(tokens, snapshot.data().name)).forEach((snapshot) => records.push(result('File', teamId, snapshot.id, String(snapshot.data().name ?? 'Team file'), `${String(snapshot.data().contentType ?? 'File')} · ${Number(snapshot.data().sizeBytes ?? 0)} bytes`, `/files?file=${encodeURIComponent(snapshot.id)}`)));
     }
     const team = await db.doc(`teams/${teamId}`).get();
-    if (team.exists && textMatches(tokens, team.data()?.name)) records.push(result('Team', teamId, teamId, String(team.data()?.name ?? 'Team'), 'Team workspace', '/hub'));
+    if (team.exists && textMatches(tokens, team.data()?.name)) records.push(result('Team', teamId, teamId, String(team.data()?.name ?? 'Team'), 'Team workspace', '/team'));
     records.push(...await recentTeamRecords(teamId, tokens));
   }
   const unique = [...new Map(records.map((entry) => [`${entry.type}:${entry.teamId}:${entry.recordId}`, entry])).values()];

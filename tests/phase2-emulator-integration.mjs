@@ -93,6 +93,15 @@ let mentor = await createUser(`phase2-mentor-${suffix}@example.com`);
 const joiner = await createUser(`phase2-joiner-${suffix}@example.com`);
 let expiredInvitee = await createUser(`phase2-expired-${suffix}@example.com`);
 
+// Team creation is for coach and mentor accounts; the type is declared once.
+await callFails('createTeam', joiner.idToken, { name: 'No account type yet' }, 'FAILED_PRECONDITION');
+await call('setAccountType', student.idToken, { accountType: 'student' });
+await callFails('createTeam', student.idToken, { name: 'Student team' }, 'PERMISSION_DENIED');
+await callFails('setAccountType', student.idToken, { accountType: 'coach' }, 'FAILED_PRECONDITION');
+const unchangedType = await call('setAccountType', student.idToken, { accountType: 'student' });
+if (unchangedType.changed !== false) throw new Error('Re-declaring the same account type was not a no-op.');
+await callFails('setAccountType', coach.idToken, { accountType: 'teamLeader' }, 'INVALID_ARGUMENT');
+await call('setAccountType', coach.idToken, { accountType: 'coach' });
 const team = await call('createTeam', coach.idToken, { name: `Phase 2 Integration ${suffix}` });
 const teamId = team.teamId;
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: mentor.email, role: 'mentor', operationId: 'op-invite-mentor' });
@@ -145,4 +154,14 @@ const leaveResponse = await json(`${functionsBase}/leaveTeam`, {
 });
 if (leaveResponse.response.status === 200) throw new Error('A sole coach was allowed to leave the team.');
 
-globalThis.console.log('Phase 2 Functions integration passed: invitation verification/expiry, role assignment, policy update, join approval, report, moderation, and sole-coach protection.');
+// A coach-typed account that is a student on some team still cannot create one:
+// the membership decides, so an invited student cannot relabel their way in.
+let dual = await createUser(`phase2-dual-${suffix}@example.com`);
+await call('setAccountType', dual.idToken, { accountType: 'coach' });
+const guardTeam = await call('createTeam', coach.idToken, { name: `Phase 2 dual-role guard ${suffix}` });
+const dualInvitation = await call('createInvitation', coach.idToken, { teamId: guardTeam.teamId, email: dual.email, role: 'student' });
+dual = await verifyUser(dual);
+await call('acceptInvitation', dual.idToken, { invitationId: dualInvitation.invitationId });
+await callFails('createTeam', dual.idToken, { name: 'Dual role team' }, 'PERMISSION_DENIED');
+
+globalThis.console.log('Phase 2 Functions integration passed: team creation by account type, invitation verification/expiry, role assignment, policy update, join approval, report, moderation, and sole-coach protection.');

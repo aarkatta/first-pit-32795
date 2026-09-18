@@ -57,6 +57,8 @@ const suffix = Date.now();
 const coach = await createUser(`phase5-coach-${suffix}@example.com`);
 const student = await createUser(`phase5-student-${suffix}@example.com`);
 const parent = await createUser(`phase5-parent-${suffix}@example.com`);
+// Only coach and mentor accounts create teams; the type is declared once.
+await call('setAccountType', coach.idToken, { accountType: 'coach' });
 const team = await call('createTeam', coach.idToken, { name: `Phase 5 Integration ${suffix}` });
 const teamId = team.teamId;
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: student.email, role: 'student' });

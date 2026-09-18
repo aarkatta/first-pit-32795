@@ -62,6 +62,8 @@ const mentor = await createUser(`phase3-mentor-${suffix}@example.com`);
 const parent = await createUser(`phase3-parent-${suffix}@example.com`);
 // Never invited anywhere: proves an import cannot assign work to a stranger.
 const outsider = await createUser(`phase3-outsider-${suffix}@example.com`);
+// Only coach and mentor accounts create teams; the type is declared once.
+await call('setAccountType', coach.idToken, { accountType: 'coach' });
 const team = await call('createTeam', coach.idToken, { name: `Phase 3 Integration ${suffix}` });
 const teamId = team.teamId;
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: student.email, role: 'student' });
@@ -91,7 +93,17 @@ const project = await call('createProject', coach.idToken, { teamId, operationId
 const testingColumn = await call('addProjectColumn', coach.idToken, { teamId, projectId: project.projectId, operationId: `column-${suffix}`, name: 'Testing', color: 'purple' });
 const kanbanTask = await call('createKanbanTask', coach.idToken, { teamId, projectId: project.projectId, columnId: 'todo', operationId: `kanban-task-${suffix}`, title: 'Assigned robot review', assignedTo: student.localId, goalId: goal.goalId });
 const unassignedTask = await call('createKanbanTask', coach.idToken, { teamId, projectId: project.projectId, columnId: 'todo', operationId: `unassigned-task-${suffix}`, title: 'Unassigned coach task' });
-await callFails('moveTaskCard', student.idToken, { teamId, projectId: project.projectId, taskId: unassignedTask.taskId, columnId: testingColumn.columnId, expectedVersion: 1, operationId: `student-unassigned-move-${suffix}` }, 'PERMISSION_DENIED');
+// Students are task editors: they move any card, not only their own.
+await call('moveTaskCard', student.idToken, { teamId, projectId: project.projectId, taskId: unassignedTask.taskId, columnId: testingColumn.columnId, expectedVersion: 1, operationId: `student-unassigned-move-${suffix}` });
+await call('updateTask', student.idToken, { teamId, taskId: unassignedTask.taskId, expectedVersion: 2, operationId: `student-edit-${suffix}`, title: 'Unassigned task a student renamed', priority: 'high', assignedTo: student.localId });
+const studentEdited = await readDocument(`tasks/${unassignedTask.taskId}`, student.idToken);
+if (studentEdited.fields.title?.stringValue !== 'Unassigned task a student renamed' || studentEdited.fields.assignedTo?.stringValue !== student.localId) throw new Error('A student could not edit a task\'s details.');
+const studentCreated = await call('createKanbanTask', student.idToken, { teamId, projectId: project.projectId, columnId: 'todo', operationId: `student-create-${suffix}`, title: 'Task a student added' });
+const studentCard = await readDocument(`tasks/${studentCreated.taskId}`, student.idToken);
+if (studentCard.fields.createdBy?.stringValue !== student.localId) throw new Error('A student-created task did not record its author.');
+await callFails('createKanbanTask', mentor.idToken, { teamId, projectId: project.projectId, columnId: 'todo', title: 'Mentor task' }, 'PERMISSION_DENIED');
+await callFails('createKanbanTask', parent.idToken, { teamId, projectId: project.projectId, columnId: 'todo', title: 'Parent task' }, 'PERMISSION_DENIED');
+await callFails('updateTask', mentor.idToken, { teamId, taskId: unassignedTask.taskId, expectedVersion: 3, title: 'Mentor rename' }, 'PERMISSION_DENIED');
 await call('moveTaskCard', student.idToken, { teamId, projectId: project.projectId, taskId: kanbanTask.taskId, columnId: testingColumn.columnId, expectedVersion: 1, operationId: `student-move-${suffix}` });
 const movedTask = await readDocument(`tasks/${kanbanTask.taskId}`, student.idToken);
 if (movedTask.fields.columnId?.stringValue !== testingColumn.columnId || movedTask.fields.version?.integerValue !== '2') throw new Error('A student could not move their assigned team card.');
@@ -397,6 +409,17 @@ const migrationInvitation = await call('createInvitation', coach.idToken, { team
 await call('acceptInvitation', student.idToken, { invitationId: migrationInvitation.invitationId });
 await callFails('ensureDefaultProject', student.idToken, { teamId: migrationTeam.teamId }, 'PERMISSION_DENIED');
 
+// A team with no tasks yet starts from the standard season plan: the same
+// categories and tasks as the downloadable Excel template.
+const seededBoard = await call('ensureDefaultProject', coach.idToken, { teamId: migrationTeam.teamId });
+if (!seededBoard.created || seededBoard.seededTaskCount !== 48) throw new Error(`A new team's board was not seeded from the standard plan (${seededBoard.seededTaskCount}).`);
+const seededBoardDoc = await readDocument(`projects/${seededBoard.projectId}`, student.idToken);
+const seededCategories = seededBoardDoc.fields.categories?.arrayValue?.values ?? [];
+if (seededCategories.length !== 4 || seededBoardDoc.fields.migrationVersion?.integerValue !== '1') throw new Error('The seeded board is missing its categories or was left mid-migration.');
+// Once the board exists, anyone on the team can open it, and nothing is seeded twice.
+const reopened = await call('ensureDefaultProject', student.idToken, { teamId: migrationTeam.teamId });
+if (reopened.created || reopened.seededTaskCount) throw new Error('Opening an existing board seeded it again.');
+
 if (process.env.STORAGE_EMULATOR_HOST) {
   const { deleteApp, initializeApp } = await import('firebase/app');
   const { connectAuthEmulator, getAuth, signInWithEmailAndPassword } = await import('firebase/auth');
@@ -442,4 +465,4 @@ if (process.env.STORAGE_EMULATOR_HOST) {
   await Promise.all([deleteApp(coachStorage.app), deleteApp(studentStorage.app)]);
 }
 
-globalThis.console.log('Phase 3 and Release 1.1 integration passed: admin-only migration, assigned Student movement, coach-only board templates, upload ownership/atomic replay when Storage is available, notifications, and goal counters.');
+globalThis.console.log('Phase 3 and Release 1.1 integration passed: admin-only migration, standard-plan seeding, Student task editing, coach-only board templates, upload ownership/atomic replay when Storage is available, notifications, and goal counters.');

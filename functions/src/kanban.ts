@@ -1,19 +1,23 @@
 import { FieldPath, FieldValue, getFirestore, type DocumentData, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
+  assertTaskEditorInTransaction,
   assertTeamAdminInTransaction,
   assertTeamMemberInTransaction,
   auditRecord,
   getInput,
   isReplayOfOwnCreate,
+  isTaskEditor,
   requireString,
   requireText,
   requireTeamAdmin,
   requireTeamId,
+  requireTaskEditor,
   requireTeamMember,
   type TeamAdmin
 } from './phase2.js';
 import { DASHBOARD_AREAS } from './phase7.js';
+import { buildStandardPlan } from './standard-plan.js';
 
 /** The judging areas a category may be tied to; the dashboard counts the same ids. */
 const AREA_IDS: readonly string[] = DASHBOARD_AREAS.map((area) => area.id);
@@ -119,10 +123,6 @@ export function inputRecord(request: KanbanRequest) {
 
 function has(input: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(input, key);
-}
-
-function isAdmin(actor: TeamAdmin) {
-  return actor.platformAdmin || actor.role === 'coach' || actor.role === 'teamLeader';
 }
 
 function optionalId(value: unknown, label: string) {
@@ -325,36 +325,84 @@ export const ensureDefaultProject = async (request: KanbanRequest) => {
   }
   const actor = await requireTeamAdmin(request, teamId);
   let created = false;
+  let seededTaskCount = 0;
   if (!projectSnapshot.exists) {
+    const plan = buildStandardPlan();
+    const seedRefs = plan.cards.map(() => db.collection('tasks').doc());
     await db.runTransaction(async (transaction) => {
       await assertTeamAdminInTransaction(transaction, teamId, actor);
-      const existing = await transaction.get(projectRef);
+      const [existing, anyTask] = await Promise.all([
+        transaction.get(projectRef),
+        transaction.get(db.collection('tasks').where('teamId', '==', teamId).limit(1))
+      ]);
       if (existing.exists) return;
+      // A team with no work yet starts from the standard season plan. A team
+      // that already has tasks keeps exactly those: they migrate onto the board
+      // below, and seeding would bury them under 48 cards nobody asked for.
+      const seed = anyTask.empty;
       const now = FieldValue.serverTimestamp();
       transaction.set(projectRef, {
         id: projectId,
         teamId,
         createdBy: actor.uid,
         name: 'Team Board',
-        description: 'Shared team work carried forward from the Tracker.',
+        description: seed ? 'The standard FLL season plan. Edit, add or remove tasks to fit your team.' : 'Shared team work carried forward from the Tracker.',
         columns: DEFAULT_PROJECT_COLUMNS,
+        categories: seed ? plan.categories : [],
         completedColumnId: 'completed',
         archived: false,
         version: 1,
-        migrationVersion: 0,
+        // Nothing to migrate on a seeded board, so the migration pass is skipped.
+        migrationVersion: seed ? 1 : 0,
         migrationCursor: null,
-        migrationColumnCounts: {},
+        migrationColumnCounts: seed ? { todo: plan.cards.length } : {},
+        ...(seed ? { templateId: 'standard-plan' } : {}),
         createdAt: now,
         updatedAt: now
       });
+      if (seed) {
+        plan.cards.forEach((card, index) => {
+          const ref = seedRefs[index];
+          transaction.set(ref, {
+            id: ref.id,
+            teamId,
+            createdBy: actor.uid,
+            projectId,
+            columnId: 'todo',
+            categoryId: card.categoryId,
+            orderKey: (index + 1) * ORDER_STEP,
+            version: 1,
+            title: card.title,
+            description: card.description,
+            status: 'todo',
+            priority: 'medium',
+            assignedTo: null,
+            watcherUserIds: [],
+            goalId: null,
+            labels: card.labels,
+            checklist: [],
+            subtasks: [],
+            attachmentFileIds: [],
+            startAt: null,
+            endAt: null,
+            dueAt: null,
+            completedAt: null,
+            historyCount: 1,
+            createdAt: now,
+            updatedAt: now
+          });
+          transaction.set(db.collection('taskHistory').doc(), { id: ref.id, teamId, createdBy: actor.uid, taskId: ref.id, actorUserId: actor.uid, action: 'created', changedFields: ['created', 'projectId', 'columnId'], createdAt: now, updatedAt: now });
+        });
+      }
       transaction.set(db.collection('auditEvents').doc(), auditRecord({
         type: 'administrative.action',
         actorUserId: actor.uid,
         teamId,
         targetResource: `projects/${projectId}`,
-        metadata: { action: 'kanban.default-project.created' }
+        metadata: { action: seed ? 'kanban.default-project.seeded' : 'kanban.default-project.created' }
       }));
       created = true;
+      seededTaskCount = seed ? plan.cards.length : 0;
     });
   }
 
@@ -441,7 +489,7 @@ export const ensureDefaultProject = async (request: KanbanRequest) => {
     });
     result = { migratedTaskCount: tasksToMigrate.length, nextCursor };
   });
-  return { projectId, created, ...result };
+  return { projectId, created, seededTaskCount, ...result };
 };
 
 export const createProject = async (request: KanbanRequest) => {
@@ -716,7 +764,8 @@ function stringList(value: unknown, label: string, maxItems: number, maxLength =
 
 export const createKanbanTask = async (request: KanbanRequest) => {
   const teamId = requireTeamId(request);
-  const admin = await requireTeamAdmin(request, teamId);
+  // Students add work too; mentors and parents view the board.
+  const actor = await requireTaskEditor(request, teamId);
   const input = inputRecord(request);
   const projectId = requireString(input.projectId, 'Project ID', 128);
   const columnId = requireString(input.columnId, 'Column ID', 128);
@@ -732,7 +781,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
   const taskRef = db.doc(`tasks/${taskId}`);
   const opRef = operationRef(teamId, operationId(input, 'createKanbanTask'));
   await db.runTransaction(async (transaction) => {
-    await assertTeamAdminInTransaction(transaction, teamId, admin);
+    await assertTaskEditorInTransaction(transaction, teamId, actor);
     const projectRef = db.doc(`projects/${projectId}`);
     const [projectSnapshot, existing, operation, lastCards] = await Promise.all([
       transaction.get(projectRef),
@@ -740,7 +789,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
       transaction.get(opRef),
       transaction.get(db.collection('tasks').where('teamId', '==', teamId).where('projectId', '==', projectId).where('columnId', '==', columnId).orderBy('orderKey', 'desc').limit(MAX_CARDS_PER_COLUMN_PAGE))
     ]);
-    if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: admin.uid }, 'Task')) return;
+    if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: actor.uid }, 'Task')) return;
     const project = requireProject(projectSnapshot, teamId);
     requireColumn(project, columnId);
     const projectCategoryList = projectCategories(project);
@@ -766,7 +815,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
     transaction.set(taskRef, {
       id: taskId,
       teamId,
-      createdBy: admin.uid,
+      createdBy: actor.uid,
       projectId,
       columnId,
       categoryId,
@@ -791,9 +840,9 @@ export const createKanbanTask = async (request: KanbanRequest) => {
       createdAt: now,
       updatedAt: now
     });
-    transaction.set(db.collection('taskHistory').doc(), { id: taskId, teamId, createdBy: admin.uid, taskId, actorUserId: admin.uid, action: 'created', changedFields: ['created', 'projectId', 'columnId'], createdAt: now, updatedAt: now });
-    transaction.set(opRef, { teamId, createdBy: admin.uid, kind: 'kanban-task.create', createdAt: now });
-    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: admin.uid, teamId, targetResource: `tasks/${taskId}`, metadata: { action: 'kanban.task.created' } }));
+    transaction.set(db.collection('taskHistory').doc(), { id: taskId, teamId, createdBy: actor.uid, taskId, actorUserId: actor.uid, action: 'created', changedFields: ['created', 'projectId', 'columnId'], createdAt: now, updatedAt: now });
+    transaction.set(opRef, { teamId, createdBy: actor.uid, kind: 'kanban-task.create', createdAt: now });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: actor.uid, teamId, targetResource: `tasks/${taskId}`, metadata: { action: 'kanban.task.created' } }));
   });
   return { taskId, projectId, columnId };
 };
@@ -831,9 +880,8 @@ export const moveTaskCard = async (request: KanbanRequest) => {
     requireColumn(project, columnId);
     if (!columnHasCapacity(targetCards.size, task.columnId === columnId)) throw new HttpsError('resource-exhausted', 'This column is full. Archive completed work before moving more cards here.');
     if (Number(task.version ?? 1) !== expectedVersion) throw new HttpsError('aborted', 'This card changed after the board loaded. The board has been refreshed.');
-    if (!isAdmin({ ...actor, role: String(membership.role) as TeamAdmin['role'] })) {
-      if (membership.role !== 'student') throw new HttpsError('permission-denied', 'Your role can view the board but cannot move cards.');
-      if (task.assignedTo !== actor.uid) throw new HttpsError('permission-denied', 'Students can move only tasks assigned to them.');
+    if (!isTaskEditor({ ...actor, role: String(membership.role) as TeamAdmin['role'] })) {
+      throw new HttpsError('permission-denied', 'Your role can view the board but cannot move cards.');
     }
 
     const target = targetCards.docs.filter((snapshot) => snapshot.id !== taskId);

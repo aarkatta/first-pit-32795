@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('firebase/functions', () => ({ httpsCallable: mocks.httpsCallable }));
 vi.mock('./firebase', () => ({ getFirebaseServices: mocks.getFirebaseServices }));
 
-import { getDashboard, globalSearch, requestAccountDeletion, updateProfileSettings } from './phase7-service';
+import { getDashboard, requestAccountDeletion, updateProfileSettings } from './phase7-service';
 
 describe('Phase 7 client service contracts', () => {
   beforeEach(() => {
@@ -20,7 +20,6 @@ describe('Phase 7 client service contracts', () => {
     const profile = { displayName: 'Student', photoURL: null, theme: 'system' as const, highContrast: true, reducedMotion: false, fontScale: 'large' as const, emailNotifications: true, pushNotifications: false, isMinor: true };
     const cases: Array<[string, () => Promise<unknown>, unknown]> = [
       ['getDashboard', () => getDashboard('team-1'), { teamId: 'team-1' }],
-      ['globalSearch', () => globalSearch({ query: 'mission', teamId: 'team-1' }), { query: 'mission', teamId: 'team-1' }],
       ['requestAccountDeletion', () => requestAccountDeletion(), {}],
       ['updateProfileSettings', () => updateProfileSettings(profile), profile]
     ];

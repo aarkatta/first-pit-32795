@@ -379,10 +379,58 @@ export function hasTeamRole(
   return Boolean(membership && isTeamMember(membership) && roles.includes(membership.role));
 }
 
+/**
+ * What a person said they are at sign-up. Belongs to the account, not a team,
+ * and only decides who may create a team. Mirrors `ACCOUNT_TYPES` in
+ * `functions/src/phase2.ts`, which enforces it.
+ */
+export type AccountType = 'coach' | 'mentor' | 'student' | 'parent';
+
+export const ACCOUNT_TYPE_OPTIONS: Array<{ value: AccountType; label: string }> = [
+  { value: 'coach', label: 'Coach' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'student', label: 'Student' },
+  { value: 'parent', label: 'Parent' }
+];
+
+export function isAccountType(value: unknown): value is AccountType {
+  return ACCOUNT_TYPE_OPTIONS.some((option) => option.value === value);
+}
+
+/** Coach and mentor accounts create teams; students and parents join by invitation. */
+export function canCreateTeams(accountType: AccountType | null | undefined): boolean {
+  return accountType === 'coach' || accountType === 'mentor';
+}
+
+/**
+ * Whether to offer "Create a team" at all. A student or parent on any team is
+ * never offered it, whatever their account says — the server refuses them the
+ * same way. An account with no type yet (created before sign-up asked) and no
+ * such role is offered it, and is asked for its type on the Create team page.
+ */
+export function mayOfferTeamCreation(
+  accountType: AccountType | null | undefined,
+  memberships: ReadonlyArray<Pick<Membership, 'role' | 'status'>>
+): boolean {
+  const studentOrParent = memberships.some((membership) => (membership.role === 'student' || membership.role === 'parent') && (membership.status === 'active' || membership.status === 'pending'));
+  if (studentOrParent) return false;
+  return accountType === null || accountType === undefined || canCreateTeams(accountType);
+}
+
 export function isCoachOrLeader(
   membership: Pick<Membership, 'role' | 'status'> | null | undefined
 ): boolean {
   return hasTeamRole(membership, ['coach', 'teamLeader']);
+}
+
+/**
+ * Adding tracker tasks and editing any task's details. Mirrors
+ * `TASK_EDITOR_ROLES` in `functions/src/phase2.ts`, which enforces it.
+ */
+export function canEditTasks(
+  membership: Pick<Membership, 'role' | 'status'> | null | undefined
+): boolean {
+  return hasTeamRole(membership, ['coach', 'teamLeader', 'student']);
 }
 
 export type AuthorizationClaims = { platformAdmin?: boolean };
@@ -415,7 +463,7 @@ export type Permission =
   | 'score.export';
 
 const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
-  student: ['profile.update', 'team.read', 'membership.request', 'report.create', 'task.updateAssignedFields', 'file.read', 'notification.read', 'score.read', 'score.create'],
+  student: ['profile.update', 'team.read', 'membership.request', 'report.create', 'task.create', 'task.assign', 'task.updateAssignedFields', 'file.read', 'notification.read', 'score.read', 'score.create'],
   parent: ['profile.update', 'team.read', 'report.create', 'file.read', 'notification.read', 'score.read', 'score.create'],
   mentor: ['profile.update', 'team.read', 'report.create', 'file.read', 'notification.read', 'score.read', 'score.create'],
   coach: ['profile.update', 'team.read', 'membership.invite', 'membership.approve', 'membership.manage', 'role.assign', 'policy.update', 'report.create', 'moderation.read', 'moderation.manage', 'audit.read', 'task.create', 'task.assign', 'task.updateAssignedFields', 'goal.manage', 'event.manage', 'file.upload', 'file.read', 'notification.read', 'score.read', 'score.create', 'score.correct', 'score.config.manage', 'score.export'],

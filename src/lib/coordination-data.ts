@@ -4,10 +4,12 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   where,
-  type Firestore
+  type Firestore,
+  type Unsubscribe
 } from 'firebase/firestore';
 import type { NotificationRecord, TeamGoal } from './domain';
 import { parseTeamGoal } from './phase3-service';
@@ -69,6 +71,52 @@ export async function loadTeamNotifications(firestore: Firestore, teamId: string
     limit(max)
   ));
   return snapshot.docs.map((document) => parseNotification(document.id, document.data() as Record<string, unknown>));
+}
+
+/**
+ * The unread badge stops counting here; anything above renders as "99+", so
+ * the listener never reads more than this many documents.
+ */
+export const UNREAD_BADGE_LIMIT = 100;
+
+export function formatUnreadBadge(count: number): string {
+  return count >= UNREAD_BADGE_LIMIT ? '99+' : String(count);
+}
+
+/** Live count of this member's unread notifications on one team, capped at `UNREAD_BADGE_LIMIT`. */
+export function subscribeUnreadNotificationCount(
+  firestore: Firestore,
+  teamId: string,
+  userId: string,
+  onNext: (count: number) => void,
+  onError: (error: Error) => void
+): Unsubscribe {
+  return onSnapshot(query(
+    collection(firestore, 'notifications'),
+    where('recipientUserId', '==', userId),
+    where('teamId', '==', teamId),
+    where('readAt', '==', null),
+    orderBy('createdAt', 'desc'),
+    limit(UNREAD_BADGE_LIMIT)
+  ), (snapshot) => onNext(snapshot.size), onError);
+}
+
+/** Live view of this member's most recent notifications on one team, read and unread. */
+export function subscribeRecentNotifications(
+  firestore: Firestore,
+  teamId: string,
+  userId: string,
+  max: number,
+  onNext: (notifications: NotificationRecord[]) => void,
+  onError: (error: Error) => void
+): Unsubscribe {
+  return onSnapshot(query(
+    collection(firestore, 'notifications'),
+    where('recipientUserId', '==', userId),
+    where('teamId', '==', teamId),
+    orderBy('createdAt', 'desc'),
+    limit(max)
+  ), (snapshot) => onNext(snapshot.docs.map((document) => parseNotification(document.id, document.data() as Record<string, unknown>))), onError);
 }
 
 /**
