@@ -42,12 +42,12 @@ describe('AppShell route and canonical profile metadata', () => {
     });
   });
 
-  it('names and exposes Knowledge in desktop/mobile navigation and shows the Firestore profile', () => {
+  it('names and exposes the Knowledge base in desktop/mobile navigation and shows the Firestore profile', () => {
     const { unmount } = render(<MemoryRouter initialEntries={['/knowledge']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Knowledge content</p></AppShell></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: 'Knowledge' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Knowledge' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Knowledge base' })).toHaveLength(2);
     expect(screen.getByText('Saved Profile')).toBeInTheDocument();
-    expect(document.title).toBe('Knowledge | First Pit');
+    expect(document.title).toBe('Knowledge base | First Pit');
     unmount();
     expect(mocks.unsubscribe).toHaveBeenCalledOnce();
   });
@@ -75,12 +75,13 @@ describe('AppShell route and canonical profile metadata', () => {
     render(<MemoryRouter initialEntries={['/scorer']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Scorer content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(within(primary).getAllByRole('link')).toHaveLength(4);
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Manage team', '▦Tracker', '?Knowledge']);
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '?Knowledge base', '▤Manage team']);
 
     fireEvent.click(screen.getByLabelText('Open workspace menu'));
     const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
     expect(within(secondary).getByRole('link', { name: 'Scorer' })).toBeInTheDocument();
-    expect(within(secondary).getByRole('link', { name: 'Team files' })).toBeInTheDocument();
+    // Team files has no nav entry; it is reached from task cards.
+    expect(within(secondary).queryByRole('link', { name: 'Team files' })).not.toBeInTheDocument();
     // Notifications moved to the top-bar bell.
     expect(within(secondary).queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bell team-2 user-1' })).toBeInTheDocument();
@@ -90,7 +91,7 @@ describe('AppShell route and canonical profile metadata', () => {
     expect(within(secondary).queryByRole('link', { name: 'Board setup' })).not.toBeInTheDocument();
     expect(within(secondary).queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();
     expect(within(secondary).queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
-    expect(within(secondary).getByRole('link', { name: 'Profile & settings' })).toBeInTheDocument();
+    expect(within(secondary).getByRole('link', { name: 'View profile' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team from mobile menu' }), { target: { value: 'team-1' } });
     expect(setActiveTeamId).toHaveBeenCalledWith('team-1');
     expect(screen.getByRole('button', { name: 'Sign out from mobile menu' })).toBeInTheDocument();
@@ -128,7 +129,9 @@ describe('AppShell route and canonical profile metadata', () => {
   it('lists only product destinations: no State lab, Emulators or Search', () => {
     render(<MemoryRouter initialEntries={['/team']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Team content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▤Manage team', '▦Tracker', '🗎Team files', '?Knowledge', '◫Scorer']);
+    // Order is a product decision: Home, Tracker, Scorer, Knowledge base, Manage team, View profile, Sign out.
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '◫Scorer', '?Knowledge base', '▤Manage team', '◉View profile']);
+    expect(within(primary).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Search team workspace' })).not.toBeInTheDocument();
   });
 

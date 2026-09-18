@@ -747,6 +747,8 @@ Phase 5 stores Questions, How-to Videos, and Polls in top-level Firestore collec
 - Polls use transaction-guarded one-vote-per-user documents, single/multiple choice validation, role audiences, anonymous mode, expiration, close-now, results visibility, aggregate counts, `pollHistory`, audit events, and deterministic notification IDs/deep links. Result aggregates are returned only through server-controlled output that enforces each poll's `resultsVisibility`; direct reads and list output must not bypass that setting.
 - `remove-content` moderation actions update the referenced Phase 5 item, and the read rules hide removed questions/videos from subsequent access.
 
+As of 2026-09-18 the Knowledge page has three tabs: Questions, Polls, and Resources (static curated links in `src/lib/knowledge-resources.ts`). The Videos tab and question comments were removed from the UI; the video and comment callables, rules and data remain server-side, and old `?tab=videos` / `?video=` links open the Questions tab.
+
 Acceptance and rules coverage lives in `tests/phase5-emulator-integration.mjs` and `tests/firestore-rules-phase5.integration.mjs`.
 
 ---
@@ -786,7 +788,7 @@ project management. Notifications are reached from the top-bar bell
 (capped at 99+, reading at most 100 documents) and, only while open, the eight
 most recent; its "See all" link opens the full `/notifications` page. Each loads only its own records, so a team whose policy
 or rules deny one still gets the others, and the phone's four-slot bar carries
-Home, Manage team, Tracker and Knowledge; everything else is in the ☰ menu.
+Home, Tracker, Knowledge base and Manage team; everything else is in the ☰ menu.
 Search results for a milestone and a file now deep-link to `/milestones?goal=`
 and `/files?file=`; links stored before the split still resolve to the tracker.
 
@@ -858,11 +860,13 @@ notifications are always written as enabled.
 
 ## App shell and navigation
 
-As of 2026-09-17 (`src/components/AppShell.tsx`):
+As of 2026-09-18 (`src/components/AppShell.tsx`):
 
-- **Sidebar:** Home, Manage team, Tracker, Team files, Knowledge, Scorer. The
-  phone's bottom bar carries Home, Manage team, Tracker and Knowledge; the rest
-  sit in the ☰ menu.
+- **Sidebar:** Home, Tracker, Scorer, Knowledge base, Manage team, View
+  profile, Sign out, in that order; the footer shows who is signed in. Team
+  files (`/files`) has no entry and is reached from task cards. The phone's
+  bottom bar carries Home, Tracker, Knowledge base and Manage team; Scorer,
+  View profile and Sign out sit in the ☰ menu.
 - **Top bar:** online status and the notification **bell**
   (`NotificationBell`) — a live unread count for the active team (99+ cap, at
   most 100 documents read), a dropdown of the eight most recent that is read

@@ -16,13 +16,15 @@ type AppShellProps = {
   appTagline: string;
 };
 
+// Sidebar order. View profile and Sign out follow these in the sidebar; the
+// four `mobile` entries fill the phone's bottom bar and the rest go in its ☰
+// menu. Team files (`/files`) has no entry: it is reached from task cards.
 const navItems = [
   { to: '/', label: 'Home', icon: '⌂', mobile: true },
-  { to: '/team', label: 'Manage team', icon: '▤', mobile: true },
   { to: '/coordination', label: 'Tracker', icon: '▦', mobile: true },
-  { to: '/files', label: 'Team files', icon: '🗎' },
-  { to: '/knowledge', label: 'Knowledge', icon: '?', mobile: true },
-  { to: '/scorer', label: 'Scorer', icon: '◫' }
+  { to: '/scorer', label: 'Scorer', icon: '◫' },
+  { to: '/knowledge', label: 'Knowledge base', icon: '?', mobile: true },
+  { to: '/team', label: 'Manage team', icon: '▤', mobile: true }
 ];
 
 function getBrandMark(appName: string) {
@@ -42,6 +44,7 @@ const routeLabels: { to: string; label: string }[] = [
   { to: '/board-setup', label: 'Board setup' },
   // Reached from the top-bar bell rather than the navigation.
   { to: '/notifications', label: 'Notifications' },
+  { to: '/files', label: 'Team files' },
   { to: '/profile', label: 'Profile & settings' },
   { to: '/settings', label: 'Profile & settings' },
   { to: '/teams/new', label: 'Create a team' },
@@ -142,17 +145,22 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
               <span aria-hidden="true">{item.icon}</span>{item.label}
             </NavLink>
           ))}
+          {authStatus === 'authenticated' ? <>
+            <NavLink className="sidebar-nav__link" to="/profile">
+              <span aria-hidden="true">◉</span>View profile
+            </NavLink>
+            <button className="sidebar-nav__link sidebar-nav__button" type="button" disabled={signingOut} onClick={() => void handleSignOut()}>
+              <span aria-hidden="true">⏻</span>{signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </> : null}
         </nav>
 
         {authStatus === 'authenticated' ? (
           <div className="sidebar-footer">
-            <Link className="profile-button" to="/profile">
+            <div className="profile-button profile-button--static">
               <span className="profile-avatar" aria-hidden="true">{profile?.photoURL ? <img src={profile.photoURL} alt="" /> : (profile?.displayName || user?.displayName || user?.email || 'FP').slice(0, 2).toUpperCase()}</span>
-              <span><strong>{profile?.displayName || user?.displayName || user?.email || 'Signed in'}</strong><small>Profile & settings</small></span>
-            </Link>
-            <button className="text-button" type="button" disabled={signingOut} onClick={() => void handleSignOut()}>
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </button>
+              <span><strong>{profile?.displayName || user?.displayName || user?.email || 'Signed in'}</strong><small>{user?.email ?? 'Signed in'}</small></span>
+            </div>
           </div>
         ) : (
           <div className="sidebar-footer"><Link className="button" to="/auth">Sign in</Link></div>
@@ -178,7 +186,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
                 {teams.length > 0 ? <label className="mobile-team-switcher">Active team<select aria-label="Switch active team from mobile menu" value={activeTeamId ?? ''} onChange={(event) => setActiveTeamId(event.target.value)}>{teams.map(({ teamId, team }) => <option key={teamId} value={teamId}>{team?.name ?? 'Unnamed team'}</option>)}</select></label> : null}
                 <nav className="mobile-secondary-nav__links" aria-label="Mobile secondary navigation">
                   {secondaryItems.map((item) => <NavLink key={item.to} to={item.to} onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">{item.icon}</span>{item.label}</NavLink>)}
-                  <NavLink to="/profile" onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">◉</span>Profile &amp; settings</NavLink>
+                  <NavLink to="/profile" onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">◉</span>View profile</NavLink>
                 </nav>
                 <button className="text-button" type="button" aria-label="Sign out from mobile menu" disabled={signingOut} onClick={() => void handleSignOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button>
               </div>

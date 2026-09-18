@@ -289,7 +289,7 @@ export function AuthPage() {
         <ul className="art-points">
           <li>Boards and tasks everyone can see</li>
           <li>Files and team notifications</li>
-          <li>Moderated questions and how-to videos</li>
+          <li>Moderated questions and trusted FLL resources</li>
           <li>One-click access to the official FIRST scoresheet</li>
         </ul>
       </div>
