@@ -24,8 +24,8 @@ function roleLabel(role: string | undefined) {
 function roleEmptyCopy(role: string | undefined) {
   if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task, milestone, or score session so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };
   if (role === 'student') return { title: 'Nothing is assigned yet', message: 'Your coach or team leader has not assigned work yet. You can still browse team knowledge.', action: '/knowledge', label: 'Open knowledge' };
-  if (role === 'parent') return { title: 'Follow the team safely', message: 'Visibility follows the team policy set by the coach.', action: '/hub', label: 'Open team hub' };
-  return { title: 'Support the next milestone', message: 'Follow authorized work, knowledge, and scoring activity.', action: '/hub', label: 'Open team hub' };
+  if (role === 'parent') return { title: 'Follow the team safely', message: 'Visibility follows the team policy set by the coach.', action: '/team', label: 'Open your team' };
+  return { title: 'Support the next milestone', message: 'Follow authorized work, knowledge, and scoring activity.', action: '/team', label: 'Open your team' };
 }
 
 function taskStatus(status: unknown) {

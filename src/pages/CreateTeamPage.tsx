@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
+import { setAccountType, useAccountType } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
+import { ACCOUNT_TYPE_OPTIONS, mayOfferTeamCreation, type AccountType } from '@/lib/domain';
+import { useTeamContext } from '@/lib/team-context';
 import { createTeam } from '@/lib/team-service';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -13,6 +16,28 @@ export function CreateTeamPage() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
+  const account = useAccountType(user?.uid);
+  const { teams } = useTeamContext();
+  const [chosenType, setChosenType] = useState<AccountType | ''>('');
+
+  async function saveAccountType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!chosenType) return;
+    if (!online) {
+      setRequestState(getRequestState(new Error('Network unavailable.'), false));
+      return;
+    }
+    setBusy(true);
+    setRequestState(null);
+    try {
+      // The profile listener picks the saved type up and re-renders this page.
+      await setAccountType(chosenType);
+    } catch (requestError) {
+      setRequestState(getRequestState(requestError, online));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submitRequest() {
     if (!user) {
@@ -27,7 +52,7 @@ export function CreateTeamPage() {
     setRequestState(null);
     try {
       await createTeam(name);
-      navigate('/hub', { replace: true });
+      navigate('/team', { replace: true });
     } catch (requestError) {
       setRequestState(getRequestState(requestError, online));
     } finally {
@@ -40,6 +65,44 @@ export function CreateTeamPage() {
     void submitRequest();
   }
 
+  if (account.status === 'loading') return <StatePanel variant="loading" title="Checking your account" message="Only coach and mentor accounts can create a team." />;
+
+  if (account.status === 'ready' && !mayOfferTeamCreation(account.accountType, teams)) {
+    return (
+      <div className="page-stack">
+        <StatePanel variant="permission" title="Coaches and mentors create teams" message="Students and parents join a team by invitation instead of creating one. Ask your coach to send you an invite link. If your account type is wrong, ask an administrator to change it." />
+        <div className="form-actions"><Link className="button" to="/join">Accept an invitation</Link></div>
+      </div>
+    );
+  }
+
+  if (account.status === 'ready' && !account.accountType) {
+    return (
+      <div className="page-stack">
+        <section className="team-hero"><div><span className="eyebrow light">NEW TEAM</span><h3>First, who are you on the team?</h3><p>Only coaches and mentors create teams; students and parents join by invitation.</p></div></section>
+        {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
+        <section className="split-panels">
+          <article className="feature-panel">
+            <span className="eyebrow">YOUR ACCOUNT</span>
+            <h3>Choose your account type</h3>
+            <p>You choose this once. Only an administrator can change it later.</p>
+            <form className="form-stack" onSubmit={saveAccountType}>
+              <label>I am a
+                <select value={chosenType} onChange={(event) => setChosenType(event.target.value as AccountType | '')} required>
+                  <option value="">Choose…</option>
+                  {ACCOUNT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <button className="button" type="submit" disabled={busy || !chosenType}>{busy ? 'Saving…' : 'Continue'}</button>
+            </form>
+          </article>
+        </section>
+      </div>
+    );
+  }
+
+  // A profile that could not be read falls through to the form: the server
+  // makes the same decision and explains a refusal itself.
   return (
     <div className="page-stack">
       <section className="team-hero"><div><span className="eyebrow light">NEW TEAM</span><h3>Create your private workspace.</h3><p>Start with safe team policies, a coach membership, and an auditable foundation.</p></div></section>

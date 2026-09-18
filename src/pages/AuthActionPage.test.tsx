@@ -35,7 +35,7 @@ function renderAt(search: string) {
     <MemoryRouter initialEntries={[`/auth/action${search}`]}>
       <Routes>
         <Route path="/auth/action" element={<AuthActionPage />} />
-        <Route path="/hub" element={<p>Team hub</p>} />
+        <Route path="/team" element={<p>Manage team</p>} />
       </Routes>
     </MemoryRouter>
   );
@@ -61,9 +61,9 @@ describe('AuthActionPage', () => {
   });
 
   it('continues into the app at the path the email carried', async () => {
-    renderAt('?mode=verifyEmail&oobCode=code-1&next=%2Fhub');
+    renderAt('?mode=verifyEmail&oobCode=code-1&next=%2Fteam');
     fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
-    await waitFor(() => expect(screen.getByText('Team hub')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Manage team')).toBeInTheDocument());
   });
 
   it('treats a code-less landing as the hosted handler having already run', async () => {

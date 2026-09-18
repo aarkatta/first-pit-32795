@@ -93,6 +93,29 @@ unless the same call names a milestone explicitly. Judging areas are still task
 the importer and the built-in templates, **not** by manual card creation — see
 the follow-ups in `docs/architecture.md`.
 
+A team's first board is **pre-filled** when `ensureDefaultProject` creates it for
+a team with no tasks: the four categories and 48 tasks of
+`functions/src/data/fll-standard-task-list.json` (`buildStandardPlan` in
+`functions/src/standard-plan.ts`). That JSON is also the source of the Excel
+template (`npm run template:build`), so edit it there, once.
+
+### Who may do what
+
+- **Account type** (`users/{uid}.accountType`: coach / mentor / student /
+  parent) is chosen at sign-up, set once via the `setAccountType` callable (the
+  browser cannot write it), and decides only **team creation**: `createTeam`
+  allows coach and mentor accounts and refuses anyone who is a student or parent
+  on any team (`teamCreationRefusal`, `phase2.ts`).
+- **Team role** (a membership's `role`) decides everything inside a team.
+  Administration — invitations, roles, policy, moderation, audit, board setup,
+  import, templates, file attachments — is coach/team-leader (`requireTeamAdmin`).
+- **Tracker task editors** are coaches, team leaders **and students**
+  (`TASK_EDITOR_ROLES` / `requireTaskEditor`): they add, edit and move any task.
+  Mentors and parents view the board.
+- Client mirrors for UI only: `isCoachOrLeader`, `canEditTasks`,
+  `canCreateTeams`, `mayOfferTeamCreation` in `src/lib/domain.ts`. The server
+  re-checks every one; hiding a control is never the authorization.
+
 ### Server command modules
 
 `functions/src/index.ts` defines Phase 0–2 callables inline and re-exports the
@@ -101,7 +124,7 @@ membership, safety, plus the shared validators `requireTeamId`, `requireTeamAdmi
 `auditRecord`, …), `phase3.ts` (tracker/goals/notifications/files),
 `kanban.ts`, `kanban-templates.ts` (board presets and team-saved templates),
 `phase5.ts` (Q&A/videos/polls), `phase6.ts` (scorer), `phase7.ts`
-(dashboard/search/profile). There is no `phase4.ts` — chat was removed from the
+(dashboard/search/profile), `standard-plan.ts` (the seeded season plan). There is no `phase4.ts` — chat was removed from the
 product. `phase2.ts` is the shared validation/authorization toolkit — reuse its
 helpers instead of re-deriving auth checks. There is also one
 `onRequest` HTTP function, `api`, serving `/healthz`.
@@ -115,7 +138,16 @@ Mutations follow two conventions worth preserving:
   `expectedVersion` and a mismatch is a conflict error, not a silent overwrite.
 
 Sensitive administrative changes (invitations, role changes, membership lifecycle,
-moderation) must also write an immutable `auditEvents` record.
+moderation) must also write an immutable `auditEvents` record. Audit `metadata`
+accepts only the keys in `AUDIT_METADATA_KEYS` (`phase2.ts`); encode anything
+else in `action`.
+
+A callable must return stored dates as **ISO strings** — a raw Firestore
+`Timestamp` reaches the browser as `{_seconds, _nanoseconds}`, which `toDate()`
+cannot read (see `pickPublicFields` in `phase7.ts`).
+
+Invitations are **not emailed**: `createInvitation` stores the invitation and the
+coach shares the `/join?invite=<id>` link themselves.
 
 ### Client structure
 
@@ -136,12 +168,20 @@ moderation) must also write an immutable `auditEvents` record.
 - `src/lib/domain.ts` holds shared domain types/role unions. Note `TeamRole` on the
   client includes `teamLeader`; `functions/src/phase2.ts` `TEAM_ROLES` is the
   *assignable* set and excludes it.
+- Navigation (`AppShell.tsx`): sidebar Home, Manage team, Tracker, Team files,
+  Knowledge, Scorer; top bar online status + notification bell. **Manage team**
+  (`/team`, `ManageTeamPage`) is the team overview for everyone plus, for
+  coaches/team leaders, the `TeamAdminPage` sections below it; `/hub`, `/admin`
+  and `/team/admin` redirect there. Search, State lab and Emulators pages were
+  removed (`/search` → Home). Tracker routes render full-width
+  (`wideRoutes` → `.app-main--wide`); other pages use a centred 1440px column.
 - The tracker is four routes presented as tabs by
   `src/features/kanban/TrackerTabs.tsx` and absent from the sidebar:
   `/coordination` (board), `/milestones`, `/import`, `/board-setup`. The last two
   are coach-only and read the team's single board through `src/lib/use-team-board.ts`.
-  `/files` and `/notifications` are their own sidebar destinations; their shared
-  reads live in `src/lib/coordination-data.ts`.
+  `/files` is its own sidebar destination; `/notifications` is reached from the
+  top-bar bell (`src/components/NotificationBell.tsx`, live unread badge + recent
+  list). Their shared reads and listeners live in `src/lib/coordination-data.ts`.
 - `src/features/kanban/` holds the board: `KanbanBoard.tsx` (subscriptions,
   movement, card dialog), `BoardTable.tsx` (the one board view), `BoardToolbar.tsx`,
   `BoardSetup.tsx` (columns + categories), `TaskImportPanel.tsx` and
@@ -155,7 +195,7 @@ Every screen and data operation must handle loading, empty, error/retry,
 permission-denied, and offline. `src/lib/request-state.ts` maps an unknown error +
 online flag to one of those variants, and `src/components/StatePanel.tsx` renders
 them; `src/lib/use-online-status.ts` supplies the online flag. Use these rather than
-inventing per-page error UI. `/states` (`StatusLabPage`) is the visual catalogue.
+inventing per-page error UI.
 
 ## Testing layout
 
@@ -168,7 +208,10 @@ inventing per-page error UI. `/states` (`StatusLabPage`) is the visual catalogue
   `functions/src/**` unmeasured — see the test-gap notes before trusting the number.
 - **Emulator + rules integration** — plain Node scripts in `tests/*.mjs` driven by
   `firebase emulators:exec`. They talk to the emulator REST APIs / rules-unit-testing
-  directly and throw on failure; there is no test framework in them.
+  directly and throw on failure; there is no test framework in them. They use the
+  default emulator ports, so stop a running `npm run emulators` first (or run them
+  against a copy of `firebase.json` with other ports). Any suite that creates a
+  team must first call `setAccountType` with `coach` or `mentor`.
 - `scripts/release-check.mjs` is a static release gate (Capacitor metadata,
   Vercel SPA rewrite, safe-area viewport, production emulator guard, secret scan).
 
@@ -190,6 +233,11 @@ a safe mechanical change; renaming the collections needs a data migration.
 Copy `.env.example` to `.env.local` (never commit it) and keep
 `VITE_USE_FIREBASE_EMULATORS=true` for local work. Emulator ports: auth 9099,
 firestore 8080, functions 5001, storage 9199, UI 4000.
+
+Emulator data is thrown away on every `npm run emulators` restart — use
+`npm run emulators:export` to persist it to `.firebase/emulator-data`. Emulated
+verification emails are never delivered; read the links from
+`http://127.0.0.1:9099/emulator/v1/projects/demo-first-pit-dev/oobCodes`.
 
 ## Conventions
 

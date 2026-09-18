@@ -24,7 +24,7 @@ const EXPECTED_CALLABLES = [
   'globalSearch', 'importProjectTasks', 'leaveTeam', 'linkFileToTask', 'listPolls', 'listProjectTemplates',
   'listScoreDefinitions', 'listScoreSessions', 'listTeamMembers', 'markNotificationRead', 'moveTaskCard',
   'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn', 'reorderProjectColumns', 'requestAccountDeletion',
-  'requestToJoinTeam', 'resolveImportAssignees', 'revokeInvitation', 'saveProjectAsTemplate', 'searchQuestions', 'searchVideos',
+  'requestToJoinTeam', 'resolveImportAssignees', 'revokeInvitation', 'saveProjectAsTemplate', 'searchQuestions', 'searchVideos', 'setAccountType',
   'toggleSavedQuestion', 'toggleVideoFavorite', 'transferTeamLeadership', 'updateGoal', 'updateMembershipStatus',
   'updateModerationCase', 'updatePrivacySettings', 'updateProfileSettings', 'updateProject', 'updateProjectCategories',
   'updateProjectColumn',

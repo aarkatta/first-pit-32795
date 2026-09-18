@@ -19,6 +19,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Knowledge and polls](#knowledge-and-polls)
 - [Scorer and practice history](#scorer-and-practice-history)
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
+- [App shell and navigation](#app-shell-and-navigation)
 - [Authentication hardening](#authentication-hardening)
 - [Calendar and Google Calendar integration (removed)](#calendar-and-google-calendar-integration-removed)
 - [v1 launch hardening (2026-08-29)](#v1-launch-hardening-2026-08-29)
@@ -199,6 +200,40 @@ policy, report, moderation, or audit documents directly.
 Platform Admin is a Firebase Auth `platformAdmin == true` custom claim. Claim
 issuance and revocation remain an operational responsibility; clients do not
 edit claims.
+
+### Account types and who may create a team
+
+A team role belongs to a membership; an **account type** belongs to the person
+and decides one thing: who may create a team (decision of 2026-09-17).
+
+- Sign-up asks "I am a: Coach / Mentor / Student / Parent". The value is stored
+  as `users/{uid}.accountType` by the `setAccountType` callable only — the
+  `users` rules pin the keys a client may write, so the browser cannot set or
+  change it. It is set **once**; a later change is a Platform Admin action.
+  Accounts created before sign-up asked have no type and are asked on the
+  Create team page. It is self-declared, not verified.
+- `createTeam` refuses, inside its transaction (`teamCreationRefusal` in
+  `functions/src/phase2.ts`): an account with no type (`failed-precondition`),
+  a student or parent account (`permission-denied`), and anyone who holds an
+  active or pending **student or parent membership on any team**, whatever
+  their account type — so an invited student cannot relabel themselves a coach.
+  Platform Admins bypass it. The creator becomes the new team's `coach`.
+- The client mirrors this (`canCreateTeams` / `mayOfferTeamCreation` in
+  `src/lib/domain.ts`, `useAccountType` in `src/lib/account-type.ts`): "Create
+  a team" and "Create another team" are never shown to students or parents, and
+  `/teams/new` explains the refusal instead of showing the form.
+
+### Invitations are links, not emails
+
+First Pit sends no email for invitations — there is no mail provider.
+`createInvitation` stores a pending invitation (normalized email, role, team
+name, 7-day expiry, audit record) and returns its id; the coach sends the
+invite link (`/join?invite=<id>`) themselves. The Administration section says
+so, copies the link to the clipboard on creation, and keeps **Copy link** on
+every pending invitation. The invitee must sign in as, and verify, the invited
+address before `acceptInvitation` succeeds. Sending real invitation emails
+(for example Firebase's Trigger Email extension) is an open product decision,
+not a bug.
 
 ### Safe policy defaults
 
@@ -399,12 +434,17 @@ workflow.
   existed read as having none, so no migration was needed.
 - Ordered Kanban cards with pointer, touch, keyboard, and explicit select-menu
   movement controls.
-- Active students may move only cards assigned to them; coaches and team
-  leaders may move any card. Parents and mentors are read-only. This is
-  enforced server-side in `functions/src/kanban.ts` (`moveTaskCard`) and
-  mirrored client-side by `canMoveKanbanTask` in `KanbanBoard.tsx`.
-- Coach-managed task title, description, priority, assignment, labels, and due
-  date details.
+- **Task editors** — coaches, team leaders and active students — add cards
+  and edit any card's title, description, priority, assignment, category,
+  milestone, labels, dates and subtasks, and move any card. Mentors and parents
+  are read-only, except that a member assigned to a card may still progress its
+  status, checklist and their own subtasks. Import, board setup, templates and
+  attaching team files stay with coaches and team leaders. The role set is
+  `TASK_EDITOR_ROLES` in `functions/src/phase2.ts` (`requireTaskEditor`,
+  `assertTaskEditorInTransaction`, used by `createKanbanTask`, `moveTaskCard`
+  and `updateTask`), mirrored client-side by `canEditTasks` in
+  `src/lib/domain.ts` and `canMoveKanbanTask` in `KanbanBoard.tsx`. Students
+  were limited to their own cards until 2026-09-17.
 - **Subtasks** — up to 30 sub-items per card, stored in a `subtasks` array on
   the task itself rather than as a second collection of cards. That keeps a
   subtask edit atomic with its parent's `version`, keeps sub-items out of the
@@ -472,7 +512,7 @@ workflow.
     unknown or ambiguous value imports unassigned with the reason shown rather
     than blocking the row.
   - The **standard template** is a fixed file, `public/first-pit-task-template.xlsx`,
-    authored by `npm run template:build` from `scripts/data/fll-standard-task-list.json`
+    authored by `npm run template:build` from `functions/src/data/fll-standard-task-list.json`
     — the team's own 12-week, 48-task plan across Project Mgmt & Core Values,
     Innovation Project, Robot Design and Robot Game. It is served statically, so
     every team starts from the same sheet and ExcelJS stays a devDependency
@@ -567,8 +607,14 @@ Each import writes task history for every card and one audit record. Spreadsheet
 size (1 MB), rows read (500), columns (20), and cell length are capped in the
 browser before anything is previewed.
 
-`ensureDefaultProject` is idempotent. It creates a deterministic Team Board and
-maps legacy `todo`, `inProgress`, `review`, and `completed` tasks into compatible
+`ensureDefaultProject` is idempotent. It creates a deterministic Team Board.
+When the team has no tasks at all, that board is seeded in the same transaction
+with the **standard season plan** — the four categories (each tied to its
+judging area) and 48 tasks of `functions/src/data/fll-standard-task-list.json`,
+the same list the downloadable Excel template is built from — all in the first
+column, labelled with their area and week, and marked as needing no migration
+(`buildStandardPlan` in `functions/src/standard-plan.ts`). A team that already
+has tasks gets an empty board instead, and the call then maps legacy `todo`, `inProgress`, `review`, and `completed` tasks into compatible
 columns with stable initial ordering and versions. Its server-owned cursor and
 per-column counts make multi-page migration resumable without duplicate order
 keys or client-selected gaps.
@@ -599,6 +645,19 @@ reordering so a successful write cannot create a hidden 51st card.
 
 After these criteria pass, the next roadmap decision is whether Release 1.1
 should add recurring task templates or keep further planning features deferred.
+
+### Verification record — 17 September 2026 (second round)
+
+`npm run verify:static` passes (485 tests with coverage, functions and web
+builds, release check), and the foundation, Phase 2, 3, 5, 6 and 7 emulator
+suites pass. This round shipped: the notification bell; ISO dates from
+`getDashboard`; a new team's board pre-filled with the standard season plan;
+students as task editors; the full-width tracker; Manage team; invite-link
+wording; account types gating team creation; and removal of Search, State lab
+and Emulators. Deploy with `firebase deploy --only functions` for the new
+`setAccountType` callable and the changed `createTeam`, `ensureDefaultProject`,
+`createKanbanTask`, `moveTaskCard`, `updateTask` and `getDashboard`; no rules or
+index changes.
 
 ### Verification record — 17 September 2026
 
@@ -637,7 +696,8 @@ emulator binaries and were last confirmed on 09 August 2026.
 - the combined Auth, Functions, Firestore, and Storage emulator verification
   command documented in `README.md`
 
-The emulator role matrix covers coach and student movement, stale-version
+The emulator role matrix covers coach and student movement and editing,
+standard-plan seeding of a new team's board, stale-version
 `ABORTED` responses, mentor and parent `PERMISSION_DENIED` responses, direct
 write denial, legacy migration, and linked-goal counters. Deployment remains
 blocked until the manual Phase 8 product/safety approvals and pilot gates are
@@ -661,7 +721,7 @@ Two deliberate leftovers:
   purging a team's message history is a data decision with its own retention and
   safeguarding consequences. The rules make the data unreachable, which is the
   security-relevant half. Deleting it is a separate, explicit migration.
-- **`/chat` redirects to `/hub`.** Notifications already delivered to mailboxes
+- **`/chat` redirects to `/team`.** Notifications already delivered to mailboxes
   carry `/chat?channel=…` deep links, and `safeInternalRoute` no longer allows
   that path, so both the router and the deep-link allowlist land the user on a
   real page instead of a 404.
@@ -733,10 +793,13 @@ level), `/import` (the spreadsheet import) and `/board-setup` (columns and
 categories). Import and board setup are coach-only, and read the team's single
 board through `useTeamBoard` rather than owning card subscriptions. They stay
 separate routes so each keeps its deep links — `?goal=`, `?task=` — and loads
-only its own records. `/files` and `/notifications` are their own sidebar
-destinations, since neither is project management. Each loads only its own records, so a team whose policy
+only its own records. `/files` is its own sidebar destination, since it is not
+project management. Notifications are reached from the top-bar bell
+(`NotificationBell`), which keeps a live unread count for the active team
+(capped at 99+, reading at most 100 documents) and, only while open, the eight
+most recent; its "See all" link opens the full `/notifications` page. Each loads only its own records, so a team whose policy
 or rules deny one still gets the others, and the phone's four-slot bar carries
-Home, Team hub, Tracker and Milestones (Knowledge moved to the secondary menu).
+Home, Manage team, Tracker and Knowledge; everything else is in the ☰ menu.
 Search results for a milestone and a file now deep-link to `/milestones?goal=`
 and `/files?file=`; links stored before the split still resolve to the tracker.
 
@@ -745,14 +808,24 @@ modules. The Dashboard reads a bounded, server-authorized summary for the
 selected active team. Global search is a callable operation: it first resolves
 the caller's active memberships and then searches only team Questions, Videos,
 Files, Tasks, Goals, Scores, and the team's own record.
-Community/public discovery is intentionally excluded.
+Community/public discovery is intentionally excluded. **No screen calls it any
+more:** the Search page was removed on 2026-09-17 (see *App shell and
+navigation*); the callable remains server-side until it is deliberately retired.
 
 ### Dashboard analytics
 
 The Dashboard (`src/pages/HomePage.tsx`) is laid out as a season analytics
 view. Every figure comes from the one `getDashboard` callable, and every read
 behind it is bounded — count aggregations or small `limit`ed queries — so the
-cost does not grow with a team's season:
+cost does not grow with a team's season.
+
+Dates leave the callable as **ISO strings** (`pickPublicFields` in
+`functions/src/phase7.ts`). A callable encodes a Firestore `Timestamp` as a bare
+`{_seconds, _nanoseconds}` object that `toDate()` cannot read; until 2026-09-17
+that showed every Upcoming task as "Due · …" with no date, every task as "No due
+date", and dropped every score from the trend chart. Any callable that returns a
+stored date must convert it the same way.
+
 
 - **Overall season progress** — task completion percentage, tasks complete,
   goals achieved (`status == completed` count), and open tasks.
@@ -800,6 +873,35 @@ preferences, notification preferences, and the privacy-safe minor flag. Safety
 notifications are always written as enabled.
 
 ---
+
+## App shell and navigation
+
+As of 2026-09-17 (`src/components/AppShell.tsx`):
+
+- **Sidebar:** Home, Manage team, Tracker, Team files, Knowledge, Scorer. The
+  phone's bottom bar carries Home, Manage team, Tracker and Knowledge; the rest
+  sit in the ☰ menu.
+- **Top bar:** online status and the notification **bell**
+  (`NotificationBell`) — a live unread count for the active team (99+ cap, at
+  most 100 documents read), a dropdown of the eight most recent that is read
+  only while open, and "See all" to `/notifications`. Notifications are no
+  longer a sidebar entry.
+- **Manage team** (`/team`, `src/pages/ManageTeamPage.tsx`) replaced Team hub
+  and Team admin: one page with the team overview for every member, followed
+  for coaches and team leaders by the administration sections (invite links,
+  safety defaults, roster and roles, invitations, join approvals, moderation,
+  audit history). Hiding them is presentation only — `TeamAdminPage` refuses
+  non-coaches itself and every administrative callable re-checks the role.
+  Coaches do not get the overview's short roster preview; the full roster is
+  below it. `/hub`, `/admin` and `/team/admin` redirect to `/team`, so stored
+  links, emailed `next=` paths and notifications keep working. Sign-in and team
+  creation land on `/team`.
+- **Removed pages:** Search (`/search` redirects to Home; the ⌕ top-bar icon is
+  gone), and the development-only State lab (`/states`) and Emulators
+  (`/emulators`) pages, which now fall through to not-found.
+- **Layout width:** pages sit in a centred 1440px column, except the four
+  Tracker routes, which use the full width beside the sidebar (`wideRoutes` →
+  `.app-main--wide`) because the board is a wide table.
 
 ## Authentication hardening
 
@@ -1068,8 +1170,8 @@ The parser rejects emulator mode whenever Vite builds with `MODE=production`.
 
 ### Responsive and accessibility matrix
 
-Smoke-test the Dashboard, Auth, Team hub, Coordination, Knowledge,
-Scorer, Search, Profile, and Team admin routes at:
+Smoke-test the Dashboard, Auth, Manage team (as a coach and as a student),
+Coordination, Knowledge, Scorer and Profile routes at:
 
 | Profile | Viewport | Required checks |
 | --- | --- | --- |

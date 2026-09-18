@@ -33,7 +33,10 @@ type BoardToolbarProps = {
   labels: string[];
   /** Board categories, in board order, for the category filter. */
   categories: { id: string; name: string }[];
+  /** Import and board setup: coaches and team leaders. */
   canManage: boolean;
+  /** Adding items: coaches, team leaders and students. */
+  canEditTasks?: boolean;
   disabled: boolean;
   onNewItem: () => void;
   /** Opens the spreadsheet import panel; coach-only, like creating an item. */
@@ -84,6 +87,7 @@ export function BoardToolbar({
   labels,
   categories,
   canManage,
+  canEditTasks = canManage,
   disabled,
   onNewItem,
   onImport,
@@ -104,9 +108,9 @@ export function BoardToolbar({
   return (
     <div className="mb-toolbar" ref={root}>
       <div className="mb-toolbar-actions">
+        {canEditTasks ? <button className="mb-new-item" type="button" disabled={disabled} onClick={onNewItem}>New item</button> : null}
         {canManage ? (
           <>
-            <button className="mb-new-item" type="button" disabled={disabled} onClick={onNewItem}>New item</button>
             <button className="mb-import-item" type="button" disabled={disabled} onClick={onImport}>
               <span aria-hidden="true">⭳</span> Import from Excel
             </button>

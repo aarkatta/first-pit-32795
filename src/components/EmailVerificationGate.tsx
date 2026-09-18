@@ -29,7 +29,7 @@ const POLL_MS = 4000;
  * server on a timer and whenever the tab is focused, so a user who verifies
  * on their phone finds the desktop tab already through.
  */
-export function EmailVerificationGate({ user, auth, online, next = '/hub' }: EmailVerificationGateProps) {
+export function EmailVerificationGate({ user, auth, online, next = '/team' }: EmailVerificationGateProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);

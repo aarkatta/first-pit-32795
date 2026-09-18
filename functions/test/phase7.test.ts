@@ -1,5 +1,18 @@
+import { Timestamp } from 'firebase-admin/firestore';
 import { describe, expect, it } from 'vitest';
-import { DASHBOARD_AREAS, areaProgress, summarizeUnreadNotifications } from '../src/phase7.js';
+import { DASHBOARD_AREAS, areaProgress, pickPublicFields, summarizeUnreadNotifications } from '../src/phase7.js';
+
+describe('Phase 7 dashboard record serialization', () => {
+  it('sends Firestore timestamps as ISO strings the client can parse', () => {
+    const dueAt = Timestamp.fromDate(new Date('2026-09-20T15:00:00.000Z'));
+    const record = pickPublicFields('task-1', { title: 'Build arm', dueAt, readAt: null, secret: 'x' }, ['title', 'dueAt', 'readAt', 'missing']);
+    expect(record).toEqual({ id: 'task-1', title: 'Build arm', dueAt: '2026-09-20T15:00:00.000Z', readAt: null });
+    // The bare shape a callable would otherwise send — and that the client's
+    // date parser rejected — must not survive JSON encoding.
+    expect(JSON.stringify(record)).not.toContain('_seconds');
+    expect(new Date(String(record.dueAt)).getTime()).toBe(dueAt.toMillis());
+  });
+});
 
 describe('Phase 7 truthful bounded notification summary', () => {
   it('reports the read boundary as truncated once the cap is hit', () => {

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resendVerificationEmail: vi.fn(),
   sendPasswordRecovery: vi.fn(),
   bootstrapUserProfile: vi.fn(),
+  setAccountType: vi.fn(),
   VerificationEmailDeliveryError: class VerificationEmailDeliveryError extends Error {
     user: unknown;
 
@@ -36,6 +37,7 @@ vi.mock('@/lib/auth', () => ({
   sendPasswordRecovery: mocks.sendPasswordRecovery
 }));
 vi.mock('@/lib/profile', () => ({ bootstrapUserProfile: mocks.bootstrapUserProfile }));
+vi.mock('@/lib/account-type', () => ({ setAccountType: mocks.setAccountType }));
 
 import { AuthPage } from './AuthPage';
 
@@ -51,6 +53,7 @@ beforeEach(() => {
   mocks.sendPasswordRecovery.mockResolvedValue(undefined);
   mocks.resendVerificationEmail.mockResolvedValue(undefined);
   mocks.bootstrapUserProfile.mockResolvedValue(undefined);
+  mocks.setAccountType.mockResolvedValue({ accountType: 'coach', changed: true });
   mocks.signInWithGoogle.mockResolvedValue({ user: { uid: 'google-user' } });
   // No redirect in flight on a normal page load.
   mocks.completeGoogleRedirect.mockResolvedValue(null);
@@ -109,14 +112,38 @@ describe('AuthPage', () => {
     await waitFor(() => expect(mocks.signInWithEmail).toHaveBeenCalledWith({}, 'coach@example.com', 'password'));
   });
 
+  it('requires an account type to create an account, and signs up even if saving it fails', async () => {
+    mocks.setAccountType.mockRejectedValueOnce(new Error('offline'));
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
+    const type = screen.getByLabelText(/I am a/);
+    expect(type).toBeRequired();
+    expect(screen.getByText(/students and parents join by invitation/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'kid@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+    fireEvent.change(type, { target: { value: 'student' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(mocks.setAccountType).toHaveBeenCalledWith('student'));
+    // A failed save does not strand the new account; Create team asks again.
+    expect(screen.queryByText(/private profile could not be saved/i)).not.toBeInTheDocument();
+  });
+
+  it('does not ask for an account type when signing in', () => {
+    renderPage();
+    expect(screen.queryByLabelText(/I am a/)).not.toBeInTheDocument();
+  });
+
   it('creates an account and offers password recovery', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+    fireEvent.change(screen.getByLabelText(/I am a/), { target: { value: 'coach' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mocks.signUpWithEmail).toHaveBeenCalled());
     expect(mocks.bootstrapUserProfile).toHaveBeenCalledWith({ uid: 'new-user' });
+    // The type chosen at sign-up is saved server-side once the profile exists.
+    await waitFor(() => expect(mocks.setAccountType).toHaveBeenCalledWith('coach'));
 
     cleanup();
     renderPage();
@@ -169,6 +196,7 @@ describe('AuthPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+    fireEvent.change(screen.getByLabelText(/I am a/), { target: { value: 'coach' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText(/private profile could not be saved/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -183,11 +211,12 @@ describe('AuthPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+    fireEvent.change(screen.getByLabelText(/I am a/), { target: { value: 'coach' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(await screen.findByText(/account was created, but the verification email could not be sent/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/hub'));
+    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/team'));
     expect(mocks.bootstrapUserProfile).toHaveBeenCalledWith(user);
     expect(mocks.signUpWithEmail).toHaveBeenCalledTimes(1);
   });
@@ -198,7 +227,7 @@ describe('AuthPage', () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Resend verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/hub'));
+    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/team'));
     expect(screen.getByRole('status')).toHaveTextContent(/new verification email has been sent/i);
   });
 });

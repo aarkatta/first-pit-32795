@@ -6,13 +6,14 @@ import {
   assertTeamMemberInTransaction,
   getInput,
   isReplayOfOwnCreate,
+  isTaskEditor,
   requireString,
   requireText,
   requireTeamAdmin,
   requireTeamId,
   requireTeamMember,
   auditRecord,
-  type TeamAdmin
+  TASK_EDITOR_ROLES
 } from './phase2.js';
 import { categoryGoalId, columnHasCapacity, DEFAULT_PROJECT_COLUMNS, MAX_CARDS_PER_COLUMN_PAGE, ORDER_STEP, projectCategories, projectColumns, requireCategoryId, requireProject } from './kanban.js';
 
@@ -155,10 +156,6 @@ function entityId(input: Record<string, unknown>, key: string, prefix: string, f
   if (input[key] !== undefined) return requireString(input[key], `${prefix} ID`);
   if (input.operationId !== undefined) return `${prefix}_${requireString(input.operationId, 'Operation ID', 96)}`;
   return fallback;
-}
-
-function isAdmin(admin: TeamAdmin) {
-  return admin.platformAdmin || admin.role === 'coach' || admin.role === 'teamLeader';
 }
 
 function mutationVersion(value: unknown, label: string): number {
@@ -435,15 +432,17 @@ export const updateTask = async (request: Phase3Request) => {
   const input = requestRecord(request);
   const db = getFirestore();
   const opRef = operationRef(teamId, operationId(input, 'updateTask'));
-  const admin = isAdmin(actor);
-  const allowedStudentFields = new Set(['status', 'checklist', 'comment', 'subtaskStatus', 'expectedVersion', 'operationId', 'taskId', 'teamId']);
-  for (const key of Object.keys(input)) if (!admin && !allowedStudentFields.has(key)) throw new HttpsError('permission-denied', 'Students can update status, checklist, subtask status, and comments only.');
+  // Coaches, team leaders and students edit any task's details. Any other
+  // member may only progress work assigned to them.
+  const editor = isTaskEditor(actor);
+  const assigneeOnlyFields = new Set(['status', 'checklist', 'comment', 'subtaskStatus', 'expectedVersion', 'operationId', 'taskId', 'teamId']);
+  for (const key of Object.keys(input)) if (!editor && !assigneeOnlyFields.has(key)) throw new HttpsError('permission-denied', 'Your role can update status, checklist, subtask status, and comments only.');
   const nextStatus = has(input, 'status') ? enumValue(input.status, ['todo', 'inProgress', 'review', 'completed'] as const, 'Task status') : undefined;
   const nextChecklist = has(input, 'checklist') ? validateChecklist(input.checklist) : undefined;
   const comment = has(input, 'comment') ? requireText(input.comment, 'Task comment', 2000) : undefined;
   const subtaskStatus = has(input, 'subtaskStatus') ? requireSubtaskStatusInput(input.subtaskStatus) : undefined;
   const adminFields: Record<string, unknown> = {};
-  if (admin) {
+  if (editor) {
     if (has(input, 'title')) adminFields.title = requireText(input.title, 'Task title', 160);
     if (has(input, 'description')) adminFields.description = requireText(input.description, 'Task description', 4000);
     if (has(input, 'priority')) adminFields.priority = enumValue(input.priority, ['low', 'medium', 'high', 'urgent'] as const, 'Task priority');
@@ -473,12 +472,12 @@ export const updateTask = async (request: Phase3Request) => {
     if (!taskSnapshot.exists || current?.teamId !== teamId) throw new HttpsError('not-found', 'Task not found.');
     if (operation?.exists) return taskOperationVersion(operation.data() ?? {}, { teamId, actorUserId: actor.uid, taskId });
     const nextVersion = nextTaskMutationVersion(current.version, expectedVersion);
-    const currentAdmin = actor.platformAdmin || ['coach', 'teamLeader'].includes(String(actorMembership.role));
-    // The admin-only field set was built from the role read BEFORE the
-    // transaction. Re-check it against the in-transaction membership so a coach
-    // demoted in between cannot still apply admin-only edits.
-    if (!currentAdmin && Object.keys(adminFields).length > 0) {
-      throw new HttpsError('permission-denied', 'Students can update status, checklist, subtask status, and comments only.');
+    const currentEditor = actor.platformAdmin || TASK_EDITOR_ROLES.includes(String(actorMembership.role));
+    // The editor-only field set was built from the role read BEFORE the
+    // transaction. Re-check it against the in-transaction membership so a
+    // member demoted in between cannot still apply editor-only edits.
+    if (!currentEditor && Object.keys(adminFields).length > 0) {
+      throw new HttpsError('permission-denied', 'Your role can update status, checklist, subtask status, and comments only.');
     }
     const storedSubtasks = readSubtasks(current.subtasks);
     const targetSubtask = subtaskStatus ? storedSubtasks.find((entry) => entry.id === subtaskStatus.id) : undefined;
@@ -492,7 +491,7 @@ export const updateTask = async (request: Phase3Request) => {
       && Object.keys(adminFields).length === 0;
     const mayEditAsAssignee = current.assignedTo === actor.uid
       || (subtaskStatusOnly && targetSubtask !== undefined && canUpdateSubtaskStatus(current, targetSubtask, actor.uid));
-    if (!currentAdmin && !mayEditAsAssignee) throw new HttpsError('permission-denied', 'Only the assigned student can update this task.');
+    if (!currentEditor && !mayEditAsAssignee) throw new HttpsError('permission-denied', 'Only the assignee can update this task.');
     const nextSubtasks = subtaskStatus ? applySubtaskStatus(storedSubtasks, subtaskStatus) : undefined;
     if (adminFields.assignedTo) await assertTeamMemberInTransaction(transaction, teamId, String(adminFields.assignedTo));
     const nextWatcherUserIds = Array.isArray(adminFields.watcherUserIds) ? adminFields.watcherUserIds : Array.isArray(current.watcherUserIds) ? current.watcherUserIds : [];

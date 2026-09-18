@@ -3,7 +3,7 @@ import { KanbanBoard } from '@/features/kanban/KanbanBoard';
 import { TrackerTabs } from '@/features/kanban/TrackerTabs';
 import { useTeamContext } from '@/lib/team-context';
 import { useAuth } from '@/lib/auth-context';
-import { isCoachOrLeader } from '@/lib/domain';
+import { canEditTasks, isCoachOrLeader } from '@/lib/domain';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
 /**
@@ -20,6 +20,7 @@ export function CoordinationPage() {
   const online = useOnlineStatus();
   const teamId = activeTeam?.teamId ?? null;
   const canManage = isCoachOrLeader(activeTeam);
+  const canEdit = canEditTasks(activeTeam);
 
   if (teamStatus === 'loading') return <StatePanel variant="loading" title="Loading the tracker" message="Checking your active team membership before loading the board." />;
   if (!teamId || !user) return <StatePanel variant="empty" title="Choose a team" message="The tracker becomes available after an active team membership is selected." />;
@@ -27,7 +28,7 @@ export function CoordinationPage() {
   return (
     <TrackerTabs canManage={canManage}>
       {!online ? <StatePanel variant="offline" title="You are offline" message="Existing data may be stale. Mutations will be retried only after you reconnect." /> : null}
-      <KanbanBoard teamId={teamId} canManage={canManage} actorRole={activeTeam?.role ?? 'parent'} actorUserId={user.uid} online={online} />
+      <KanbanBoard teamId={teamId} canManage={canManage} canEditTasks={canEdit} actorRole={activeTeam?.role ?? 'parent'} actorUserId={user.uid} online={online} />
     </TrackerTabs>
   );
 }

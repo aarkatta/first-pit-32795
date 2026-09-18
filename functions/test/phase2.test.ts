@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEAM_POLICY,
+  requireAccountType,
+  teamCreationRefusal,
   assertNotLastCoach,
   auditRecord,
   encodedInvitationId,
@@ -142,5 +144,35 @@ describe('Phase 2 command validation', () => {
       .toThrow(/Operation ID is already used by another operation/);
     // Community records carry teamId: null; an absent teamId must match it.
     expect(isReplayOfOwnCreate(snapshot({ createdBy: 'coach-1' }), snapshot(null), { teamId: null, actorUserId: 'coach-1' }, 'Question')).toBe(true);
+  });
+});
+
+describe('team creation by account type', () => {
+  it('lets coach and mentor accounts create a team', () => {
+    expect(teamCreationRefusal('coach', [])).toBeNull();
+    expect(teamCreationRefusal('mentor', [{ role: 'coach', status: 'active' }, { role: 'mentor', status: 'active' }])).toBeNull();
+  });
+
+  it('refuses student and parent accounts', () => {
+    expect(teamCreationRefusal('student', [])?.code).toBe('permission-denied');
+    expect(teamCreationRefusal('parent', [])?.code).toBe('permission-denied');
+  });
+
+  it('asks an account with no type to choose one first', () => {
+    expect(teamCreationRefusal(undefined, [])?.code).toBe('failed-precondition');
+    expect(teamCreationRefusal('platformAdmin', [])?.code).toBe('failed-precondition');
+  });
+
+  it('refuses a coach-typed account that is a student or parent on some team', () => {
+    expect(teamCreationRefusal('coach', [{ role: 'student', status: 'active' }])?.code).toBe('permission-denied');
+    expect(teamCreationRefusal('mentor', [{ role: 'parent', status: 'pending' }])?.code).toBe('permission-denied');
+    // A membership that ended no longer counts.
+    expect(teamCreationRefusal('coach', [{ role: 'student', status: 'removed' }])).toBeNull();
+  });
+
+  it('validates the declared type', () => {
+    expect(requireAccountType('mentor')).toBe('mentor');
+    expect(() => requireAccountType('teamLeader')).toThrow('Account type must be');
+    expect(() => requireAccountType(undefined)).toThrow('Account type must be');
   });
 });

@@ -91,15 +91,32 @@ describe('TaskDetails native dialog accessibility', () => {
   });
 });
 
+describe('TaskDetails for a student editor', () => {
+  it('lets a student edit card details but keeps file attaching coach-only', () => {
+    const onSave = vi.fn();
+    render(<TaskDetails task={task} canManage={false} canEdit busy={false} attachableFiles={[teamFile()]} onAttachFile={vi.fn()} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'Test robot twice' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: 'Test robot twice' }), 1);
+    expect(screen.getByRole('button', { name: 'Add subtask' })).toBeInTheDocument();
+    expect(screen.queryByText('Attach a team file')).not.toBeInTheDocument();
+  });
+
+  it('shows a read-only card when the role cannot edit', () => {
+    render(<TaskDetails task={task} canManage={false} canEdit={false} busy={false} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Save task' })).not.toBeInTheDocument();
+    expect(screen.getByText('Check every mission.')).toBeInTheDocument();
+  });
+});
+
 describe('Kanban task movement permissions', () => {
-  it('allows administrators to move any card and Students only their own assignment', () => {
-    expect(canMoveKanbanTask({ assignedTo: null }, 'coach', 'coach-1')).toBe(true);
-    expect(canMoveKanbanTask({ assignedTo: 'student-2' }, 'teamLeader', 'leader-1')).toBe(true);
-    expect(canMoveKanbanTask({ assignedTo: 'student-1' }, 'student', 'student-1')).toBe(true);
-    expect(canMoveKanbanTask({ assignedTo: 'student-2' }, 'student', 'student-1')).toBe(false);
-    expect(canMoveKanbanTask({ assignedTo: null }, 'student', 'student-1')).toBe(false);
-    expect(canMoveKanbanTask({ assignedTo: 'mentor-1' }, 'mentor', 'mentor-1')).toBe(false);
-    expect(canMoveKanbanTask({ assignedTo: 'parent-1' }, 'parent', 'parent-1')).toBe(false);
+  it('lets coaches, team leaders and students move any card; mentors and parents none', () => {
+    expect(canMoveKanbanTask('coach')).toBe(true);
+    expect(canMoveKanbanTask('teamLeader')).toBe(true);
+    // Students move any card now, not only their own.
+    expect(canMoveKanbanTask('student')).toBe(true);
+    expect(canMoveKanbanTask('mentor')).toBe(false);
+    expect(canMoveKanbanTask('parent')).toBe(false);
   });
 });
 

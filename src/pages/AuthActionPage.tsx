@@ -53,7 +53,7 @@ export function AuthActionPage() {
   const mode = parseEmailActionMode(params.get('mode'));
   // Firebase's hosted handler forwards to the continue URL with its own
   // parameters stripped; `next` is ours, added when the email was sent.
-  const next = params.get('next') || '/hub';
+  const next = params.get('next') || '/team';
 
   const settle = useCallback(async (email: string | null) => {
     // The signed-in User still carries the stale `emailVerified: false` it was

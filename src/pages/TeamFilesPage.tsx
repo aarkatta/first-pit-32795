@@ -174,7 +174,7 @@ export function TeamFilesPage() {
           <StatePanel
             variant="empty"
             title="Team file sharing is off"
-            message="A coach must turn on team file sharing in Team admin before files can be uploaded or opened here."
+            message="A coach must turn on team file sharing in Manage team → Administration before files can be uploaded or opened here."
           />
         ) : (
           <>

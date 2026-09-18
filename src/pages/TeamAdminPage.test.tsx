@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   listTeamMembers: vi.fn(),
   getDocs: vi.fn(),
   revokeInvitation: vi.fn(),
+  createInvitation: vi.fn(),
   approveJoinRequest: vi.fn(),
   updateModerationCase: vi.fn()
 }));
@@ -31,7 +32,7 @@ vi.mock('@/lib/directory', async (importOriginal) => ({
 vi.mock('@/lib/phase2-service', () => ({
   approveJoinRequest: mocks.approveJoinRequest,
   assignTeamRole: vi.fn(),
-  createInvitation: vi.fn(),
+  createInvitation: mocks.createInvitation,
   rejectJoinRequest: vi.fn(),
   revokeInvitation: mocks.revokeInvitation,
   transferTeamLeadership: vi.fn(),
@@ -83,6 +84,31 @@ beforeEach(() => {
 });
 
 describe('TeamAdminPage membership administration', () => {
+  it('creates an invite link, says no email was sent, and copies the link', async () => {
+    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_c3R1ZGVudA' });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<TeamAdminPage />);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'student@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+    await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledWith('team-1', 'student@example.com', 'student'));
+    const link = `${window.location.origin}/join?invite=team-1_c3R1ZGVudA`;
+    expect(await screen.findByText(/Invitation created for student@example\.com\. No email is sent/)).toHaveTextContent(link);
+    expect(writeText).toHaveBeenCalledWith(link);
+    expect(screen.queryByText(/Invitation sent/)).not.toBeInTheDocument();
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('still shows the invite link when the clipboard is unavailable', async () => {
+    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_abc' });
+    render(<TeamAdminPage />);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'parent@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+    const notice = await screen.findByText(/No email is sent — send them this link/);
+    expect(notice).toHaveTextContent(`${window.location.origin}/join?invite=team-1_abc`);
+    expect(notice).not.toHaveTextContent('copied');
+  });
+
   it('renders display names rather than raw user ids', async () => {
     render(<TeamAdminPage />);
     expect(await screen.findByText('Dana Ruiz')).toBeInTheDocument();

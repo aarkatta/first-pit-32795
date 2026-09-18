@@ -205,6 +205,8 @@ progress('creating and verifying the Coach account');
 const coach = await createUser(`phase6-coach-${suffix}@example.com`);
 progress('creating and verifying the Student account');
 const student = await createUser(`phase6-student-${suffix}@example.com`);
+// Only coach and mentor accounts create teams; the type is declared once.
+await call('setAccountType', coach.idToken, { accountType: 'coach' });
 const boundaryCounts = [0, 50, 51, 500, 501];
 const teams = new Map();
 

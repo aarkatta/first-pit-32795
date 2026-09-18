@@ -88,6 +88,39 @@ export function requireResourceReference(value: unknown): string {
   return reference;
 }
 
+/**
+ * What a person told First Pit they are, chosen once at sign-up. Unlike a team
+ * role it belongs to the account, and it exists for one decision: who may
+ * create a team. It is self-declared, not verified.
+ */
+export const ACCOUNT_TYPES = ['coach', 'mentor', 'student', 'parent'] as const;
+export type AccountType = typeof ACCOUNT_TYPES[number];
+export const TEAM_CREATOR_ACCOUNT_TYPES: readonly AccountType[] = ['coach', 'mentor'];
+
+export function requireAccountType(value: unknown): AccountType {
+  if (!ACCOUNT_TYPES.includes(value as AccountType)) throw new HttpsError('invalid-argument', 'Account type must be coach, mentor, student, or parent.');
+  return value as AccountType;
+}
+
+/**
+ * Team creation is for coach and mentor accounts. Anyone who already holds a
+ * student or parent role on a team is refused too, whatever the account says,
+ * so an invited student cannot sidestep the rule by claiming to be a coach.
+ */
+export function teamCreationRefusal(accountType: unknown, membershipRoles: Array<{ role: unknown; status: unknown }>): HttpsError | null {
+  if (!ACCOUNT_TYPES.includes(accountType as AccountType)) {
+    return new HttpsError('failed-precondition', 'Choose your account type before creating a team.');
+  }
+  if (!TEAM_CREATOR_ACCOUNT_TYPES.includes(accountType as AccountType)) {
+    return new HttpsError('permission-denied', 'Only coach and mentor accounts can create a team. Ask your coach for an invitation instead.');
+  }
+  const studentOrParent = membershipRoles.some((membership) => ['student', 'parent'].includes(String(membership.role)) && ['active', 'pending'].includes(String(membership.status)));
+  if (studentOrParent) {
+    return new HttpsError('permission-denied', 'You are a student or parent on a team, so you cannot create one. Ask your coach if this is wrong.');
+  }
+  return null;
+}
+
 export function requireAuth(request: CallableRequest<unknown>): { uid: string; platformAdmin: boolean } {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
   return { uid: request.auth.uid, platformAdmin: request.auth.token.platformAdmin === true };
@@ -198,6 +231,30 @@ export async function assertTeamAdminInTransaction(transaction: Transaction, tea
   if (!snapshot.exists || data?.teamId !== teamId || data.userId !== admin.uid || data.status !== 'active' || !['coach', 'teamLeader'].includes(data.role)) {
     throw new HttpsError('permission-denied', 'Your team-admin access changed. Refresh and try again.');
   }
+}
+
+/**
+ * Roles that may add tracker tasks and edit any task's details. Mentors and
+ * parents view the board; deleting work and board setup stay with coaches and
+ * team leaders (`requireTeamAdmin`).
+ */
+export const TASK_EDITOR_ROLES: readonly string[] = ['coach', 'teamLeader', 'student'];
+
+export function isTaskEditor(actor: TeamAdmin) {
+  return actor.platformAdmin || TASK_EDITOR_ROLES.includes(String(actor.role));
+}
+
+export async function requireTaskEditor(request: CallableRequest<unknown>, teamId: string): Promise<TeamAdmin> {
+  const member = await requireTeamMember(request, teamId);
+  if (!isTaskEditor(member)) throw new HttpsError('permission-denied', 'Your role can view the board but cannot add or edit tasks.');
+  return member;
+}
+
+/** Re-reads the role inside the transaction, so a member demoted mid-request cannot still edit. */
+export async function assertTaskEditorInTransaction(transaction: Transaction, teamId: string, actor: TeamAdmin) {
+  if (actor.platformAdmin) return;
+  const data = await assertTeamMemberInTransaction(transaction, teamId, actor.uid);
+  if (!TASK_EDITOR_ROLES.includes(String(data?.role))) throw new HttpsError('permission-denied', 'Your task-editing access changed. Refresh and try again.');
 }
 
 export async function assertTeamMemberInTransaction(transaction: Transaction, teamId: string, uid: string) {

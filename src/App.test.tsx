@@ -1,5 +1,5 @@
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientEnv } from '@/lib/env';
 
@@ -54,15 +54,17 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: /state lab/i })).not.toBeInTheDocument();
   });
 
-  it('renders the state lab page', async () => {
-    renderRoutes('/states');
+  it.each(['/states', '/emulators'])('no longer serves the removed %s page', async (path) => {
+    renderRoutes(path);
 
-    expect(await screen.findByRole('heading', { name: /loading, empty, error, permission, and offline/i })).toBeInTheDocument();
-    expect(screen.getByText(/permission denied/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /we could not find that page/i })).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  it('sends the removed search page home', async () => {
+    renderRoutes('/search?q=mission');
 
-    expect(screen.getByText(/retry selected for the loading state example/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /students and coaches working as one team/i }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveAttribute('data-pathname', '/');
   });
 
   it('redirects the legacy home route to the overview', async () => {
@@ -78,13 +80,6 @@ describe('AppRoutes', () => {
     expect(await screen.findByRole('heading', { name: /we could not find that page/i })).toBeInTheDocument();
     expect(screen.queryByText(/phase 1 foundation/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back to overview/i })).toHaveAttribute('href', '/');
-  });
-
-  it('renders the emulator route', async () => {
-    renderRoutes('/emulators');
-
-    expect(await screen.findByRole('heading', { name: /local services are wired before feature work starts/i })).toBeInTheDocument();
-    expect(screen.getByText('Firestore').closest('li')).toHaveTextContent('8080');
   });
 
   it('preserves the full protected deep link when redirecting to the lazy auth route', async () => {

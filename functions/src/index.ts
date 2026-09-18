@@ -20,7 +20,9 @@ import {
   validatePolicy,
   validateReportInput,
   assertNotLastCoach,
-  auditRecord
+  auditRecord,
+  requireAccountType,
+  teamCreationRefusal
 } from './phase2.js';
 import {
   completeFileUpload as completeFileUploadCommand,
@@ -165,11 +167,18 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
   const displayName = auth.token.name ?? (typeof email === 'string' ? email.split('@')[0] : 'Team coach');
 
   await db.runTransaction(async (transaction) => {
-    const [userSnapshot, notificationPreferencesSnapshot, privacySettingsSnapshot] = await Promise.all([
+    const [userSnapshot, notificationPreferencesSnapshot, privacySettingsSnapshot, ownMemberships] = await Promise.all([
       transaction.get(userRef),
       transaction.get(notificationPreferencesRef),
-      transaction.get(privacySettingsRef)
+      transaction.get(privacySettingsRef),
+      transaction.get(db.collection('memberships').where('userId', '==', uid).limit(100))
     ]);
+    // Only coach and mentor accounts create teams (see `teamCreationRefusal`).
+    // Checked inside the transaction so it reads the same profile it writes.
+    if (auth.token.platformAdmin !== true) {
+      const refusal = teamCreationRefusal(userSnapshot.data()?.accountType, ownMemberships.docs.map((membership) => ({ role: membership.data().role, status: membership.data().status })));
+      if (refusal) throw refusal;
+    }
     transaction.set(teamRef, {
       name,
       normalizedName: normalizedTeamName(name),
@@ -227,6 +236,45 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
   });
 
   return { teamId: teamRef.id, auditEventId: auditRef.id };
+});
+
+/**
+ * Records what the signed-in person is — coach, mentor, student or parent —
+ * once. The browser cannot write `accountType` (the `users` rules pin its keys),
+ * so this is the only way in; a later change is a platform-admin action,
+ * otherwise a student could relabel themselves a coach and create a team.
+ */
+export const setAccountType = onCall(async (request: CallableRequest<{ accountType?: unknown }>) => {
+  const auth = requireCallableAuth(request);
+  const accountType = requireAccountType(request.data?.accountType);
+  const db = getFirestore();
+  const userRef = db.doc(`users/${auth.uid}`);
+  const token = request.auth?.token;
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(userRef);
+    const current = snapshot.data()?.accountType;
+    if (current === accountType) return { accountType, changed: false };
+    if (typeof current === 'string' && !auth.platformAdmin) {
+      throw new HttpsError('failed-precondition', 'Your account type is already set. Ask an administrator to change it.');
+    }
+    const now = FieldValue.serverTimestamp();
+    const email = token?.email ?? null;
+    transaction.set(userRef, {
+      uid: auth.uid,
+      accountType,
+      accountTypeSetAt: now,
+      updatedAt: now,
+      // A profile this call creates gets the same defaults `createTeam` writes,
+      // so the client's own bootstrap finds nothing it must add.
+      ...(snapshot.exists ? {} : {
+        email,
+        displayName: token?.name ?? (typeof email === 'string' ? email.split('@')[0] : 'First Pit member'),
+        photoURL: token?.picture ?? null,
+        createdAt: now
+      })
+    }, { merge: true });
+    return { accountType, changed: true };
+  });
 });
 
 type Phase2Request = CallableRequest<Record<string, unknown>>;

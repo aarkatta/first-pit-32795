@@ -61,7 +61,10 @@ import { createOperationId } from '@/lib/ids';
 
 type KanbanBoardProps = {
   teamId: string;
+  /** Board setup, import and file attachments: coaches and team leaders. */
   canManage: boolean;
+  /** Adding, editing and moving any task: coaches, team leaders and students. */
+  canEditTasks: boolean;
   actorRole: TeamRole;
   actorUserId: string;
   online: boolean;
@@ -87,10 +90,8 @@ const inputDate = dateTimeInputValue;
 
 // Exported for focused authorization-alignment tests alongside the board component.
 // eslint-disable-next-line react-refresh/only-export-components
-export function canMoveKanbanTask(task: Pick<TrackerTask, 'assignedTo'>, actorRole: TeamRole, actorUserId: string) {
-  return actorRole === 'coach'
-    || actorRole === 'teamLeader'
-    || (actorRole === 'student' && task.assignedTo === actorUserId);
+export function canMoveKanbanTask(actorRole: TeamRole) {
+  return actorRole === 'coach' || actorRole === 'teamLeader' || actorRole === 'student';
 }
 
 /** Card attachments and the team-file picker share one presentation. */
@@ -123,6 +124,7 @@ export type AttachmentsStatus = 'loading' | 'ready' | 'error';
 export function TaskDetails({
   task,
   canManage,
+  canEdit = canManage,
   busy,
   conflict = false,
   categories = NO_CATEGORIES,
@@ -141,7 +143,10 @@ export function TaskDetails({
   onSave
 }: {
   task: TrackerTask;
+  /** Coach/team-leader actions on the card, such as attaching team files. */
   canManage: boolean;
+  /** Editing the card's details and subtasks; students have this too. Defaults to `canManage`. */
+  canEdit?: boolean;
   busy: boolean;
   conflict?: boolean;
   /** Board categories, in board order, for the category picker. */
@@ -251,8 +256,8 @@ export function TaskDetails({
     <div className="kanban-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={dialogRef} className="kanban-modal" role="dialog" aria-modal="true" aria-labelledby="task-dialog-title" aria-describedby="task-dialog-description">
         <div className="modal-heading"><div><span className="eyebrow">TASK CARD</span><h2 id="task-dialog-title">{task.title}</h2></div><button type="button" onClick={onClose} aria-label="Close task details">×</button></div>
-        <p className="visually-hidden" id="task-dialog-description">{canManage ? 'Review or edit this task, then save or cancel.' : 'Review this task. Close the dialog to return to the board.'}</p>
-        {canManage ? <form className="kanban-details-form" onSubmit={submit}>
+        <p className="visually-hidden" id="task-dialog-description">{canEdit ? 'Review or edit this task, then save or cancel.' : 'Review this task. Close the dialog to return to the board.'}</p>
+        {canEdit ? <form className="kanban-details-form" onSubmit={submit}>
           {conflict || hasRemoteChange ? <div role="alert"><p>This task changed while you were editing it. Your draft is preserved until you choose to load the latest saved task.</p><button type="button" onClick={reloadLatest} disabled={!hasRemoteChange}>{hasRemoteChange ? 'Load latest task' : 'Waiting for latest task…'}</button></div> : null}
           <label>Title<input required maxLength={160} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
           <label>Description<textarea maxLength={4000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
@@ -282,7 +287,7 @@ export function TaskDetails({
         </form> : <div className="task-readonly-details"><p>{task.description || 'No description.'}</p><dl><div><dt>Priority</dt><dd>{task.priority}</dd></div><div><dt>Category</dt><dd>{categories.find((category) => category.id === task.categoryId)?.name ?? 'No category'}</dd></div><div><dt>Milestone</dt><dd>{goals.find((goal) => goal.id === task.goalId)?.title ?? (task.goalId ? 'Linked milestone' : 'No milestone')}</dd></div><div><dt>Assignee</dt><dd>{nameOf(directory, task.assignedTo)}</dd></div><div><dt>Start</dt><dd>{dueLabel(task.startAt)}</dd></div><div><dt>End</dt><dd>{dueLabel(task.endAt)}</dd></div><div><dt>Due</dt><dd>{dueLabel(task.dueAt)}</dd></div></dl></div>}
         <section className="task-subtasks" aria-labelledby="task-subtasks-heading">
           <h3 id="task-subtasks-heading">Subtasks{task.subtasks.length ? ` · ${task.subtasks.filter((subtask) => subtask.status === 'done').length}/${task.subtasks.length}` : ''}</h3>
-          {canManage ? (
+          {canEdit ? (
             <>
               <ul className="subtask-editor">
                 {form.subtasks.map((subtask, index) => (
@@ -375,7 +380,7 @@ export function TaskDetails({
 
 
 
-export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online }: KanbanBoardProps) {
+export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorUserId, online }: KanbanBoardProps) {
   const firestore = getFirebaseServices().firestore;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -653,7 +658,8 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
     [selectedTask, teamFiles]
   );
   const selectedTasks = useMemo(() => tasks.filter((task) => selectedIds.has(task.id)), [selectedIds, tasks]);
-  const canMoveTask = useCallback((task: TrackerTask) => canMoveKanbanTask(task, actorRole, actorUserId), [actorRole, actorUserId]);
+  // Any task editor may move any card, so the rule no longer depends on the card.
+  const canMoveTask: (task: TrackerTask) => boolean = useCallback(() => canMoveKanbanTask(actorRole), [actorRole]);
 
   function targetPlacement(task: TrackerTask, columnId: string, index?: number) {
     const target = tasks.filter((entry) => entry.columnId === columnId && entry.id !== task.id).sort((a, b) => Number(a.orderKey) - Number(b.orderKey));
@@ -693,7 +699,7 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
   }
 
   function patch(task: TrackerTask, changes: BoardTaskPatch) {
-    if (!canManage || busy || !online) return;
+    if (!canEditTasks || busy || !online) return;
     void run(() => updateTask({
       teamId,
       taskId: task.id,
@@ -819,6 +825,7 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
         labels={labels}
         categories={selectedProject.categories}
         canManage={canManage}
+        canEditTasks={canEditTasks}
         disabled={busy || !online}
         onNewItem={() => {
           setGroupBy('column');
@@ -838,7 +845,7 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
             people={people}
             directory={directory}
             now={now}
-            canManage={canManage}
+            canManage={canEditTasks}
             canMoveTask={canMoveTask}
             disabled={busy || !online}
             selectedIds={selectedIds}
@@ -876,11 +883,12 @@ export function KanbanBoard({ teamId, canManage, actorRole, actorUserId, online 
         </div>
       ) : null}
 
-      {canManage ? null : <p className="board-permission-note">{actorRole === 'student' ? 'Students can move only cards assigned to them. Project setup and card details remain coach-managed.' : 'Your role has view-only access to project boards.'}</p>}
+      {canManage ? null : <p className="board-permission-note">{canEditTasks ? 'You can add, edit and move tasks. Board setup and importing stay with your coach.' : 'Your role has view-only access to project boards.'}</p>}
 
       {selectedTask ? <TaskDetails
         task={selectedTask}
         canManage={canManage}
+        canEdit={canEditTasks}
         busy={busy}
         conflict={taskConflict}
         categories={selectedProject.categories}

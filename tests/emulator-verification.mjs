@@ -142,6 +142,15 @@ await expectStatus(firstUserProfileUrl, 200, 'Client profile bootstrap', {
 });
 await expectStatus(firstUserProfileUrl, 403, 'Cross-user private profile read', { headers: authHeader(secondUserToken) });
 
+// Only coach and mentor accounts create teams; each declares its type once.
+for (const [token, accountType, label] of [[firstUserToken, 'coach', 'Coach'], [secondUserToken, 'mentor', 'Mentor']]) {
+  await expectStatus(`${functionsBase}/setAccountType`, 200, `${label} account type`, {
+    method: 'POST',
+    headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: { accountType } })
+  });
+}
+
 const teamResponse = await expectStatus(
   `${functionsBase}/createTeam`,
   200,
