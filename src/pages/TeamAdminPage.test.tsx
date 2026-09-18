@@ -93,8 +93,19 @@ describe('TeamAdminPage membership administration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
     await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledWith('team-1', 'student@example.com', 'student'));
     const link = `${window.location.origin}/join?invite=team-1_c3R1ZGVudA`;
-    expect(await screen.findByText(/Invitation created for student@example\.com\. No email is sent/)).toHaveTextContent(link);
+    const notice = await screen.findByText(/Invitation created for student@example\.com\. First Pit does not send email itself/);
+    expect(notice).toHaveTextContent(link);
+    expect(notice).toHaveTextContent('already copied to your clipboard');
     expect(writeText).toHaveBeenCalledWith(link);
+    // Gmail compose opens in a new tab with the invitation already written.
+    const gmailInvite = screen.getByRole('link', { name: '✉ Email invite with Gmail to student@example.com' });
+    expect(gmailInvite).toHaveAttribute('target', '_blank');
+    const gmail = new URL(gmailInvite.getAttribute('href') ?? '');
+    expect(gmail.host).toBe('mail.google.com');
+    expect(gmail.searchParams.get('to')).toBe('student@example.com');
+    expect(gmail.searchParams.get('su')).toBe('Join Robotics on First Pit');
+    expect(gmail.searchParams.get('body')).toContain(link);
+    expect(screen.queryByRole('link', { name: 'Use another email app' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Invitation sent/)).not.toBeInTheDocument();
     Reflect.deleteProperty(navigator, 'clipboard');
   });
@@ -104,7 +115,7 @@ describe('TeamAdminPage membership administration', () => {
     render(<TeamAdminPage />);
     fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'parent@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
-    const notice = await screen.findByText(/No email is sent — send them this link/);
+    const notice = await screen.findByText(/or send them this link:/);
     expect(notice).toHaveTextContent(`${window.location.origin}/join?invite=team-1_abc`);
     expect(notice).not.toHaveTextContent('copied');
   });
@@ -144,6 +155,8 @@ describe('TeamAdminPage membership administration', () => {
     render(<TeamAdminPage />);
     expect(await screen.findByText('new@example.com')).toBeInTheDocument();
     expect(screen.getByText(/mentor · pending/i)).toBeInTheDocument();
+    const emailInvite = screen.getByRole('link', { name: 'Email invite to new@example.com with Gmail (opens in a new tab)' });
+    expect(new URL(emailInvite.getAttribute('href') ?? '').searchParams.get('body')).toContain('as a mentor.');
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
     await waitFor(() => expect(mocks.revokeInvitation).toHaveBeenCalledWith('team-1', 'team-1_abc'));
   });
