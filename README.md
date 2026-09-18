@@ -102,7 +102,8 @@ The individual scripts behind them, for iterating on one thing:
 - The app uses `BrowserRouter`.
 - `vercel.json` rewrites client routes to `index.html`, excluding `/assets/*` and the
   files served from `public/`, so a stale asset URL returns a 404 instead of HTML.
-- The same shell remains compatible with a future Capacitor iOS build.
+- The same shell is packaged for iOS with Capacitor: `npm run ios:build`, then
+  `npm run ios:open` (see *Capacitor iOS* in `docs/architecture.md`).
 
 ## Brand and social assets
 

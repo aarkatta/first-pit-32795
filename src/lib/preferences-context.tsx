@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from './auth-context';
+import { syncNativeStatusBar } from './native-shell';
 import { getProfileFirestore, loadProfileSettings, type UserSettings } from './profile-settings';
 
 /**
@@ -34,10 +35,12 @@ function resolvedTheme(theme: UserSettings['theme']): 'light' | 'dark' {
 
 function applyPreferencesToDocument(preferences: UserSettings) {
   const root = document.documentElement;
-  root.dataset.theme = resolvedTheme(preferences.theme);
+  const theme = resolvedTheme(preferences.theme);
+  root.dataset.theme = theme;
   root.dataset.highContrast = String(preferences.highContrast);
   root.dataset.reducedMotion = String(preferences.reducedMotion);
   root.dataset.fontScale = preferences.fontScale;
+  void syncNativeStatusBar(theme);
 }
 
 type PreferencesProviderProps = {

@@ -17,14 +17,20 @@ const mocks = vi.hoisted(() => ({
   signInWithPopup: vi.fn(),
   signInWithRedirect: vi.fn(),
   getRedirectResult: vi.fn(),
-  GoogleAuthProvider: vi.fn(function GoogleAuthProvider(this: Record<string, unknown>) {
+  signInWithCredential: vi.fn(),
+  GoogleAuthProvider: Object.assign(vi.fn(function GoogleAuthProvider(this: Record<string, unknown>) {
     this.setCustomParameters = vi.fn();
-  }),
-  isNativePlatform: vi.fn()
+  }), { credential: vi.fn((idToken: string, accessToken?: string) => ({ idToken, accessToken })) }),
+  isNativePlatform: vi.fn(),
+  nativeSignInWithGoogle: vi.fn(),
+  nativeSignOut: vi.fn()
 }));
 
 vi.mock('firebase/auth', () => mocks);
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: mocks.isNativePlatform } }));
+vi.mock('@capacitor-firebase/authentication', () => ({
+  FirebaseAuthentication: { signInWithGoogle: mocks.nativeSignInWithGoogle, signOut: mocks.nativeSignOut }
+}));
 
 import {
   applyEmailActionCode,
@@ -114,17 +120,43 @@ describe('auth service helpers', () => {
     expect(mocks.sendEmailVerification).not.toHaveBeenCalled();
   });
 
-  it('redirects instead of popping up inside the Capacitor shell', async () => {
-    // A popup has no opener to post back to at a capacitor:// origin, so the
-    // popup path cannot work on iOS at all.
+  it('signs in with the native Google SDK inside the Capacitor shell', async () => {
+    // A popup has no opener at a capacitor:// origin and a redirect cannot
+    // return to the app, so the shell hands the native ID token to the JS SDK.
     mocks.isNativePlatform.mockReturnValue(true);
-    mocks.signInWithRedirect.mockResolvedValue(undefined);
+    mocks.nativeSignInWithGoogle.mockResolvedValue({ credential: { idToken: 'id-token', accessToken: 'access-token' } });
+    mocks.signInWithCredential.mockResolvedValue({ user: { uid: 'native-user' } });
 
-    await expect(signInWithGoogle(auth)).resolves.toBeNull();
+    await expect(signInWithGoogle(auth)).resolves.toEqual({ user: { uid: 'native-user' } });
 
+    expect(mocks.nativeSignInWithGoogle).toHaveBeenCalledWith({ skipNativeAuth: true });
+    expect(mocks.signInWithCredential).toHaveBeenCalledWith(auth, { idToken: 'id-token', accessToken: 'access-token' });
     expect(mocks.signInWithPopup).not.toHaveBeenCalled();
-    expect(mocks.signInWithRedirect).toHaveBeenCalledTimes(1);
-    expect(mocks.signInWithRedirect.mock.calls[0][2]).toBe(mocks.browserPopupRedirectResolver);
+    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
+  });
+
+  it('fails native Google sign-in that returns no ID token', async () => {
+    mocks.isNativePlatform.mockReturnValue(true);
+    mocks.nativeSignInWithGoogle.mockResolvedValue({ credential: null });
+
+    await expect(signInWithGoogle(auth)).rejects.toThrow(/ID token/);
+    expect(mocks.signInWithCredential).not.toHaveBeenCalled();
+  });
+
+  it('never asks for a redirect result inside the shell', async () => {
+    mocks.isNativePlatform.mockReturnValue(true);
+    await expect(completeGoogleRedirect(auth)).resolves.toBeNull();
+    expect(mocks.getRedirectResult).not.toHaveBeenCalled();
+  });
+
+  it('also ends the native Google session on sign-out in the shell', async () => {
+    mocks.isNativePlatform.mockReturnValue(true);
+    mocks.signOut.mockResolvedValue(undefined);
+    mocks.nativeSignOut.mockRejectedValue(new Error('no native session'));
+
+    await expect(signOutCurrentUser(auth)).resolves.toBeUndefined();
+    expect(mocks.signOut).toHaveBeenCalledWith(auth);
+    expect(mocks.nativeSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to a redirect when the browser blocks the popup', async () => {
@@ -161,6 +193,7 @@ describe('auth service helpers', () => {
     expect(isDismissedPopup(Object.assign(new Error('x'), { code: 'auth/popup-closed-by-user' }))).toBe(true);
     expect(isDismissedPopup(Object.assign(new Error('x'), { code: 'auth/cancelled-popup-request' }))).toBe(true);
     expect(isDismissedPopup(new Error('auth/popup-closed-by-user'))).toBe(true);
+    expect(isDismissedPopup(new Error('The user canceled the sign-in flow.'))).toBe(true);
     expect(isDismissedPopup(Object.assign(new Error('x'), { code: 'auth/popup-blocked' }))).toBe(false);
     expect(isDismissedPopup('not an error')).toBe(false);
   });
@@ -172,6 +205,18 @@ describe('auth service helpers', () => {
       const settings = emailActionCodeSettings('/join?invite=abc');
       expect(settings.url).toBe(`${window.location.origin}/auth/action?next=%2Fjoin%3Finvite%3Dabc`);
       expect(settings.handleCodeInApp).toBe(false);
+    });
+
+    it('points the continue URL at the public website from the iOS shell', () => {
+      // capacitor://localhost is useless in an email and Firebase refuses it.
+      mocks.isNativePlatform.mockReturnValue(true);
+      vi.stubEnv('VITE_PUBLIC_WEB_ORIGIN', 'https://www.first-pit.com');
+      try {
+        expect(emailActionCodeSettings().url).toBe('https://www.first-pit.com/auth/action');
+      } finally {
+        vi.unstubAllEnvs();
+        mocks.isNativePlatform.mockReturnValue(false);
+      }
     });
 
     it('still sends the email when this origin is not an authorized domain', async () => {

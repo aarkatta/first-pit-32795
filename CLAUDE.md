@@ -25,6 +25,8 @@ npm run test:watch
 npm run build            # vite build -> dist/
 npm run functions:build  # tsc for the functions workspace -> functions/lib/
 npm run template:build   # regenerates public/first-pit-task-template.xlsx
+npm run ios:build        # production bundle -> checked -> cap sync ios (needs .env.ios.local + ios/App/App/GoogleService-Info.plist)
+npm run ios:open         # open the iOS shell in Xcode
 ```
 
 Run a single test file or case:

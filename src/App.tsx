@@ -8,6 +8,7 @@ import { TeamProvider } from '@/lib/team-context';
 import { PreferencesProvider } from '@/lib/preferences-context';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { NativeDeepLinks } from '@/components/NativeDeepLinks';
 
 const AuthActionPage = lazy(() => import('@/pages/AuthActionPage').then((module) => ({ default: module.AuthActionPage })));
 const AuthPage = lazy(() => import('@/pages/AuthPage').then((module) => ({ default: module.AuthPage })));
@@ -106,6 +107,7 @@ export default function App() {
       <PreferencesProvider>
         <TeamProvider>
           <BrowserRouter>
+            <NativeDeepLinks />
             <AppRoutes />
           </BrowserRouter>
         </TeamProvider>

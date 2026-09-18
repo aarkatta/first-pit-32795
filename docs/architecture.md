@@ -893,30 +893,32 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
 
 ### Sign-in transports
 
-`signInWithPopup` was the only Google path, and it cannot work in the Capacitor
-iOS shell: at a `capacitor://` origin a popup has no opener to post back to.
-`signInWithGoogle` now picks its transport:
+`signInWithPopup` cannot work in the Capacitor iOS shell: at a `capacitor://`
+origin a popup has no opener to post back to, and a redirect cannot return to
+the app. `signInWithGoogle` picks its transport:
 
 | Environment | Transport |
 | --- | --- |
 | Desktop / mobile web | `signInWithPopup` |
-| Capacitor shell (`Capacitor.isNativePlatform()`) | `signInWithRedirect` |
 | Web where the popup is blocked or storage is unusable | falls back to `signInWithRedirect` |
+| Capacitor shell (`isNativeShell()`) | native Google SDK via `@capacitor-firebase/authentication`, then `signInWithCredential` |
 
-It resolves to `null` when a redirect has started, because the page is
-navigating away and there is no credential yet. `completeGoogleRedirect`
-(`getRedirectResult`) collects it on the next load from an effect in `AuthPage`;
-`AuthProvider` still creates the private profile from its own session listener,
-so the redirect path only has to route the user and surface failures. A genuine
-popup failure is rethrown rather than silently converted to a redirect.
+On the web, a redirect resolves to `null` because the page is navigating away;
+`completeGoogleRedirect` (`getRedirectResult`) collects it on the next load from
+an effect in `AuthPage`. `AuthProvider` still creates the private profile from
+its own session listener, so the redirect path only has to route the user and
+surface failures. A genuine popup failure is rethrown rather than silently
+converted to a redirect.
 
-**Known limit, not yet closed.** The redirect transport is what makes native
-sign-in possible, but a production iOS build also needs the redirect to return
-to the app — an `authDomain` the WebView can reach plus the matching URL scheme
-in Xcode. Where that proves unreliable, the supported answer is the
-`@capacitor-firebase/authentication` plugin, which uses the native Google SDK.
-That is a native-packaging task and cannot be rehearsed in the emulator, so it
-stays open; this change removes the transport that could never have worked.
+In the shell, the plugin runs with `skipNativeAuth: true`: the native Google
+SDK only obtains Google's ID token, and the Firebase JS SDK signs in with
+`GoogleAuthProvider.credential(idToken)` and owns the session exactly as on
+the web. The plugin is loaded with a dynamic `import()` so the web bundle does
+not carry it. `completeGoogleRedirect` returns `null` in the shell (its Auth has
+no redirect resolver), a dismissed Google sheet counts as a dismissal rather
+than an error, and `signOutCurrentUser` also ends the native Google session so
+the next sign-in shows the account picker. Sign in with Apple is deliberately
+out of scope; see `docs/ios-app-plan.md` for the App Store review risk.
 
 ### Session persistence
 
@@ -1169,27 +1171,96 @@ network changes state.
 
 ### Capacitor iOS
 
-The web bundle remains the source of truth. Native packaging is only a shell:
+The phased plan for shipping the app, and its status, is in
+`docs/ios-app-plan.md`.
+
+The web bundle remains the source of truth; `ios/` is a Capacitor 8 shell using
+Swift Package Manager (no CocoaPods), iOS 15+, bundle id `com.firstpit.app`.
+Building it needs Xcode 26 or later.
 
 ```bash
-npm run build
-npm install
-npx cap add ios
-npx cap sync ios
-npx cap open ios
+cp .env.ios.example .env.ios.local   # once; production web config, see below
+npx firebase apps:sdkconfig IOS --project production \
+  --out ios/App/App/GoogleService-Info.plist   # once; native Google sign-in
+npm run ios:build                    # typecheck, vite build --mode ios, bundle check, cap sync ios
+npm run ios:open                     # opens ios/App in Xcode
 ```
 
-`capacitor.config.ts` uses `dist` and automatic iOS content insets. The web
-viewport includes `viewport-fit=cover`, and CSS consumes the safe-area inset
-variables. The current MVP requests no camera, location, contacts, photo
-library, or push permissions. File selection uses the browser/WebView picker;
-do not add native permission prompts without an approved feature and privacy
-review.
+- **Production bundle only.** `ios:build` builds in Vite mode `ios`, which layers
+  `.env.ios.local` over `.env.local`. `scripts/ios-bundle-check.mjs` inspects the
+  built JS before `cap sync` and refuses a bundle that is not mode `ios`, has
+  emulators on, or points at a `demo-*` project. The values are the production
+  Firebase *web* app config (`npx firebase apps:sdkconfig WEB --project
+  production`), which is public by design.
+- **Auth initialization.** In the shell, `getFirebaseApp` creates Auth with
+  `initializeAuth(app, { persistence: indexedDBLocalPersistence })` before
+  anything calls `getAuth`. The browser `getAuth` loads the popup/redirect
+  resolver iframe from `authDomain`, which never answers at a `capacitor://`
+  origin, so the first auth-state event never arrived and the app sat on
+  "Loading your dashboard".
+- **Safe areas.** `contentInset: 'never'`: the page is full-bleed
+  (`viewport-fit=cover`) and pads itself with `env(safe-area-inset-*)`. An
+  `automatic` inset padded twice and showed the bare web view behind the home
+  indicator. `release-check` asserts the setting.
+- **Native chrome** lives in `src/lib/native-shell.ts` (`isNativeShell`,
+  `syncNativeStatusBar`, `hideNativeSplash`); each is a no-op on the web. The
+  status bar follows the resolved theme from `PreferencesProvider`; the splash
+  hides after the first paint, capped at 10 s in `capacitor.config.ts`.
+- **Native Google sign-in** needs `ios/App/App/GoogleService-Info.plist` (the
+  iOS app `com.firstpit.app`, registered in the production project). It is
+  gitignored like other platform config and referenced by the Xcode target, so
+  a checkout builds only once it is downloaded. Its reversed client ID is the
+  `google-sign-in` URL scheme in `Info.plist`. `capacitor.config.ts` limits the
+  plugin's Swift package to the Google trait, so the Facebook SDK is not linked.
+- **Links in the shell** (`src/lib/native-links.ts`, installed from `main.tsx`):
+  one bubble-phase click handler on `document` routes an `<a download>` to the
+  cache and the share sheet, and an `http(s)` link to another origin to the
+  in-app Safari view (`@capacitor/browser`). In-app routes, `mailto:` and
+  clicks a component already handled are left alone. Pages keep plain anchors.
+- **Public web origin.** Invite links and the continue URL in verification
+  emails use `publicWebOrigin()` (`src/lib/public-origin.ts`): the page origin
+  on the web, `VITE_PUBLIC_WEB_ORIGIN` in the shell, where the page origin is
+  `capacitor://localhost`. The bundle check requires it to be `https://`.
+- **Invites** in the shell use the share sheet (**Send invite**) instead of
+  Gmail's web compose screen; the landing page's "coming soon" store badges are
+  hidden there.
+- **iPhone is portrait-only**; the iPad orientations are the template's until
+  the iPad decision is made. `Info.plist` declares `arm64` and
+  `ITSAppUsesNonExemptEncryption = false` (HTTPS only).
+- **Icon and splash** are drawn from the `public/favicon.svg` mark by
+  `scripts/render-ios-brand.swift`: opaque, full bleed, brand colours.
 
-Deep links remain internal paths such as `/coordination?task=...` and
-`/chat?channel=...`. Universal Links/App Links require a real production domain,
-associated-domain entitlements, and an Apple developer signing profile, so they
-are a pilot deployment task rather than a local emulator assumption.
+The shell requests no camera, location, contacts, photo library, or push
+permissions. File selection uses the WebView picker; do not add native
+permission prompts without an approved feature and privacy review.
+
+**Universal Links.** A `https://www.first-pit.com/...` link tapped on an
+iPhone with the app installed opens the app at the same route.
+
+- `public/.well-known/apple-app-site-association` names
+  `B4C87L2787.com.firstpit.app` and claims every route except static files
+  (`/assets/*`, `/.well-known/*`, anything with a file extension). `vercel.json`
+  excludes `/.well-known/` from the SPA rewrite and serves the file as
+  `application/json`; without that, iOS received `index.html` and ignored it.
+  `release-check` asserts all three.
+- `ios/App/App/App.entitlements` holds `applinks:www.first-pit.com`. Only
+  `www` is listed: the apex `first-pit.com` 308-redirects to it, and iOS does
+  not follow redirects for the association file.
+- `NativeDeepLinks` (inside the router) uses `listenForDeepLinks`
+  (`src/lib/native-deep-links.ts`): the launch URL on a cold start and
+  `appUrlOpen` afterwards. Only URLs on `publicWebOrigin()` are routed.
+  Protected routes still go through `ProtectedRoute`, so a signed-out invitee
+  signs in and keeps `/join?invite=…`.
+- The team is `B4C87L2787`, the developer's individual account, used for
+  TestFlight. Moving the app to the coach's account means an App Store Connect
+  app transfer and a new Team ID. Add the new `<TEAMID>.com.firstpit.app` to
+  `appIDs` and deploy it **before** the transfer, then update
+  `DEVELOPMENT_TEAM`.
+- iOS fetches the file through Apple's CDN when the app is installed, so links
+  work only after the file is deployed to production.
+
+Still open for the store build: the device checks listed under Phases B and C
+in `docs/ios-app-plan.md`.
 
 ### Pilot policy gate
 

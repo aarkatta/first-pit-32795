@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["B4C87L2787.com.firstpit.app"],
+        "components": [
+          { "/": "/assets/*", "exclude": true, "comment": "Built JS and CSS" },
+          { "/": "/.well-known/*", "exclude": true },
+          { "/": "/*.*", "exclude": true, "comment": "Static files: icons, the Excel template, robots.txt" },
+          { "/": "/*", "comment": "Every app route, e.g. /join?invite=..., /coordination?task=..." }
+        ]
+      }
+    ]
+  }
+}

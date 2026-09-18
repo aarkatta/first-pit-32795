@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getApps: vi.fn(),
   initializeApp: vi.fn(),
   getAuth: vi.fn(() => ({ name: 'auth' })),
+  initializeAuth: vi.fn(),
+  isNativeShell: vi.fn(() => false),
   getFirestore: vi.fn(() => ({ name: 'firestore' })),
   getFunctions: vi.fn(() => ({ name: 'functions' })),
   getStorage: vi.fn(() => ({ name: 'storage' })),
@@ -23,8 +25,12 @@ vi.mock('firebase/app', () => ({
 
 vi.mock('firebase/auth', () => ({
   connectAuthEmulator: mocks.connectAuthEmulator,
-  getAuth: mocks.getAuth
+  getAuth: mocks.getAuth,
+  indexedDBLocalPersistence: { type: 'LOCAL' },
+  initializeAuth: mocks.initializeAuth
 }));
+
+vi.mock('./native-shell', () => ({ isNativeShell: mocks.isNativeShell }));
 
 vi.mock('firebase/firestore', () => ({
   connectFirestoreEmulator: mocks.connectFirestoreEmulator,
@@ -75,6 +81,7 @@ describe('Firebase bootstrap', () => {
     mocks.getApps.mockReturnValue([]);
     mocks.initializeApp.mockReturnValue(mocks.app);
     mocks.getAuth.mockReturnValue({ name: 'auth' });
+    mocks.isNativeShell.mockReturnValue(false);
     mocks.getFirestore.mockReturnValue({ name: 'firestore' });
     mocks.getFunctions.mockReturnValue({ name: 'functions' });
     mocks.getStorage.mockReturnValue({ name: 'storage' });
@@ -132,5 +139,25 @@ describe('Firebase bootstrap', () => {
       'http://[::1]:9099',
       { disableWarnings: true }
     );
+  });
+
+  it('leaves Auth to getAuth on the web', async () => {
+    const { getFirebaseServices } = await import('./firebase');
+
+    getFirebaseServices();
+
+    expect(mocks.initializeAuth).not.toHaveBeenCalled();
+  });
+
+  it('initializes Auth once with IndexedDB persistence in the iOS shell', async () => {
+    mocks.isNativeShell.mockReturnValue(true);
+    const { getFirebaseServices } = await import('./firebase');
+
+    getFirebaseServices();
+    mocks.getApps.mockReturnValue([mocks.app]);
+    getFirebaseServices();
+
+    expect(mocks.initializeAuth).toHaveBeenCalledOnce();
+    expect(mocks.initializeAuth).toHaveBeenCalledWith(mocks.app, { persistence: { type: 'LOCAL' } });
   });
 });

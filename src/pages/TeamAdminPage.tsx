@@ -13,7 +13,10 @@ import {
   type TeamPolicy
 } from '@/lib/domain';
 import { useTeamContext } from '@/lib/team-context';
-import { inviteGmailHref, type InviteEmailInput } from '@/lib/invite-email';
+import { inviteEmailBody, inviteEmailSubject, inviteGmailHref, type InviteEmailInput } from '@/lib/invite-email';
+import { shareText } from '@/lib/native-links';
+import { isNativeShell } from '@/lib/native-shell';
+import { publicWebOrigin } from '@/lib/public-origin';
 import {
   approveJoinRequest,
   assignTeamRole,
@@ -78,7 +81,7 @@ const INVITATION_STATUSES: InvitationStatus[] = ['pending', 'accepted', 'revoked
 const MODERATION_STATUSES: ModerationStatus[] = ['open', 'investigating', 'resolved', 'dismissed'];
 
 function inviteLink(invitationId: string) {
-  return `${window.location.origin}/join?invite=${encodeURIComponent(invitationId)}`;
+  return `${publicWebOrigin()}/join?invite=${encodeURIComponent(invitationId)}`;
 }
 
 async function copyToClipboard(text: string) {
@@ -201,6 +204,9 @@ export function TeamAdminPage() {
   const { user } = useAuth();
   const { activeTeam } = useTeamContext();
   const online = useOnlineStatus();
+  // In the iOS shell, invites go through the share sheet (Mail, Messages,
+  // Gmail…) instead of Gmail's web compose screen.
+  const nativeShell = isNativeShell();
   const firestore = getFirebaseServices().firestore;
   const teamId = activeTeam?.teamId ?? null;
   const canAdminister = isCoachOrLeader(activeTeam);
@@ -278,7 +284,7 @@ export function TeamAdminPage() {
       const link = inviteLink(invitationId);
       const copied = await copyToClipboard(link);
       setLastInvite({ id: invitationId, email: invitee, role: inviteRole });
-      setNotice(`Invitation created for ${invitee}. First Pit does not send email itself — use Email invite to open your email app with the message written, or send them this link${copied ? ' (already copied to your clipboard)' : ''}: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
+      setNotice(`Invitation created for ${invitee}. First Pit does not send email itself — use ${nativeShell ? 'Send invite' : 'Email invite'} to open your email app with the message written, or send them this link${copied ? ' (already copied to your clipboard)' : ''}: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
     });
   }
 
@@ -291,6 +297,15 @@ export function TeamAdminPage() {
       teamNumber: activeTeam?.team?.teamNumber ?? null,
       inviterName: user?.displayName ?? null
     };
+  }
+
+  async function shareInvite(invitation: { id: string; email: string; role: string }) {
+    const message = inviteEmailFor(invitation);
+    try {
+      await shareText({ title: inviteEmailSubject(message), text: inviteEmailBody(message) });
+    } catch (shareError) {
+      setRequestState(getRequestState(shareError, online));
+    }
   }
 
   async function copyInviteLink(invitationId: string) {
@@ -320,7 +335,9 @@ export function TeamAdminPage() {
       {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => { setNotice(null); setLastInvite(null); }} /> : null}
       {notice && lastInvite ? (
         <p className="invite-email-action">
-          <a className="button" href={inviteGmailHref(inviteEmailFor(lastInvite))} target="_blank" rel="noopener noreferrer">✉ Email invite with Gmail to {lastInvite.email}</a>
+          {nativeShell
+            ? <button className="button" type="button" onClick={() => void shareInvite(lastInvite)}>✉ Send invite to {lastInvite.email}</button>
+            : <a className="button" href={inviteGmailHref(inviteEmailFor(lastInvite))} target="_blank" rel="noopener noreferrer">✉ Email invite with Gmail to {lastInvite.email}</a>}
         </p>
       ) : null}
       <section className="split-panels">
@@ -385,7 +402,9 @@ export function TeamAdminPage() {
               <span>
                 {invitation.status === 'pending' ? (
                   <>
-                    <a className="text-button" href={inviteGmailHref(inviteEmailFor(invitation))} target="_blank" rel="noopener noreferrer" aria-label={`Email invite to ${invitation.email} with Gmail (opens in a new tab)`}>Email invite</a>
+                    {nativeShell
+                      ? <button className="text-button" type="button" onClick={() => void shareInvite(invitation)} aria-label={`Send invite to ${invitation.email}`}>Send invite</button>
+                      : <a className="text-button" href={inviteGmailHref(inviteEmailFor(invitation))} target="_blank" rel="noopener noreferrer" aria-label={`Email invite to ${invitation.email} with Gmail (opens in a new tab)`}>Email invite</a>}
                     <button className="text-button" type="button" disabled={busy} onClick={() => void copyInviteLink(invitation.id)}>Copy link</button>
                     <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => revokeInvitation(teamId, invitation.id))}>Revoke</button>
                   </>

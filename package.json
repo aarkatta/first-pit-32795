@@ -35,10 +35,19 @@
     "emulators": "npm run functions:build && firebase emulators:start --config firebase.json",
     "emulators:export": "npm run functions:build && firebase emulators:start --config firebase.json --import .firebase/emulator-data --export-on-exit .firebase/emulator-data",
     "test:release": "node scripts/release-check.mjs",
-    "template:build": "node scripts/build-import-template.mjs"
+    "template:build": "node scripts/build-import-template.mjs",
+    "ios:build": "npm run typecheck && vite build --mode ios && node scripts/ios-bundle-check.mjs && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
-    "@capacitor/core": "^6.1.2",
+    "@capacitor-firebase/authentication": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/share": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -57,8 +66,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.1.2",
-    "@capacitor/ios": "^6.2.1",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
     "@eslint/js": "^9.36.0",
     "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/vite": "^4.3.3",
