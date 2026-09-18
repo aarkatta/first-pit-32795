@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  teamNumberSuffix,
   canEditKnowledge,
   canEditTasks,
   hasTeamRole,
@@ -74,6 +75,12 @@ describe('domain authorization helpers', () => {
     expect(canEditKnowledge({ role: 'mentor', status: 'suspended' })).toBe(false);
     expect(canEditKnowledge({ role: 'parent', status: 'active' })).toBe(false);
     expect(canEditKnowledge(null)).toBe(false);
+  });
+
+  it('formats the team number that follows a team name', () => {
+    expect(teamNumberSuffix('12345')).toBe(' · Team #12345');
+    expect(teamNumberSuffix(null)).toBe('');
+    expect(teamNumberSuffix(undefined)).toBe('');
   });
 
   it('treats Platform Admin as a separate full-access claim', () => {

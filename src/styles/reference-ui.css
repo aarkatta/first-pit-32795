@@ -1185,6 +1185,14 @@ and profile compositions. */
 .team-hero p { margin: 0; color: #b8c5be; }
 .team-hero button,
 .team-hero .button { padding: 12px 16px; border: 0; border-radius: 10px; background: var(--acid); color: #14200e; font-weight: 800; }
+.team-hero .team-number { color: var(--acid); font-weight: 600; }
+.team-hero .team-number-edit { margin-top: 14px; padding: 8px 12px; background: rgba(255, 255, 255, 0.1); color: #f6faf7; box-shadow: none; font-size: 12px; }
+.team-number-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 14px; }
+.team-number-form label { display: grid; gap: 4px; color: #b8c5be; font-size: 12px; font-weight: 700; }
+.team-number-form input.team-name-input { width: 240px; }
+.team-number-form input { width: 140px; min-height: 36px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px; background: #fff; color: var(--ink); }
+.team-hero .team-number-form button { padding: 8px 12px; font-size: 12px; }
+.team-hero .team-number-form .button--ghost { background: rgba(255, 255, 255, 0.1); color: #f6faf7; box-shadow: none; }
 
 .member-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
 .member-grid article { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 25px 18px; border: 1px solid var(--line); border-radius: 15px; background: #fff; text-align: center; }

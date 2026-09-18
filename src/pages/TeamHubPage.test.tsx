@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ useAuth: vi.fn(), useTeamContext: vi.fn(), useAccountType: vi.fn() }));
+const mocks = vi.hoisted(() => ({ useAuth: vi.fn(), useTeamContext: vi.fn(), useAccountType: vi.fn(), updateTeamDetails: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
 vi.mock('@/lib/team-context', () => ({ useTeamContext: mocks.useTeamContext }));
 vi.mock('@/lib/account-type', () => ({ useAccountType: mocks.useAccountType }));
+vi.mock('@/lib/team-service', () => ({ updateTeamDetails: mocks.updateTeamDetails }));
 
 import { TeamHubPage } from './TeamHubPage';
 
@@ -77,6 +78,30 @@ describe('TeamHubPage', () => {
     // The administration sections sit below the overview on the same page now.
     expect(screen.queryByRole('link', { name: /manage roster and invitations/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Open' }).length).toBeGreaterThan(0);
+  });
+
+  it('lets a coach edit the team name and number together', async () => {
+    const patchTeam = vi.fn();
+    const membership = { teamId: 'team-1', role: 'coach', status: 'active', team: { name: 'Robotics', id: 'team-1', teamNumber: null } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [membership], activeTeam: membership, patchTeam });
+    mocks.updateTeamDetails.mockResolvedValue({ teamId: 'team-1', name: 'TechSummer', teamNumber: '12345' });
+    render(<MemoryRouter><TeamHubPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit team name & number' }));
+    expect(screen.getByLabelText('Team name')).toHaveValue('Robotics');
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'TechSummer' } });
+    fireEvent.change(screen.getByLabelText('Team number'), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mocks.updateTeamDetails).toHaveBeenCalledWith('team-1', { name: 'TechSummer', teamNumber: '12345' }));
+    expect(await screen.findByRole('heading', { name: 'TechSummer · Team #12345' })).toBeInTheDocument();
+    expect(patchTeam).toHaveBeenCalledWith('team-1', { name: 'TechSummer', teamNumber: '12345' });
+  });
+
+  it('shows the team number to a student without an edit control', () => {
+    const membership = { teamId: 'team-1', role: 'student', status: 'active', team: { name: 'Robotics', id: 'team-1', teamNumber: '777' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [membership], activeTeam: membership });
+    render(<MemoryRouter><TeamHubPage /></MemoryRouter>);
+    expect(screen.getByRole('heading', { name: 'Robotics · Team #777' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /team number/i })).not.toBeInTheDocument();
   });
 
   it('requires a confirmation step before leaving a team', () => {

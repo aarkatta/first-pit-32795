@@ -47,6 +47,7 @@ function readTeam(id: string, data: Record<string, unknown>): Team {
     id,
     name: String(data.name ?? ''),
     normalizedName: String(data.normalizedName ?? ''),
+    teamNumber: typeof data.teamNumber === 'string' && data.teamNumber ? data.teamNumber : null,
     createdBy: String(data.createdBy ?? ''),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt
