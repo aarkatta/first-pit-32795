@@ -13,6 +13,7 @@ import {
   type TeamPolicy
 } from '@/lib/domain';
 import { useTeamContext } from '@/lib/team-context';
+import { inviteGmailHref, type InviteEmailInput } from '@/lib/invite-email';
 import {
   approveJoinRequest,
   assignTeamRole,
@@ -208,6 +209,8 @@ export function TeamAdminPage() {
   const [error, setError] = useState<Error | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The invite just created, so the notice can offer to email it.
+  const [lastInvite, setLastInvite] = useState<{ id: string; email: string; role: string } | null>(null);
   const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'student' | 'parent' | 'mentor' | 'coach'>('student');
   const [busy, setBusy] = useState(false);
@@ -274,12 +277,25 @@ export function TeamAdminPage() {
       // Saying "sent" here used to make coaches wait for an email that never came.
       const link = inviteLink(invitationId);
       const copied = await copyToClipboard(link);
-      setNotice(`Invitation created for ${invitee}. No email is sent — ${copied ? 'the invite link is copied to your clipboard; ' : ''}send them this link: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
+      setLastInvite({ id: invitationId, email: invitee, role: inviteRole });
+      setNotice(`Invitation created for ${invitee}. First Pit does not send email itself — use Email invite to open your email app with the message written, or send them this link${copied ? ' (already copied to your clipboard)' : ''}: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
     });
+  }
+
+  function inviteEmailFor(invitation: { id: string; email: string; role: string }): InviteEmailInput {
+    return {
+      email: invitation.email,
+      link: inviteLink(invitation.id),
+      role: invitation.role,
+      teamName: activeTeam?.team?.name ?? 'our team',
+      teamNumber: activeTeam?.team?.teamNumber ?? null,
+      inviterName: user?.displayName ?? null
+    };
   }
 
   async function copyInviteLink(invitationId: string) {
     const link = inviteLink(invitationId);
+    setLastInvite(null);
     setNotice(await copyToClipboard(link) ? `Invite link copied: ${link}` : `Invite link: ${link}`);
   }
 
@@ -301,7 +317,12 @@ export function TeamAdminPage() {
         <button className="button button--ghost" type="button" onClick={() => document.getElementById('invite-member')?.focus()}>＋ Invite member</button>
       </div>
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
-      {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => setNotice(null)} /> : null}
+      {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => { setNotice(null); setLastInvite(null); }} /> : null}
+      {notice && lastInvite ? (
+        <p className="invite-email-action">
+          <a className="button" href={inviteGmailHref(inviteEmailFor(lastInvite))} target="_blank" rel="noopener noreferrer">✉ Email invite with Gmail to {lastInvite.email}</a>
+        </p>
+      ) : null}
       <section className="split-panels">
         <article className="feature-panel">
           <span className="eyebrow">INVITE A MEMBER</span>
@@ -312,7 +333,7 @@ export function TeamAdminPage() {
             <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)}><option value="student">Student</option><option value="parent">Parent</option><option value="mentor">Mentor</option><option value="coach">Coach</option></select></label>
             <button className="button" type="submit" disabled={locked}>{busy ? 'Creating…' : 'Create invite link'}</button>
           </form>
-          <p><small>The invitee opens the link, signs in with that same email address and verifies it, then accepts. Pending links stay under Invitations, with <strong>Copy link</strong>.</small></p>
+          <p><small>The invitee opens the link, signs in with that same email address and verifies it, then accepts. Pending links stay under Invitations, with <strong>Email invite</strong> (opens Gmail in a new tab with the message written) and <strong>Copy link</strong>.</small></p>
         </article>
         <article className="feature-panel">
           <span className="eyebrow">SAFETY DEFAULTS</span>
@@ -364,6 +385,7 @@ export function TeamAdminPage() {
               <span>
                 {invitation.status === 'pending' ? (
                   <>
+                    <a className="text-button" href={inviteGmailHref(inviteEmailFor(invitation))} target="_blank" rel="noopener noreferrer" aria-label={`Email invite to ${invitation.email} with Gmail (opens in a new tab)`}>Email invite</a>
                     <button className="text-button" type="button" disabled={busy} onClick={() => void copyInviteLink(invitation.id)}>Copy link</button>
                     <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => revokeInvitation(teamId, invitation.id))}>Revoke</button>
                   </>

@@ -152,8 +152,11 @@ A callable must return stored dates as **ISO strings** — a raw Firestore
 `Timestamp` reaches the browser as `{_seconds, _nanoseconds}`, which `toDate()`
 cannot read (see `pickPublicFields` in `phase7.ts`).
 
-Invitations are **not emailed**: `createInvitation` stores the invitation and the
-coach shares the `/join?invite=<id>` link themselves.
+Invitations are **not emailed** by First Pit: `createInvitation` stores the
+invitation and the coach shares the `/join?invite=<id>` link themselves. Team
+admin's **Email invite** opens Gmail's compose screen in a new tab with the
+message written (`src/lib/invite-email.ts`) — no server email, no provider,
+nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option.
 
 ### Client structure
 

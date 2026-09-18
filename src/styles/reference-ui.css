@@ -1399,3 +1399,5 @@ textarea:focus-visible,
   max-width: none;
   margin: 0;
 }
+
+.invite-email-action { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: -4px 0 0; }
