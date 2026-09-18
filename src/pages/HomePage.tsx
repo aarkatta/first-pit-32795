@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Flag, Trophy } from 'lucide-react';
+import { Flag } from 'lucide-react';
 import { StatePanel } from '@/components/StatePanel';
-import { ScoreTrendChart } from '@/features/dashboard/ScoreTrendChart';
 import { LandingPage } from '@/features/landing/landing-page';
 import { useAuth } from '@/lib/auth-context';
-import { areaRows, dashboardHighlights, percentOf, scoreTrendPoints } from '@/lib/dashboard-view';
+import { areaRows, dashboardHighlights, percentOf } from '@/lib/dashboard-view';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { useTeamContext } from '@/lib/team-context';
@@ -22,10 +21,10 @@ function roleLabel(role: string | undefined) {
 }
 
 function roleEmptyCopy(role: string | undefined) {
-  if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task, milestone, or score session so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };
+  if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task or milestone so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };
   if (role === 'student') return { title: 'Nothing is assigned yet', message: 'Your coach or team leader has not assigned work yet. You can still browse team knowledge.', action: '/knowledge', label: 'Open knowledge' };
   if (role === 'parent') return { title: 'Follow the team safely', message: 'Visibility follows the team policy set by the coach.', action: '/team', label: 'Open your team' };
-  return { title: 'Support the next milestone', message: 'Follow authorized work, knowledge, and scoring activity.', action: '/team', label: 'Open your team' };
+  return { title: 'Support the next milestone', message: 'Follow authorized work and team knowledge.', action: '/team', label: 'Open your team' };
 }
 
 function taskStatus(status: unknown) {
@@ -137,8 +136,6 @@ export function HomePage() {
   const areas = areaRows(dashboard.areas);
   const taggedAreaCount = areas.filter((area) => area.taskCount > 0).length;
   const highlights = dashboardHighlights(dashboard);
-  const trend = scoreTrendPoints(dashboard.scores);
-  const latestScores = [...trend].reverse().slice(0, 5);
   const upcomingTasks = dashboard.upcomingTasks ?? [];
   const now = new Date();
 
@@ -157,10 +154,10 @@ export function HomePage() {
         <div>
           <span className="eyebrow">TEAM DASHBOARD</span>
           <h1>{dashboard.team.name}</h1>
-          <p>{roleLabel(dashboard.role)} view · {summary.taskCount} task{summary.taskCount === 1 ? '' : 's'} · {summary.goalCount} milestone{summary.goalCount === 1 ? '' : 's'} · {summary.scoreCount} score session{summary.scoreCount === 1 ? '' : 's'}</p>
+          <p>{roleLabel(dashboard.role)} view · {summary.taskCount} task{summary.taskCount === 1 ? '' : 's'} · {summary.goalCount} milestone{summary.goalCount === 1 ? '' : 's'}</p>
         </div>
         <div className="dashboard-header__actions">
-          <Link className="button button--ghost" to="/scorer">Record a score</Link>
+          <Link className="button button--ghost" to="/scorer">Open scorer</Link>
           <Link className="button" to="/coordination">Open project board</Link>
         </div>
       </header>
@@ -213,13 +210,13 @@ export function HomePage() {
           {highlights.length ? (
             <ul className="highlight-list">
               {highlights.map((highlight) => (
-                <li key={highlight.id} className={`highlight highlight--${highlight.kind}`}>
-                  <span className="highlight__icon" aria-hidden="true">{highlight.kind === 'score' ? <Trophy size={16} /> : <Flag size={16} />}</span>
+                <li key={highlight.id} className="highlight highlight--goal">
+                  <span className="highlight__icon" aria-hidden="true"><Flag size={16} /></span>
                   <span><strong>{highlight.title}</strong><small>{highlight.detail}</small></span>
                 </li>
               ))}
             </ul>
-          ) : <p className="dash-empty">Record a match score or achieve a milestone and it shows up here. <Link to="/scorer">Open scorer</Link></p>}
+          ) : <p className="dash-empty">Achieve a milestone and it shows up here. <Link to="/milestones">Open milestones</Link></p>}
         </article>
 
         <article className="dash-card dash-card--upcoming" aria-labelledby="dash-upcoming-title">
@@ -249,31 +246,6 @@ export function HomePage() {
           ) : <p className="dash-empty">No open tasks have a due date. <Link to="/coordination">Plan the next task</Link></p>}
         </article>
 
-        <article className="dash-card dash-card--trend" aria-labelledby="dash-trend-title">
-          <div className="dash-card__heading">
-            <div><h2 id="dash-trend-title">Score trend</h2><p>Total points{trend.length ? `, last ${trend.length} session${trend.length === 1 ? '' : 's'}` : ''}</p></div>
-            <Link to="/scorer">Open scorer →</Link>
-          </div>
-          {trend.length ? <ScoreTrendChart points={trend} /> : <p className="dash-empty">No score sessions yet. Record a practice run to start the trend. <Link to="/scorer">Open scorer</Link></p>}
-        </article>
-
-        <article className="dash-card dash-card--scores" aria-labelledby="dash-scores-title">
-          <h2 id="dash-scores-title">Latest scores</h2>
-          {latestScores.length ? (
-            <table className="score-table">
-              <thead><tr><th scope="col">Session</th><th scope="col">Date</th><th scope="col" className="num">Points</th></tr></thead>
-              <tbody>
-                {latestScores.map((score) => (
-                  <tr key={score.id}>
-                    <td><Link to={`/scorer?session=${encodeURIComponent(score.id)}`}>{score.title}</Link><small>{score.scoreType === 'match' ? 'Match' : 'Practice'}</small></td>
-                    <td>{formatDueDate(score.date)}</td>
-                    <td className="num">{score.points.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className="dash-empty">Scores appear here after the first session is recorded.</p>}
-        </article>
       </div>
 
       <section className="section-heading"><div><span className="eyebrow">FOCUS</span><h3>Recently updated tasks</h3></div><Link to="/coordination">View full board <span>→</span></Link></section>

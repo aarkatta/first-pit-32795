@@ -19,8 +19,6 @@
 .dash-card--areas { grid-column: span 8; }
 .dash-card--highlights { grid-column: span 4; }
 .dash-card--upcoming { grid-column: span 4; }
-.dash-card--trend { grid-column: span 8; }
-.dash-card--scores { grid-column: span 4; }
 
 .dash-empty,
 .dash-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
@@ -53,7 +51,6 @@
 .upcoming-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .highlight { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #f5f7f2; }
 .highlight__icon { display: grid; flex: none; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--ink); background: #fff; }
-.highlight--score .highlight__icon { color: #7a5b00; background: #fff3c4; }
 .highlight--goal .highlight__icon { color: #1f6b43; background: #dcf6e9; }
 .highlight strong,
 .highlight small { display: block; }
@@ -68,42 +65,11 @@
 .upcoming-list__copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .upcoming-list__copy small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
 
-/* Score trend: 2px line, 10% area wash, hairline solid grid. */
-.trend-chart__frame { position: relative; }
-.trend-chart svg { display: block; max-width: 100%; overflow: visible; touch-action: pan-y; }
-.trend-chart svg:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 8px; }
-.trend-chart__grid { stroke: var(--line); stroke-width: 1; }
-.trend-chart__tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.trend-chart__value { fill: var(--ink); font-size: 12px; font-weight: 700; }
-.trend-chart__line { fill: none; stroke: var(--blue); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.trend-chart__area { fill: var(--blue); fill-opacity: .1; stroke: none; }
-.trend-chart__crosshair { stroke: var(--muted); stroke-width: 1; }
-.trend-chart__dot { fill: var(--blue); stroke: #fff; stroke-width: 2; }
-.trend-tooltip { position: absolute; z-index: 2; display: grid; gap: 2px; min-width: 140px; max-width: 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 10px 24px rgba(21, 29, 38, .12); pointer-events: none; transform: translate(12px, -50%); }
-.trend-tooltip--flip { transform: translate(calc(-100% - 12px), -50%); }
-.trend-tooltip strong { color: var(--ink); font-size: 14px; }
-.trend-tooltip span { overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.trend-tooltip small { color: var(--muted); font-size: 11px; }
-.trend-table { margin-top: 8px; }
-.trend-table summary { color: var(--blue); font-size: 12px; font-weight: 700; cursor: pointer; }
-.trend-table table { margin-top: 8px; }
-
-/* Latest scores */
-.score-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.score-table th { padding: 0 6px 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; }
-.score-table td { padding: 9px 6px; border-top: 1px solid var(--line); vertical-align: top; }
-.score-table td a { color: var(--ink); font-weight: 700; }
-.score-table td small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
-.score-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.score-table td.num { font-weight: 700; }
-
 @media (max-width: 1100px) {
   .dash-card--progress,
   .dash-card--areas,
   .dash-card--highlights,
   .dash-card--upcoming { grid-column: span 6; grid-row: auto; }
-  .dash-card--trend,
-  .dash-card--scores { grid-column: 1 / -1; }
   .area-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

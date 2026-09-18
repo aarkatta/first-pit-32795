@@ -17,7 +17,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Kanban project management (Release 1.1)](#kanban-project-management-release-11)
 - [Chat and announcements (removed)](#chat-and-announcements-removed)
 - [Knowledge and polls](#knowledge-and-polls)
-- [Scorer and practice history](#scorer-and-practice-history)
+- [Scorer](#scorer)
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
 - [App shell and navigation](#app-shell-and-navigation)
 - [Authentication hardening](#authentication-hardening)
@@ -62,7 +62,7 @@ Public showcases, team profiles, expanded Q&A community, learning paths, event d
 
 ### MVP completion test
 
-A coach can create a team, invite members, assign work, share a file, run a poll, and record/review a practice or match score from the Dashboard. Each action respects role permissions and produces the correct notifications and audit records.
+A coach can create a team, invite members, assign work, share a file, run a poll, and open the official FIRST scoresheet from the Scorer page. Each action respects role permissions and produces the correct notifications and audit records.
 
 ---
 
@@ -485,8 +485,8 @@ workflow.
   built-in preset or a template the team saved from an existing board, and can
   save the current board — workflow, and optionally its cards — back as a team
   template. Built-in presets cover robot game, innovation project, season plan,
-  and tournament prep as *process*; no template ships season content, for the
-  same reason the scorer ships only a starter rubric. Preset cards carry a
+  and tournament prep as *process*; no template ships season content — the
+  season's missions are FIRST's to publish. Preset cards carry a
   judging-area label (see the Dashboard section) so a seeded board feeds the
   per-area progress bars immediately.
 - Spreadsheet task import (`functions/src/task-import.ts`, `TaskImportPanel`,
@@ -750,36 +750,22 @@ Acceptance and rules coverage lives in `tests/phase5-emulator-integration.mjs` a
 
 ---
 
-## Scorer and practice history
+## Scorer
 
-Phase 6 stores team scoring in the existing root-collection convention with a
-`teamId` on every record:
+As of 2026-09-18 First Pit no longer stores scores. The Scorer page
+(`/scorer`, `src/pages/ScorerPage.tsx`) links to FIRST's official robot game
+scoresheet at `https://eventhub.firstinspires.org/scoresheet`, which always
+matches the current season's missions and rules. It is a link rather than an
+iframe because that site sends `X-Frame-Options: SAMEORIGIN`, which browsers
+and the iOS web view enforce.
 
-- `scoreDefinitions`: immutable, team-owned mission and deduction definitions.
-  New records are `sourceType: team-defined` and are labeled that way in the UI.
-  `official-curated` is reserved for a platform administrator and is not
-  presented unless an approved curated source exists.
-- `scoreSessions`: practice or match records. Each record stores the server-
-  calculated total and snapshots the scoring source metadata so later definition
-  changes cannot rewrite history.
-- `scoreSessionHistory`: append-only creation and correction records with actor,
-  changed fields, and bounded before/after score snapshots.
-
-The calculation is deterministic: `max(0, sum(earned mission points) - sum(applied
-deduction points))`. Mission and deduction IDs and all point bounds are validated
-against the selected definition on the server; clients cannot supply a trusted
-total. Participants and linked events must be active members or events of the
-same team.
-
-Active team members can view history and record sessions. Coaches and team
-leaders can manage definitions, correct sessions, and export CSV. Corrections
-use an expected version compare-and-swap in a transaction; stale corrections are
-rejected. Score history and audit records are not client-writable.
-
-History/statistics and exports use the same team-scoped, bounded server query.
-CSV columns are stable and formula-leading values are prefixed to prevent
-spreadsheet formula injection. Advanced robot maintenance, parts, and version
-logs are intentionally out of scope.
+The team-defined scorer this replaced (Phase 6: `scoreDefinitions`,
+`scoreSessions`, `scoreSessionHistory`, `phase6Operations`, and the
+`createScoreDefinition`/`listScoreDefinitions`/`createScoreSession`/
+`listScoreSessions`/`correctScoreSession`/`exportScoreReport` callables) was
+removed with its rules, indexes and tests. Documents left in those collections
+are closed by the catch-all deny and read by nothing; delete them with the
+Admin SDK if the data is no longer wanted.
 
 ---
 
@@ -807,7 +793,7 @@ Phase 7 keeps the browser app as the team-scoped hub for the completed MVP
 modules. The Dashboard reads a bounded, server-authorized summary for the
 selected active team. Global search is a callable operation: it first resolves
 the caller's active memberships and then searches only team Questions, Videos,
-Files, Tasks, Goals, Scores, and the team's own record.
+Files, Tasks, Goals, and the team's own record.
 Community/public discovery is intentionally excluded. **No screen calls it any
 more:** the Search page was removed on 2026-09-17 (see *App shell and
 navigation*); the callable remains server-side until it is deliberately retired.
@@ -823,7 +809,7 @@ Dates leave the callable as **ISO strings** (`pickPublicFields` in
 `functions/src/phase7.ts`). A callable encodes a Firestore `Timestamp` as a bare
 `{_seconds, _nanoseconds}` object that `toDate()` cannot read; until 2026-09-17
 that showed every Upcoming task as "Due · …" with no date, every task as "No due
-date", and dropped every score from the trend chart. Any callable that returns a
+date". Any callable that returns a
 stored date must convert it the same way.
 
 
@@ -836,17 +822,12 @@ stored date must convert it the same way.
   and completed. Labels rather than a new task field keep every existing task,
   rule, and editor unchanged; built-in templates and the spreadsheet importer
   apply them, and a coach can add one to any card.
-- **Top achievements** — derived, never stored: the best match and practice
-  totals among the recent sessions, then up to three most recently completed
-  goals. A team with neither sees an empty state, not placeholder awards.
+- **Top achievements** — derived, never stored: up to three most recently
+  completed goals. A team with none sees an empty state, not placeholder awards.
 - **Upcoming tasks** — up to five open tasks with a due date, soonest first, so
   overdue work leads. Tasks with no due date are excluded by the query.
-- **Score trend and latest scores** — the 12 most recent score sessions as a
-  single-series line chart (`src/features/dashboard/ScoreTrendChart.tsx`) with a
-  keyboard- and pointer-driven crosshair, a screen-reader readout, and a table
-  view of the same values, beside a table of the five newest.
 
-The chart geometry, percentages, and highlight copy live in
+The percentages and highlight copy live in
 `src/lib/dashboard-view.ts`, which is pure and unit-tested. The new queries need
 the `tasks (teamId, labels)`, `tasks (teamId, labels, status)`, and
 `goals (teamId, status, updatedAt desc)` composite indexes.
@@ -857,7 +838,7 @@ The `test:phase7-emulator` workflow covers these representative paths:
 
 1. A coach creates a team and invites a student.
 2. The student receives a role-aware dashboard with team-scoped task data,
-   per-area progress from labelled tasks, upcoming due work, and the score trend.
+   per-area progress from labelled tasks, and upcoming due work.
 3. Assignment notifications appear in the selected team summary.
 5. Team Questions are searchable only inside the active membership boundary.
 6. Published team How-to Videos appear in authorized search.
@@ -1113,13 +1094,9 @@ A missing stored `version` is read as 1, so existing documents keep working.
   unreadable even though it is already in the bucket. This is a format check,
   not an antivirus scan — `scanStatus` remains the hook a real scanner would
   set, and `blocked` is now reachable.
-- **Scoring content is team-defined by design.** The season's official mission
-  list is FIRST's material and First Pit does not reproduce it; every
-  definition is labelled `team-defined`. The Scorer ships a starter
-  robot-game rubric a coach loads and renames, which is what makes the feature
-  usable without a blank pipe-delimited textarea. The landing page describes
-  the scorer as something you set up with the season's missions rather than
-  claiming an official rubric.
+- **Scoring is FIRST's official scoresheet.** First Pit does not reproduce
+  the season's missions; the Scorer page links out to FIRST's scoresheet (see
+  *Scorer*).
 
 ### Known follow-ups
 
@@ -1238,14 +1215,14 @@ Use synthetic accounts only:
 2. Coach invites one student, one parent, and one mentor.
 3. Student confirms only assigned work, permitted team content, and safe empty
    states are visible.
-4. Coach creates a task, goal, event, team-only file, announcement, poll, and
-   practice score from the Dashboard workflow.
+4. Coach creates a task, goal, event, team-only file, announcement, and poll
+   from the Dashboard workflow, and opens the official scoresheet from Scorer.
 5. Parent and mentor confirm their role-specific visibility and cannot access
    coach-only administration or private conversations.
 6. Suspend the student, retry reads and writes, and confirm access is denied.
 7. Report a test content item, resolve it as the coach, and verify the audit
    record without exposing private message contents in logs.
-8. Export a test score or message report, verify the authorized recipient, then
+8. Export a test message report, verify the authorized recipient, then
    delete the rehearsal data according to the retention policy.
 
 Record route, role, expected result, actual result, timestamp, and screenshot in

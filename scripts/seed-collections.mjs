@@ -69,8 +69,7 @@ const COLLECTIONS = {
     'polls',
     'pollVotes',
     'pollHistory'
-  ],
-  'Phase 6 — scorer': ['scoreDefinitions', 'scoreSessions', 'scoreSessionHistory', 'phase6Operations']
+  ]
 };
 
 const args = process.argv.slice(2);

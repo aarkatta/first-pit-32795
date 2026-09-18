@@ -16,14 +16,6 @@ export type DashboardEvent = {
   location?: string;
 };
 
-export type DashboardScore = {
-  id: string;
-  title?: string;
-  scoreType?: 'practice' | 'match';
-  totalPoints?: number;
-  sessionDate?: unknown;
-};
-
 /**
  * One FIRST LEGO League judging area. A task counts toward an area when it
  * carries the area's id as a label, so the importer and the built-in templates
@@ -56,8 +48,6 @@ export type DashboardResult = {
   upcomingTasks: DashboardTask[];
   goals: Array<Partial<TeamGoal> & { id: string; title: string }>;
   completedGoals: Array<Partial<TeamGoal> & { id: string; title: string }>;
-  /** The most recent score sessions, newest first. */
-  scores: DashboardScore[];
   areas: DashboardArea[];
   notifications: DashboardNotification[];
   summary: {
@@ -65,7 +55,6 @@ export type DashboardResult = {
     completedTaskCount: number;
     goalCount: number;
     completedGoalCount: number;
-    scoreCount: number;
     unreadNotificationCount: number;
     unreadSummaryTruncated: boolean;
     unreadSummaryLimit: number;
