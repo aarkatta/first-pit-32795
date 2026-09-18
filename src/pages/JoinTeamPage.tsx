@@ -111,7 +111,17 @@ export function JoinTeamPage() {
     setLookupStatus('loading');
     setLookupError(null);
     try {
-      const found = await loadInvitation(firestore, invitationId);
+      let found: InvitationView | null;
+      try {
+        found = await loadInvitation(firestore, invitationId);
+      } catch (firstError) {
+        // A session from before the address was verified can still carry an
+        // `email_verified: false` token, which the invitation rule refuses.
+        // One forced refresh settles that before calling it the wrong account.
+        if (!user || getRequestState(firstError, true).variant !== 'permission') throw firstError;
+        await user.getIdToken(true);
+        found = await loadInvitation(firestore, invitationId);
+      }
       setInvitation(found);
       setLookupStatus(found ? 'ready' : 'missing');
     } catch (nextError) {
@@ -119,7 +129,7 @@ export function JoinTeamPage() {
       setLookupError(nextError instanceof Error ? nextError : new Error('The invitation could not be loaded.'));
       setLookupStatus('error');
     }
-  }, [emailVerified, firestore, invitationId]);
+  }, [emailVerified, firestore, invitationId, user]);
 
   useEffect(() => { void lookup(); }, [lookup]);
   useEffect(() => { setEmailVerified(user?.emailVerified === true); }, [user]);
@@ -282,7 +292,7 @@ export function JoinTeamPage() {
               title={lookupState.variant === 'permission' ? 'This invitation is not for your account' : 'Invitation could not load'}
               message={
                 lookupState.variant === 'permission'
-                  ? 'Invitations are readable only by the address they were sent to. Sign in with that email address, or ask a coach to reissue the invitation.'
+                  ? `Invitations are readable only by the address they were sent to. You are signed in as ${user?.email ?? 'an account without an email address'}. Sign in with the address the coach invited, or ask the coach to invite this one.`
                   : lookupState.message
               }
               actionLabel="Retry"

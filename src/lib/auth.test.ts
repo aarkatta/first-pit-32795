@@ -194,9 +194,17 @@ describe('auth service helpers', () => {
     });
 
     it('re-reads the account so a stale verification flag does not gate the app', async () => {
-      const user = { emailVerified: false, reload: vi.fn().mockImplementation(async () => { user.emailVerified = true; }) };
+      const user = { emailVerified: false, reload: vi.fn().mockImplementation(async () => { user.emailVerified = true; }), getIdToken: vi.fn().mockResolvedValue('token') };
       await expect(refreshVerificationStatus(user as never)).resolves.toBe(true);
       expect(user.reload).toHaveBeenCalled();
+      // Rules read `email_verified` from the token, so a verified account needs a fresh one.
+      expect(user.getIdToken).toHaveBeenCalledWith(true);
+    });
+
+    it('leaves the token alone while the address is still unverified', async () => {
+      const user = { emailVerified: false, reload: vi.fn(), getIdToken: vi.fn() };
+      await expect(refreshVerificationStatus(user as never)).resolves.toBe(false);
+      expect(user.getIdToken).not.toHaveBeenCalled();
     });
 
     it('accepts only the modes the handler can complete', () => {
