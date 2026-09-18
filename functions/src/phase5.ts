@@ -1,12 +1,13 @@
 import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
-  assertTeamAdminInTransaction,
+  assertKnowledgeEditorInTransaction,
   assertTeamMemberInTransaction,
+  isKnowledgeEditorRole,
+  requireKnowledgeEditor,
   getInput,
   requireAuth,
   requireString,
-  requireTeamAdmin,
   requireTeamMember,
   auditRecord,
   type TeamAdmin
@@ -221,7 +222,7 @@ async function assertContentAccess(actor: { uid: string; platformAdmin: boolean 
   const membership = await db().doc(`memberships/${content.teamId}_${actor.uid}`).get();
   if (!membership.exists || membership.data()?.status !== 'active') throw new HttpsError('permission-denied', 'An active team membership is required.');
   if (!allowUnpublished && content.publicationStatus && content.publicationStatus !== 'published'
-    && content.createdBy !== actor.uid && !['coach', 'teamLeader'].includes(String(membership.data()?.role))) {
+    && content.createdBy !== actor.uid && !isKnowledgeEditorRole(membership.data()?.role)) {
     throw new HttpsError('not-found', 'Content is not published.');
   }
 }
@@ -237,7 +238,7 @@ async function assertContentAccessInTransaction(transaction: Transaction, actor:
   const membership = await transaction.get(db().doc(`memberships/${content.teamId}_${actor.uid}`));
   if (!membership.exists || membership.data()?.status !== 'active') throw new HttpsError('permission-denied', 'An active team membership is required.');
   if (!allowUnpublished && content.publicationStatus && content.publicationStatus !== 'published'
-    && content.createdBy !== actor.uid && !['coach', 'teamLeader'].includes(String(membership.data()?.role))) {
+    && content.createdBy !== actor.uid && !isKnowledgeEditorRole(membership.data()?.role)) {
     throw new HttpsError('not-found', 'Content is not published.');
   }
 }
@@ -450,7 +451,7 @@ export const acceptAnswer = async (request: Phase5Request) => {
     }
     if (question.createdBy !== actor.uid && !actor.platformAdmin) {
       const member = await transaction.get(db().doc(`memberships/${question.teamId}_${actor.uid}`));
-      if (!['coach', 'teamLeader'].includes(String(member.data()?.role)) || member.data()?.status !== 'active') throw new HttpsError('permission-denied', 'Only the question author or a team coach can accept an answer.');
+      if (!isKnowledgeEditorRole(member.data()?.role) || member.data()?.status !== 'active') throw new HttpsError('permission-denied', 'Only the question author, a coach, a mentor or a student can accept an answer.');
     }
     // Acceptance is exclusive, so only two documents can ever change: the answer
     // losing the flag and the one gaining it. Reading and rewriting EVERY answer
@@ -557,9 +558,9 @@ export const searchVideos = async (request: Phase5Request) => {
   const cursor = parseCursor(data.before);
   const teamId = data.teamId === undefined ? undefined : requireString(data.teamId, 'Team ID');
   const actor: TeamAdmin = teamId ? await requireTeamMember(request, teamId) : auth;
-  // Team admins (and each video's creator) must see drafts and unpublished
-  // videos, or the created-as-draft publish workflow is unreachable.
-  const managesTeamVideos = Boolean(teamId) && (actor.platformAdmin === true || ['coach', 'teamLeader'].includes(String(actor.role)));
+  // Knowledge editors (and each video's creator) must see drafts and
+  // unpublished videos, or the created-as-draft publish workflow is unreachable.
+  const managesTeamVideos = Boolean(teamId) && (actor.platformAdmin === true || isKnowledgeEditorRole(actor.role));
   // Firestore rejects where() after startAfter(), so every filter is applied
   // before the cursor and the page limit.
   let query = db().collection('videos').where('searchTokens', 'array-contains', term);
@@ -618,12 +619,12 @@ export const updateVideoPublication = async (request: Phase5Request) => {
   const video = await videoRef.get();
   if (!video.exists) throw new HttpsError('not-found', 'Video not found.');
   const teamId = video.data()?.teamId;
-  const actor = teamId ? await requireTeamAdmin(request, teamId) : requireAuth(request);
+  const actor = teamId ? await requireKnowledgeEditor(request, teamId) : requireAuth(request);
   if (!teamId && !actor.platformAdmin) throw new HttpsError('permission-denied', 'Only an approved community publisher can manage community videos.');
   await db().runTransaction(async (transaction) => {
     const current = await transaction.get(videoRef);
     if (!current.exists) throw new HttpsError('not-found', 'Video not found.');
-    if (teamId) await assertTeamAdminInTransaction(transaction, teamId, actor);
+    if (teamId) await assertKnowledgeEditorInTransaction(transaction, teamId, actor);
     const now = FieldValue.serverTimestamp();
     transaction.update(videoRef, { publicationStatus, updatedAt: now });
     transaction.set(db().collection('auditEvents').doc(), auditRecord({ type: 'administrative.action', actorUserId: actor.uid, teamId: teamId ?? undefined, targetResource: `videos/${videoId}`, metadata: { action: 'video.publication.updated', status: publicationStatus } }));
@@ -688,12 +689,12 @@ export const closePoll = async (request: Phase5Request) => {
   const pollRef = db().doc(`polls/${pollId}`);
   const poll = await pollRef.get();
   if (!poll.exists) throw new HttpsError('not-found', 'Poll not found.');
-  const actor = poll.data()?.teamId ? await requireTeamAdmin(request, requireString(poll.data()?.teamId, 'Team ID')) : requireAuth(request);
+  const actor = poll.data()?.teamId ? await requireKnowledgeEditor(request, requireString(poll.data()?.teamId, 'Team ID')) : requireAuth(request);
   if (!poll.data()?.teamId && !actor.platformAdmin) throw new HttpsError('permission-denied', 'Only an approved community publisher can close this poll.');
   await db().runTransaction(async (transaction) => {
     const snapshot = await transaction.get(pollRef);
     if (snapshot.data()?.status === 'closed') return;
-    if (poll.data()?.teamId) await assertTeamAdminInTransaction(transaction, String(poll.data()?.teamId), actor);
+    if (poll.data()?.teamId) await assertKnowledgeEditorInTransaction(transaction, String(poll.data()?.teamId), actor);
     const now = FieldValue.serverTimestamp();
     transaction.update(pollRef, { status: 'closed', closedAt: now, updatedAt: now });
     transaction.set(db().collection('pollHistory').doc(), { pollId, teamId: poll.data()?.teamId, action: 'closed', actorUserId: actor.uid, createdAt: now });

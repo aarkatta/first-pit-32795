@@ -228,8 +228,23 @@ export async function getQuestionTarget(firestore: Firestore, questionId: string
   return parseQuestion(snapshot.id, snapshot.data() as Record<string, unknown>);
 }
 
-export async function listQuestionAnswers(firestore: Firestore, questionId: string, cursor: KnowledgeCursor | null = null) {
-  const constraints: QueryConstraint[] = [where('questionId', '==', questionId), where('moderationStatus', '==', 'published'), orderBy('createdAt', 'asc')];
+export type ThreadQuestion = Pick<Question, 'id' | 'teamId' | 'visibility'>;
+
+/**
+ * Firestore rules are not filters: a list query is refused unless its own
+ * constraints prove every result readable. Answer and comment reads are gated
+ * on the parent question's `teamId`/`visibility` (`canReadQuestion`), so the
+ * thread query has to pin those two fields, not just `questionId`.
+ */
+function threadConstraints(question: ThreadQuestion): QueryConstraint[] {
+  const scope = question.visibility === 'team' && question.teamId
+    ? [where('teamId', '==', question.teamId), where('visibility', '==', 'team')]
+    : [where('teamId', '==', null), where('visibility', '==', 'community')];
+  return [where('questionId', '==', question.id), ...scope, where('moderationStatus', '==', 'published'), orderBy('createdAt', 'asc')];
+}
+
+export async function listQuestionAnswers(firestore: Firestore, question: ThreadQuestion, cursor: KnowledgeCursor | null = null) {
+  const constraints = threadConstraints(question);
   if (cursor) constraints.push(startAfter(cursor));
   constraints.push(limit(KNOWLEDGE_PAGE_SIZE + 1));
   const snapshot = await getDocs(query(collection(firestore, 'answers'), ...constraints));
@@ -238,8 +253,8 @@ export async function listQuestionAnswers(firestore: Firestore, questionId: stri
   return { answers: docs.map((entry) => parseAnswer(entry.id, entry.data() as Record<string, unknown>)), cursor: docs.at(-1) ?? null, hasMore };
 }
 
-export async function listQuestionComments(firestore: Firestore, questionId: string, cursor: KnowledgeCursor | null = null) {
-  const constraints: QueryConstraint[] = [where('questionId', '==', questionId), where('moderationStatus', '==', 'published'), orderBy('createdAt', 'asc')];
+export async function listQuestionComments(firestore: Firestore, question: ThreadQuestion, cursor: KnowledgeCursor | null = null) {
+  const constraints = threadConstraints(question);
   if (cursor) constraints.push(startAfter(cursor));
   constraints.push(limit(KNOWLEDGE_PAGE_SIZE + 1));
   const snapshot = await getDocs(query(collection(firestore, 'questionComments'), ...constraints));

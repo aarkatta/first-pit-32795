@@ -257,6 +257,30 @@ export async function assertTaskEditorInTransaction(transaction: Transaction, te
   if (!TASK_EDITOR_ROLES.includes(String(data?.role))) throw new HttpsError('permission-denied', 'Your task-editing access changed. Refresh and try again.');
 }
 
+/**
+ * Roles that may use everything on the Knowledge page: publish and unpublish
+ * team videos (and see drafts), close team polls, and accept an answer on any
+ * team question. Parents keep asking, answering, voting and watching.
+ */
+export const KNOWLEDGE_EDITOR_ROLES: readonly string[] = ['coach', 'teamLeader', 'mentor', 'student'];
+
+export function isKnowledgeEditorRole(role: unknown) {
+  return KNOWLEDGE_EDITOR_ROLES.includes(String(role));
+}
+
+export async function requireKnowledgeEditor(request: CallableRequest<unknown>, teamId: string): Promise<TeamAdmin> {
+  const member = await requireTeamMember(request, teamId);
+  if (!member.platformAdmin && !isKnowledgeEditorRole(member.role)) throw new HttpsError('permission-denied', 'Your role can use Knowledge but cannot manage team videos or polls.');
+  return member;
+}
+
+/** Re-reads the role inside the transaction, so a member demoted mid-request cannot still manage content. */
+export async function assertKnowledgeEditorInTransaction(transaction: Transaction, teamId: string, actor: TeamAdmin) {
+  if (actor.platformAdmin) return;
+  const data = await assertTeamMemberInTransaction(transaction, teamId, actor.uid);
+  if (!isKnowledgeEditorRole(data?.role)) throw new HttpsError('permission-denied', 'Your Knowledge access changed. Refresh and try again.');
+}
+
 export async function assertTeamMemberInTransaction(transaction: Transaction, teamId: string, uid: string) {
   const snapshot = await transaction.get(getFirestore().doc(`memberships/${teamId}_${uid}`));
   const data = snapshot.data();

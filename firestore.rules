@@ -207,6 +207,14 @@ service cloud.firestore {
           && data.moderationStatus != 'removed');
     }
 
+    // Mirrors KNOWLEDGE_EDITOR_ROLES in functions/src/phase2.ts: these roles
+    // publish team videos, so they must be able to read the drafts.
+    function isKnowledgeEditor(teamId) {
+      return isPlatformAdmin()
+        || (isActiveMember(teamId)
+          && get(membershipPath(teamId, request.auth.uid)).data.role in ['coach', 'teamLeader', 'mentor', 'student']);
+    }
+
     function canReadVideo(data) {
       return (signedIn()
         && data.visibility == 'community'
@@ -217,7 +225,7 @@ service cloud.firestore {
           && isActiveMember(data.teamId)
           && (data.publicationStatus == 'published'
             || data.createdBy == request.auth.uid
-            || isTeamAdmin(data.teamId)));
+            || isKnowledgeEditor(data.teamId)));
     }
 
     match /questions/{questionId} {
