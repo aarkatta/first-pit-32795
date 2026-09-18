@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEAM_POLICY,
+  optionalTeamNumber,
+  requireTeamName,
   requireAccountType,
   teamCreationRefusal,
   assertNotLastCoach,
@@ -144,6 +146,33 @@ describe('Phase 2 command validation', () => {
       .toThrow(/Operation ID is already used by another operation/);
     // Community records carry teamId: null; an absent teamId must match it.
     expect(isReplayOfOwnCreate(snapshot({ createdBy: 'coach-1' }), snapshot(null), { teamId: null, actorUserId: 'coach-1' }, 'Question')).toBe(true);
+  });
+});
+
+describe('requireTeamName', () => {
+  it('collapses whitespace and enforces 2 to 80 characters', () => {
+    expect(requireTeamName('  Tech   Summer ')).toBe('Tech Summer');
+    expect(() => requireTeamName('x')).toThrow('between 2 and 80');
+    expect(() => requireTeamName('x'.repeat(81))).toThrow('between 2 and 80');
+    expect(() => requireTeamName(42)).toThrow('between 2 and 80');
+  });
+});
+
+describe('optionalTeamNumber', () => {
+  it('accepts 1 to 8 digits, as text or a whole number, and treats empty as none', () => {
+    expect(optionalTeamNumber(' 12345 ')).toBe('12345');
+    expect(optionalTeamNumber(678)).toBe('678');
+    expect(optionalTeamNumber('')).toBeNull();
+    expect(optionalTeamNumber(undefined)).toBeNull();
+    expect(optionalTeamNumber(null)).toBeNull();
+  });
+
+  it('rejects anything that is not a plain team number', () => {
+    expect(() => optionalTeamNumber('12a45')).toThrow('1 to 8 digits');
+    expect(() => optionalTeamNumber('123456789')).toThrow('1 to 8 digits');
+    expect(() => optionalTeamNumber('-5')).toThrow('1 to 8 digits');
+    expect(() => optionalTeamNumber(1.5)).toThrow('digits only');
+    expect(() => optionalTeamNumber({})).toThrow('digits only');
   });
 });
 

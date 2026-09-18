@@ -102,8 +102,9 @@ const unchangedType = await call('setAccountType', student.idToken, { accountTyp
 if (unchangedType.changed !== false) throw new Error('Re-declaring the same account type was not a no-op.');
 await callFails('setAccountType', coach.idToken, { accountType: 'teamLeader' }, 'INVALID_ARGUMENT');
 await call('setAccountType', coach.idToken, { accountType: 'coach' });
-const team = await call('createTeam', coach.idToken, { name: `Phase 2 Integration ${suffix}` });
+const team = await call('createTeam', coach.idToken, { name: `Phase 2 Integration ${suffix}`, teamNumber: '1234' });
 const teamId = team.teamId;
+if ((await readDocument(`teams/${teamId}`, coach.idToken)).fields?.teamNumber?.stringValue !== '1234') throw new Error('createTeam did not store the team number.');
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: mentor.email, role: 'mentor', operationId: 'op-invite-mentor' });
 await callFails('acceptInvitation', mentor.idToken, { invitationId: invitation.invitationId }, 'FAILED_PRECONDITION');
 mentor = await verifyUser(mentor);
@@ -113,6 +114,17 @@ await call('createInvitation', coach.idToken, { teamId, email: student.email, ro
 const studentInvitationId = `${teamId}_${globalThis.Buffer.from(student.email).toString('base64url')}`;
 student = await verifyUser(student);
 await call('acceptInvitation', student.idToken, { invitationId: studentInvitationId });
+
+// Team details: coach / team leader only; name 2–80 chars, number digits only, empty clears it.
+const teamName = `Phase 2 Integration ${suffix}`;
+await callFails('updateTeamDetails', student.idToken, { teamId, name: teamName, teamNumber: '9999' }, 'PERMISSION_DENIED');
+await callFails('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: '12ab' }, 'INVALID_ARGUMENT');
+await callFails('updateTeamDetails', coach.idToken, { teamId, name: 'x', teamNumber: '4242' }, 'INVALID_ARGUMENT');
+await call('updateTeamDetails', coach.idToken, { teamId, name: `Renamed ${suffix}`, teamNumber: '4242' });
+const renamed = (await readDocument(`teams/${teamId}`, student.idToken)).fields;
+if (renamed?.teamNumber?.stringValue !== '4242' || renamed?.name?.stringValue !== `Renamed ${suffix}`) throw new Error('updateTeamDetails did not store the new name and number for members to read.');
+await call('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: null });
+if (!('nullValue' in ((await readDocument(`teams/${teamId}`, coach.idToken)).fields?.teamNumber ?? {}))) throw new Error('updateTeamDetails did not clear the number.');
 
 const expiredInvitation = await call('createInvitation', coach.idToken, { teamId, email: expiredInvitee.email, role: 'student', operationId: 'op-invite-expired' });
 expiredInvitee = await verifyUser(expiredInvitee);

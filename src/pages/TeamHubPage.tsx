@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
 import { formatDateLabel } from '@/lib/dates';
 import { listTeamMembers, type TeamMember } from '@/lib/directory';
-import { isCoachOrLeader, mayOfferTeamCreation } from '@/lib/domain';
+import { isCoachOrLeader, mayOfferTeamCreation, teamNumberSuffix } from '@/lib/domain';
 import { useAccountType } from '@/lib/account-type';
 import { leaveTeam } from '@/lib/phase2-service';
+import { updateTeamDetails, type TeamDetails } from '@/lib/team-service';
 import { useTeamContext } from '@/lib/team-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -26,7 +27,10 @@ const WORKSPACE_LINKS = [
 
 export function TeamHubPage() {
   const { user } = useAuth();
-  const { status, activeTeam, teams, error, retry } = useTeamContext();
+  const { status, activeTeam, teams, error, retry, patchTeam } = useTeamContext();
+  const [savedDetails, setSavedDetails] = useState<Record<string, TeamDetails>>({});
+  const [detailsDraft, setDetailsDraft] = useState<{ name: string; teamNumber: string } | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const teamId = activeTeam?.teamId ?? null;
@@ -125,23 +129,63 @@ export function TeamHubPage() {
     );
   }
 
-  const teamName = activeTeam?.team?.name ?? 'Your team';
+  // The callable's answer wins until the team context re-reads the document.
+  const saved = activeTeam ? savedDetails[activeTeam.teamId] : undefined;
+  const teamName = saved?.name ?? activeTeam?.team?.name ?? 'Your team';
+  const teamNumber = saved ? saved.teamNumber : activeTeam?.team?.teamNumber ?? null;
   const activeMemberCount = members.filter((member) => member.status === 'active').length;
   const coachCount = members.filter((member) => member.status === 'active' && ['coach', 'teamLeader'].includes(member.role)).length;
   const createdLabel = formatDateLabel(activeTeam?.team?.createdAt, '');
+
+  async function saveDetails(event: FormEvent<HTMLFormElement>, teamId: string) {
+    event.preventDefault();
+    if (detailsDraft === null) return;
+    setSavingDetails(true);
+    setRequestState(null);
+    try {
+      const result = await updateTeamDetails(teamId, detailsDraft);
+      const details = { name: result.name, teamNumber: result.teamNumber };
+      setSavedDetails((current) => ({ ...current, [teamId]: details }));
+      // Updates the sidebar switcher and Home too, without a re-read.
+      patchTeam(teamId, details);
+      setDetailsDraft(null);
+    } catch (saveError) {
+      setRequestState(getRequestState(saveError, online));
+    } finally {
+      setSavingDetails(false);
+    }
+  }
 
   return (
     <div className="page-stack">
       <section className="team-hero">
         <div>
           <span className="eyebrow light">TEAM ACCOUNT</span>
-          <h3>{teamName}</h3>
+          <h3>{teamName}{teamNumber ? <span className="team-number">{teamNumberSuffix(teamNumber)}</span> : null}</h3>
           <p>
             {activeTeam?.role === 'teamLeader' ? 'You are the team leader' : `You are a ${activeTeam?.role ?? 'member'}`}
             {rosterStatus === 'ready' ? ` · ${activeMemberCount} active member${activeMemberCount === 1 ? '' : 's'}` : ''}
             {rosterStatus === 'ready' && coachCount > 0 ? ` · ${coachCount} coach${coachCount === 1 ? '' : 'es'}` : ''}
             {createdLabel ? ` · created ${createdLabel}` : ''}
           </p>
+          {activeTeam && isCoachOrLeader(activeTeam) ? (
+            detailsDraft === null ? (
+              <button className="button button--ghost button--small team-number-edit" type="button" disabled={!online} onClick={() => setDetailsDraft({ name: activeTeam.team ? teamName : '', teamNumber: teamNumber ?? '' })}>
+                Edit team name &amp; number
+              </button>
+            ) : (
+              <form className="team-number-form" onSubmit={(event) => void saveDetails(event, activeTeam.teamId)}>
+                <label>Team name
+                  <input className="team-name-input" value={detailsDraft.name} onChange={(event) => setDetailsDraft({ ...detailsDraft, name: event.target.value })} minLength={2} maxLength={80} required autoFocus />
+                </label>
+                <label>Team number
+                  <input value={detailsDraft.teamNumber} onChange={(event) => setDetailsDraft({ ...detailsDraft, teamNumber: event.target.value })} inputMode="numeric" pattern="[0-9]{1,8}" maxLength={8} placeholder="e.g. 12345" title="Up to 8 digits. Leave empty to remove it." />
+                </label>
+                <button className="button button--small" type="submit" disabled={savingDetails || !online}>{savingDetails ? 'Saving…' : 'Save'}</button>
+                <button className="button button--ghost button--small" type="button" disabled={savingDetails} onClick={() => setDetailsDraft(null)}>Cancel</button>
+              </form>
+            )
+          ) : null}
         </div>
         {mayCreateTeam ? <Link className="button" to="/teams/new">＋ Create another team</Link> : null}
       </section>

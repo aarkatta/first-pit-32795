@@ -14,6 +14,7 @@ export function CreateTeamPage() {
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const [name, setName] = useState('');
+  const [teamNumber, setTeamNumber] = useState('');
   const [busy, setBusy] = useState(false);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const account = useAccountType(user?.uid);
@@ -51,7 +52,7 @@ export function CreateTeamPage() {
     setBusy(true);
     setRequestState(null);
     try {
-      await createTeam(name);
+      await createTeam(name, teamNumber);
       navigate('/team', { replace: true });
     } catch (requestError) {
       setRequestState(getRequestState(requestError, online));
@@ -109,7 +110,7 @@ export function CreateTeamPage() {
       {!online && !requestState ? <StatePanel variant="offline" title="You are offline" message="Reconnect before creating a team." actionLabel="Try again" onAction={() => void submitRequest()} /> : null}
       {requestState ? <StatePanel {...requestState} actionLabel="Try again" onAction={() => void submitRequest()} autoFocus /> : null}
       <section className="split-panels">
-        <article className="feature-panel"><span className="eyebrow">TEAM DETAILS</span><h3>Name your team</h3><p>The server creates the team, coach membership, baseline policies, private settings, and audit event together.</p><form className="form-stack" onSubmit={handleSubmit}><label>Team name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><button className="button" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create team'}</button></form></article>
+        <article className="feature-panel"><span className="eyebrow">TEAM DETAILS</span><h3>Name your team</h3><p>The server creates the team, coach membership, baseline policies, private settings, and audit event together.</p><form className="form-stack" onSubmit={handleSubmit}><label>Team name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><label>Team number <small className="muted">(optional)</small><input value={teamNumber} onChange={(event) => setTeamNumber(event.target.value)} inputMode="numeric" pattern="[0-9]{1,8}" maxLength={8} placeholder="e.g. 12345" title="Your FIRST LEGO League team number: up to 8 digits." /></label><button className="button" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create team'}</button></form></article>
         <article className="feature-panel"><span className="eyebrow">SAFE BY DEFAULT</span><h3>What gets configured</h3><p>Your new workspace is private and role-scoped from the first request.</p><div><span>Private discoverability</span><span>Coach membership</span><span>Invite-only access</span><span>Team-scoped files</span><span>Server audit event</span></div></article>
       </section>
     </div>

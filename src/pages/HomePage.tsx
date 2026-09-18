@@ -13,6 +13,7 @@ import { markNotificationRead } from '@/lib/phase3-service';
 import { safeInternalRoute } from '@/lib/notification-route';
 import { formatDateLabel, formatDueDate, toDate } from '@/lib/dates';
 import { dueTone } from '@/lib/board-view';
+import { teamNumberSuffix } from '@/lib/domain';
 import { initialsOf, listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import '@/styles/dashboard.css';
 
@@ -153,7 +154,7 @@ export function HomePage() {
       <header className="dashboard-header">
         <div>
           <span className="eyebrow">TEAM DASHBOARD</span>
-          <h1>{dashboard.team.name}</h1>
+          <h1>{dashboard.team.name}{activeTeam?.teamId === dashboard.team.id ? teamNumberSuffix(activeTeam.team?.teamNumber) : ''}</h1>
           <p>{roleLabel(dashboard.role)} view · {summary.taskCount} task{summary.taskCount === 1 ? '' : 's'} · {summary.goalCount} milestone{summary.goalCount === 1 ? '' : 's'}</p>
         </div>
         <div className="dashboard-header__actions">

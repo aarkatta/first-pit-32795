@@ -129,7 +129,7 @@ context, and the authorization/audit foundation.
 The minimum Firestore collections are:
 
 - `users/{uid}` — the authenticated account profile.
-- `teams/{teamId}` — the team identity and creator.
+- `teams/{teamId}` — the team identity and creator, plus an optional FIRST LEGO League `teamNumber` (1–8 digits, or null). It is set at creation (`createTeam`) or later by a coach or team leader together with the team name (`updateTeamDetails`, audited as `team.details.updated`), and shown after the name on Home and Manage team.
 - `memberships/{teamId}_{uid}` — the validated team boundary, role, and status.
 - `teamPolicies/{teamId}` — explicit foundation policy defaults.
 - `auditEvents/{eventId}` — server-generated sensitive-operation records.

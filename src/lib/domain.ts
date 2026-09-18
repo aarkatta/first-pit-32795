@@ -23,6 +23,8 @@ export type Team = {
   id: string;
   name: string;
   normalizedName: string;
+  /** FIRST LEGO League team number: 1–8 digits, or null until assigned. */
+  teamNumber?: string | null;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -441,6 +443,11 @@ export function canEditKnowledge(
   membership: Pick<Membership, 'role' | 'status'> | null | undefined
 ): boolean {
   return hasTeamRole(membership, ['coach', 'teamLeader', 'mentor', 'student']);
+}
+
+/** "Robotics · Team #12345", or just the name until a number is assigned. */
+export function teamNumberSuffix(teamNumber: string | null | undefined): string {
+  return teamNumber ? ` · Team #${teamNumber}` : '';
 }
 
 export type AuthorizationClaims = { platformAdmin?: boolean };

@@ -97,6 +97,26 @@ export const ACCOUNT_TYPES = ['coach', 'mentor', 'student', 'parent'] as const;
 export type AccountType = typeof ACCOUNT_TYPES[number];
 export const TEAM_CREATOR_ACCOUNT_TYPES: readonly AccountType[] = ['coach', 'mentor'];
 
+/** A team name: whitespace collapsed, 2–80 characters. */
+export function requireTeamName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+  if (name.length < 2 || name.length > 80) throw new HttpsError('invalid-argument', 'Team name must be between 2 and 80 characters.');
+  return name;
+}
+
+/**
+ * A FIRST LEGO League team number: optional (teams are often numbered after
+ * they register), otherwise 1–8 digits. Empty input clears it.
+ */
+export function optionalTeamNumber(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = typeof value === 'number' && Number.isInteger(value) ? String(value) : typeof value === 'string' ? value.trim() : null;
+  if (text === null) throw new HttpsError('invalid-argument', 'Team number must be digits only.');
+  if (text === '') return null;
+  if (!/^\d{1,8}$/.test(text)) throw new HttpsError('invalid-argument', 'Team number must be 1 to 8 digits.');
+  return text;
+}
+
 export function requireAccountType(value: unknown): AccountType {
   if (!ACCOUNT_TYPES.includes(value as AccountType)) throw new HttpsError('invalid-argument', 'Account type must be coach, mentor, student, or parent.');
   return value as AccountType;

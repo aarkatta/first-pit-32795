@@ -30,7 +30,15 @@ describe('CreateTeamPage', () => {
     expect(mocks.useAccountType).toHaveBeenCalledWith('coach-1');
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
-    await waitFor(() => expect(mocks.createTeam).toHaveBeenCalledWith('Robotics Team'));
+    await waitFor(() => expect(mocks.createTeam).toHaveBeenCalledWith('Robotics Team', ''));
+  });
+
+  it('submits the optional team number with the name', async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
+    fireEvent.change(screen.getByLabelText(/team number/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
+    await waitFor(() => expect(mocks.createTeam).toHaveBeenCalledWith('Robotics Team', '12345'));
   });
 
   it('lets a mentor account create a team too', () => {

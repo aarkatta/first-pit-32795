@@ -2,6 +2,7 @@ import { type Firestore } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from './auth-context';
 import { getFirebaseServices } from './firebase';
+import type { Team } from './domain';
 import type { TeamMembership } from './teams';
 import { subscribeToUserTeams } from './teams';
 
@@ -13,6 +14,8 @@ type TeamContextValue = {
   error: Error | null;
   setActiveTeamId: (teamId: string) => void;
   retry: () => void;
+  /** Applies a change the server confirmed (e.g. a new team number) without a re-read. */
+  patchTeam: (teamId: string, patch: Partial<Team>) => void;
 };
 
 const defaultTeamContext: TeamContextValue = {
@@ -22,7 +25,8 @@ const defaultTeamContext: TeamContextValue = {
   activeTeamId: null,
   error: null,
   setActiveTeamId: () => undefined,
-  retry: () => undefined
+  retry: () => undefined,
+  patchTeam: () => undefined
 };
 
 const TeamContext = createContext<TeamContextValue>(defaultTeamContext);
@@ -96,7 +100,10 @@ export function TeamProvider({ children, firestore: suppliedFirestore }: TeamPro
         setActiveTeamIdState(teamId);
         if (typeof window !== 'undefined') window.localStorage.setItem('first-pit.active-team-id', teamId);
       },
-      retry: () => setRetryToken((token) => token + 1)
+      retry: () => setRetryToken((token) => token + 1),
+      patchTeam: (teamId: string, patch: Partial<Team>) => {
+        setTeams((current) => current.map((membership) => membership.teamId === teamId && membership.team ? { ...membership, team: { ...membership.team, ...patch } } : membership));
+      }
     };
   }, [activeTeamId, error, status, teams]);
 

@@ -14,6 +14,8 @@ import {
   requireEmail,
   requireMembershipStatus,
   requireString,
+  optionalTeamNumber,
+  requireTeamName,
   requireTeamAdmin,
   requireTeamId,
   requireTeamMember,
@@ -135,15 +137,13 @@ function normalizedTeamName(name: string) {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-export const createTeam = onCall(async (request: CallableRequest<{ name?: unknown }>) => {
+export const createTeam = onCall(async (request: CallableRequest<{ name?: unknown; teamNumber?: unknown }>) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Authentication is required to create a team.');
   }
 
-  const name = typeof request.data?.name === 'string' ? request.data.name.trim().replace(/\s+/g, ' ') : '';
-  if (name.length < 2 || name.length > 80) {
-    throw new HttpsError('invalid-argument', 'Team name must be between 2 and 80 characters.');
-  }
+  const name = requireTeamName(request.data?.name);
+  const teamNumber = optionalTeamNumber(request.data?.teamNumber);
 
   const db = getFirestore();
   const auth = request.auth;
@@ -174,6 +174,7 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
     transaction.set(teamRef, {
       name,
       normalizedName: normalizedTeamName(name),
+      teamNumber,
       createdBy: uid,
       createdAt: now,
       updatedAt: now
@@ -635,6 +636,27 @@ export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
     transaction.set(operationRef, { teamId, createdBy: admin.uid, kind: 'leadership.transfer', targetUserId, createdAt: now });
   });
   return { teamId, targetUserId, role: 'teamLeader' as const };
+});
+
+/**
+ * Renames the team and sets or clears its FIRST LEGO League number, together.
+ * Coach / team leader only.
+ */
+export const updateTeamDetails = onCall(async (request: Phase2Request) => {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const name = requireTeamName(getInput(request, 'name'));
+  const teamNumber = optionalTeamNumber(getInput(request, 'teamNumber'));
+  const db = getFirestore();
+  const teamRef = db.doc(`teams/${teamId}`);
+  await db.runTransaction(async (transaction) => {
+    await assertAdminInTransaction(transaction, teamId, admin.uid, admin.platformAdmin);
+    const team = await transaction.get(teamRef);
+    if (!team.exists) throw new HttpsError('not-found', 'Team not found.');
+    transaction.update(teamRef, { name, normalizedName: normalizedTeamName(name), teamNumber, updatedAt: FieldValue.serverTimestamp() });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({ type: 'sensitive.updated', actorUserId: admin.uid, teamId, targetResource: `teams/${teamId}`, metadata: { action: 'team.details.updated' } }));
+  });
+  return { teamId, name, teamNumber };
 });
 
 export const updateTeamPolicy = onCall(async (request: Phase2Request) => {

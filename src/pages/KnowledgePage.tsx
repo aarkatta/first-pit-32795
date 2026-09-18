@@ -6,7 +6,7 @@ import { getFirebaseServices } from '@/lib/firebase';
 import { useTeamContext } from '@/lib/team-context';
 import { canEditKnowledge, type Answer, type Question } from '@/lib/domain';
 import { getRequestState, type RequestState } from '@/lib/request-state';
-import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, getPollResults, getQuestionTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, searchQuestions, toggleSavedQuestion, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type ThreadQuestion } from '@/lib/phase5-service';
+import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, getPollResults, getQuestionTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, toggleSavedQuestion, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type ThreadQuestion } from '@/lib/phase5-service';
 import { createReport } from '@/lib/phase2-service';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import { useOnlineStatus } from '@/lib/use-online-status';
@@ -41,14 +41,11 @@ export function KnowledgePage() {
     const requested = searchParams.get('tab');
     return isTab(requested) ? requested : 'questions';
   });
-  const [queryText, setQueryText] = useState('');
-  const [scope, setScope] = useState<'team' | 'community'>('team');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionCursor, setQuestionCursor] = useState<KnowledgeCursor | null>(null);
   const [hasMoreQuestions, setHasMoreQuestions] = useState(false);
   const [questionStatus, setQuestionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [questionError, setQuestionError] = useState<unknown>(null);
-  const [listMode, setListMode] = useState<'browse' | 'search'>('browse');
   const [polls, setPolls] = useState<PollListItem[]>([]);
   const [savedQuestionIds, setSavedQuestionIds] = useState<string[]>([]);
   const [savedQuestions, setSavedQuestions] = useState<Map<string, Question>>(new Map());
@@ -130,7 +127,6 @@ export function KnowledgePage() {
       setQuestions((current) => cursor ? [...current, ...page.questions.filter((question) => !current.some((entry) => entry.id === question.id))] : page.questions);
       setQuestionCursor(page.cursor);
       setHasMoreQuestions(page.hasMore);
-      setListMode('browse');
       setQuestionStatus('ready');
     } catch (error) {
       if (generation !== questionGeneration.current || contextRef.current !== refreshContext) return;
@@ -184,12 +180,9 @@ export function KnowledgePage() {
     answerOperation.current = null;
     pollOperation.current = null;
     reportOperation.current = null;
-    setQueryText('');
-    setScope(teamId ? 'team' : 'community');
     setQuestions([]);
     setQuestionCursor(null);
     setHasMoreQuestions(false);
-    setListMode('browse');
     setPolls([]);
     setSavedQuestionIds([]);
     setSavedQuestions(new Map());
@@ -322,23 +315,6 @@ export function KnowledgePage() {
     document.getElementById(`knowledge-tab-${target}`)?.focus();
   }
 
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!queryText.trim()) return;
-    const actionContext = contextKey;
-    void run(async () => {
-      if (tab === 'questions') {
-        const result = await searchQuestions({ query: queryText, ...(scope === 'team' && teamId ? { teamId } : {}) });
-        if (contextRef.current !== actionContext) return;
-        setQuestions(result.questions);
-        setQuestionCursor(null);
-        setHasMoreQuestions(false);
-        setListMode('search');
-        setQuestionStatus('ready');
-      }
-    });
-  }
-
   function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!teamId || !newQuestion.title.trim() || !newQuestion.body.trim()) return;
@@ -460,7 +436,6 @@ export function KnowledgePage() {
   return (
     <div className="page-stack">
       {!online ? <StatePanel variant="offline" title="You are offline" message="Questions and polls may be stale. Posting and voting need a connection." /> : null}
-      <section className="search-hero"><div><span className="eyebrow light">KNOWLEDGE & DECISIONS</span><h3>Learn, ask, decide.</h3><p>Questions, polls, and trusted FLL resources. Team content stays inside its authorized team or explicitly shared scope.</p></div>{tab === 'questions' ? <form onSubmit={submitSearch}><label htmlFor="knowledge-search">Search {tab}<input id="knowledge-search" value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder={`Search ${tab} by keyword`} /></label><label>Scope<select aria-label="Visibility scope" value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="team" disabled={!teamId}>Current team</option><option value="community">Shared library</option></select></label><button type="submit" disabled={busy || !queryText.trim()}>Search</button></form> : null}</section>
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} /> : null}
       {targetMismatch ? <KnowledgeTargetMismatch targetType={targetMismatch} /> : null}
       {personalStatus === 'loading' ? <StatePanel variant="loading" title="Loading your knowledge library" message="Fetching your saved questions." /> : null}
@@ -471,9 +446,8 @@ export function KnowledgePage() {
         <section className="split-panels"><article className="feature-panel"><span className="eyebrow">ASK YOUR TEAM</span><h3>Start a question</h3><p>Private team questions never enter the shared library unless explicitly published.</p><form className="form-stack" onSubmit={submitQuestion}><label>Title<input value={newQuestion.title} onChange={(event) => setNewQuestion({ ...newQuestion, title: event.target.value })} required maxLength={180} /></label><label>Question<textarea value={newQuestion.body} onChange={(event) => setNewQuestion({ ...newQuestion, body: event.target.value })} required maxLength={8000} /></label><label>Category<input value={newQuestion.category} onChange={(event) => setNewQuestion({ ...newQuestion, category: event.target.value })} /></label><label>Tags<input value={newQuestion.tags} onChange={(event) => setNewQuestion({ ...newQuestion, tags: event.target.value })} placeholder="programming, sensors" /></label><button className="button" type="submit" disabled={busy || !teamId}>Post team question</button></form></article><article className="feature-panel"><span className="eyebrow">SAVED QUESTIONS</span><h3>Your quick reference</h3>{savedQuestionIds.length ? <ul className="stack">{savedQuestionIds.map((id) => <li key={id}>{savedQuestions.has(id) ? <Link to={`?question=${id}`}>{savedQuestions.get(id)?.title}</Link> : <span className="muted">Saved question is no longer available to you.</span>}</li>)}</ul> : <p>Save a question to find it here after you sign in again.</p>}{savedHasMore ? <p className="muted">Showing your most recent saved questions.</p> : null}</article></section>
         {questionStatus === 'loading' ? <StatePanel variant="loading" title="Loading team questions" message="Fetching the most recent questions for your team." />
           : questionStatus === 'error' ? <StatePanel {...getRequestState(questionError, online)} title="Questions could not load" actionLabel="Retry" onAction={() => void refreshQuestions()} />
-          : visibleQuestions.length === 0 ? <StatePanel variant="empty" title={listMode === 'search' ? 'No questions matched that search' : 'No team questions yet'} message={listMode === 'search' ? 'Try a different keyword, or clear the search to see the most recent team questions.' : 'Ask the first question above and your team can answer it here.'} actionLabel={listMode === 'search' ? 'Show recent questions' : undefined} onAction={listMode === 'search' ? () => void refreshQuestions() : undefined} />
+          : visibleQuestions.length === 0 ? <StatePanel variant="empty" title="No team questions yet" message="Ask the first question above and your team can answer it here." />
           : <section className="feed-list">
-            {listMode === 'search' ? <button className="button button--ghost" type="button" disabled={busy} onClick={() => void refreshQuestions()}>Show recent questions</button> : null}
             {visibleQuestions.map((question) => <article id={`question-${question.id}`} className={expandedQuestionId === question.id ? 'question-card--open' : undefined} tabIndex={-1} key={question.id}>
               <span className="eyebrow">{question.category} · {question.status} · {displayDate(question.createdAt)}</span>
               <strong>{question.title}</strong>
@@ -501,7 +475,7 @@ export function KnowledgePage() {
                 </> : null}
               </div> : null}
             </article>)}
-            {listMode === 'browse' && hasMoreQuestions && questionCursor ? <button className="button" type="button" disabled={busy} onClick={() => void refreshQuestions(questionCursor)}>Load more questions</button> : null}
+            {hasMoreQuestions && questionCursor ? <button className="button" type="button" disabled={busy} onClick={() => void refreshQuestions(questionCursor)}>Load more questions</button> : null}
           </section>}
       </div> : null}
 
