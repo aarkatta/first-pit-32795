@@ -285,12 +285,12 @@ export function AuthPage() {
     <main className="onboarding-shell">
       <div className="onboarding-art">
         <h2>One private workspace for your FLL team</h2>
-        <p>Plan practice, track the innovation project, talk to the team, and keep every score in one place.</p>
+        <p>Plan practice, track the innovation project, talk to the team, and reach the official scoresheet in one click.</p>
         <ul className="art-points">
           <li>Boards and tasks everyone can see</li>
           <li>Files and team notifications</li>
           <li>Moderated questions and how-to videos</li>
-          <li>Robot game scorer with season history</li>
+          <li>One-click access to the official FIRST scoresheet</li>
         </ul>
       </div>
       <section className="onboarding-panel">

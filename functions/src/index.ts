@@ -74,14 +74,6 @@ import {
   votePoll as votePollCommand,
   voteQuestion as voteQuestionCommand
 } from './phase5.js';
-import {
-  correctScoreSession as correctScoreSessionCommand,
-  createScoreDefinition as createScoreDefinitionCommand,
-  createScoreSession as createScoreSessionCommand,
-  exportScoreReport as exportScoreReportCommand,
-  listScoreDefinitions as listScoreDefinitionsCommand,
-  listScoreSessions as listScoreSessionsCommand
-} from './phase6.js';
 import { getDashboard as getDashboardCommand, globalSearch as globalSearchCommand, updateProfileSettings as updateProfileSettingsCommand } from './phase7.js';
 
 if (getApps().length === 0) {
@@ -911,12 +903,6 @@ export const closePoll = onCall(async (request) => closePollCommand(request as C
 export const votePoll = onCall(async (request) => votePollCommand(request as CallableRequest<Record<string, unknown>>));
 export const getPollResults = onCall(async (request) => getPollResultsCommand(request as CallableRequest<Record<string, unknown>>));
 export const listPolls = onCall(async (request) => listPollsCommand(request as CallableRequest<Record<string, unknown>>));
-export const createScoreDefinition = onCall(async (request) => createScoreDefinitionCommand(request as CallableRequest<Record<string, unknown>>));
-export const listScoreDefinitions = onCall(async (request) => listScoreDefinitionsCommand(request as CallableRequest<Record<string, unknown>>));
-export const createScoreSession = onCall(async (request) => createScoreSessionCommand(request as CallableRequest<Record<string, unknown>>));
-export const listScoreSessions = onCall(async (request) => listScoreSessionsCommand(request as CallableRequest<Record<string, unknown>>));
-export const correctScoreSession = onCall(async (request) => correctScoreSessionCommand(request as CallableRequest<Record<string, unknown>>));
-export const exportScoreReport = onCall(async (request) => exportScoreReportCommand(request as CallableRequest<Record<string, unknown>>));
 export const getDashboard = onCall(async (request) => getDashboardCommand(request as CallableRequest<Record<string, unknown>>));
 export const globalSearch = onCall(async (request) => globalSearchCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateProfileSettings = onCall(async (request) => updateProfileSettingsCommand(request as CallableRequest<Record<string, unknown>>));

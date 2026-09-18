@@ -36,7 +36,7 @@ const AUDIENCES: Audience[] = [
     id: 'students',
     label: 'Students',
     headline: 'Students and coaches working as one team',
-    sub: 'One private place for your FLL team to plan practice, keep the innovation project moving, talk to each other, and keep track of every score.',
+    sub: 'One private place for your FLL team to plan practice, keep the innovation project moving, talk to each other, and get to the official scoresheet in one click.',
     boardTitle: 'Robot practice · Week 6',
     groups: [
       {
@@ -147,8 +147,8 @@ const AUDIENCES: Audience[] = [
   {
     id: 'scorers',
     label: 'Scorers',
-    headline: 'Score every run and watch the team improve',
-    sub: 'A robot game scorer you set up with this season\'s missions, breaking every run down mission by mission and keeping the whole season of practice in one place.',
+    headline: 'Score every run with the official scoresheet',
+    sub: 'The official FIRST robot game scoresheet is one click from the team\'s board, so every run is scored against this season\'s real missions and rules.',
     boardTitle: 'Match history · Season',
     groups: [
       {
@@ -282,8 +282,8 @@ const FEATURES = [
   { icon: FolderLock, title: 'Storage area', copy: 'Files and photos that stay with the team, checked on upload, and shared only with the people who should see them.', tone: 'text-[#377229] bg-[#dcf1d0]' },
   { icon: Video, title: 'How-to videos', copy: 'A mentor explains it once on video, and every student can watch it again whenever they need to.', tone: 'text-blue bg-blue/10' },
   { icon: Vote, title: 'Polls & questions', copy: 'Make quick decisions with a poll, and keep the answers to good questions around for next season.', tone: 'text-orange bg-orange/12' },
-  { icon: Trophy, title: 'Scorer', copy: 'Score each run mission by mission, see exactly where the points came from, and look back at every practice.', tone: 'text-[#886417] bg-[#ffeebd]' },
-  { icon: BarChart3, title: 'Dashboard', copy: 'Your day at a glance: what is assigned to you, what is coming up, and how the scores are trending.', tone: 'text-purple bg-purple/12' }
+  { icon: Trophy, title: 'Scorer', copy: 'Open the official FIRST scoresheet in one click and score each run against this season\'s missions.', tone: 'text-[#886417] bg-[#ffeebd]' },
+  { icon: BarChart3, title: 'Dashboard', copy: 'Your day at a glance: what is assigned to you, what is coming up, and how each judging area is progressing.', tone: 'text-purple bg-purple/12' }
 ];
 
 const STEPS = [
@@ -293,7 +293,7 @@ const STEPS = [
 ];
 
 const STATS = [
-  { value: 315, suffix: '', label: 'Best score of the season, tracked run by run' },
+  { value: 48, suffix: '', label: 'Season tasks already on a new team\'s board' },
   { value: 100, suffix: '%', label: 'Of changes are checked on the server before they are saved' },
   { value: 0, suffix: '', label: 'Public profiles. There are none.' },
   { value: 5, suffix: '', label: 'Roles, each starting with only the access it needs' }

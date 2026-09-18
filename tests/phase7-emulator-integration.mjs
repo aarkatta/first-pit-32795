@@ -67,15 +67,13 @@ const video = await call('createVideo', coach.idToken, { teamId, videoId: `phase
 await call('updateVideoPublication', coach.idToken, { videoId: video.videoId, publicationStatus: 'published' });
 
 await call('createTask', coach.idToken, { teamId, taskId: `phase7-area-task-${suffix}`, operationId: `area-${suffix}`, title: 'Robot game mission run', labels: ['robot-game'], status: 'completed' });
-const scoreDefinition = await call('createScoreDefinition', coach.idToken, { teamId, definitionId: `phase7-definition-${suffix}`, title: 'Phase 7 definition', season: '2026', missions: [{ id: 'mission-1', name: 'Mission 1', maxPoints: 50 }], deductions: [] });
-await call('createScoreSession', coach.idToken, { teamId, sessionId: `phase7-session-${suffix}`, operationId: `session-${suffix}`, scoreDefinitionId: scoreDefinition.definitionId, title: 'Phase 7 match', scoreType: 'match', sessionDate: '2026-08-20T12:00:00.000Z', missions: [{ missionId: 'mission-1', points: 40, completed: true }], deductions: [] });
 
 const dashboard = await call('getDashboard', student.idToken, { teamId });
 if (dashboard.role !== 'student' || dashboard.summary.taskCount !== 2 || dashboard.summary.completedTaskCount !== 1 || dashboard.summary.goalCount !== 1 || dashboard.summary.completedGoalCount !== 0 || dashboard.summary.unreadNotificationCount < 1) throw new Error('Dashboard did not return the authorized role, task, goal, and assignment notification summary.');
 const robotGameArea = dashboard.areas?.find((area) => area.id === 'robot-game');
 if (dashboard.areas?.length !== 4 || robotGameArea?.taskCount !== 1 || robotGameArea?.completedTaskCount !== 1) throw new Error('Dashboard did not count the labelled task toward its judging area.');
 if (dashboard.upcomingTasks?.length !== 1 || dashboard.upcomingTasks[0].id !== taskId) throw new Error('Dashboard upcoming tasks must list only open tasks with a due date.');
-if (dashboard.scores?.[0]?.totalPoints !== 40 || dashboard.scores[0].scoreType !== 'match') throw new Error('Dashboard did not return the recorded score session for the trend.');
+if ('scores' in dashboard || 'scoreCount' in dashboard.summary) throw new Error('Dashboard must no longer return score sessions.');
 const search = await call('globalSearch', student.idToken, { query: 'programming', teamId });
 const resultTypes = new Set(search.results.map((entry) => entry.type));
 for (const type of ['Task', 'Question', 'Video']) if (!resultTypes.has(type)) throw new Error(`Global search did not return authorized ${type} results.`);

@@ -60,7 +60,7 @@ Three layers, and the boundary between them is the security model:
 ### Deny-first data model
 
 Firestore collections are **flat and top-level** (`tasks`, `goals`, `polls`,
-`scoreSessions`, …), not subcollections; each document carries a validated `teamId`
+`notifications`, …), not subcollections; each document carries a validated `teamId`
 and access is derived from a `memberships/{teamId}_{userId}` lookup. Nearly every
 feature collection is `allow create, update, delete: if false` — clients read, the
 Admin SDK writes. The catch-all `match /{document=**} { allow read, write: if false; }`
@@ -123,9 +123,10 @@ rest from per-phase command modules — `phase2.ts` (roles,
 membership, safety, plus the shared validators `requireTeamId`, `requireTeamAdmin`,
 `auditRecord`, …), `phase3.ts` (tracker/goals/notifications/files),
 `kanban.ts`, `kanban-templates.ts` (board presets and team-saved templates),
-`phase5.ts` (Q&A/videos/polls), `phase6.ts` (scorer), `phase7.ts`
+`phase5.ts` (Q&A/videos/polls), `phase7.ts`
 (dashboard/search/profile), `standard-plan.ts` (the seeded season plan). There is no `phase4.ts` — chat was removed from the
-product. `phase2.ts` is the shared validation/authorization toolkit — reuse its
+product — and no `phase6.ts`: the scorer now links out to FIRST's official
+scoresheet and stores nothing. `phase2.ts` is the shared validation/authorization toolkit — reuse its
 helpers instead of re-deriving auth checks. There is also one
 `onRequest` HTTP function, `api`, serving `/healthz`.
 
@@ -224,9 +225,9 @@ day-to-day conventions.
 
 The MVP was built through a numbered-phase agent pipeline. That pipeline and its
 generated reports have been removed; the phase numbers survive only in the
-`phase{N}-service.ts` / `functions/src/phase{N}.ts` filenames and in two Firestore
-collection names (`phase3Operations`, `phase6Operations`). Renaming the files is
-a safe mechanical change; renaming the collections needs a data migration.
+`phase{N}-service.ts` / `functions/src/phase{N}.ts` filenames and in the `phase3Operations` Firestore
+collection name. Renaming the files is a safe mechanical change; renaming the
+collection needs a data migration.
 
 ## Local setup
 

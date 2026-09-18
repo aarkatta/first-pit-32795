@@ -136,11 +136,9 @@ await call('votePoll', parent.idToken, { pollId: parentPoll.pollId, selectedOpti
 const parentAfterVote = await call('getPollResults', parent.idToken, { pollId: parentPoll.pollId });
 if (parentAfterVote.totalVotes !== 1 || parentAfterVote.optionVoteCounts['option-1'] !== 1) throw new Error('Parent audience could not read after-vote results.');
 
-const definition = await call('createScoreDefinition', coach.idToken, { teamId, definitionId: `definition-${suffix}`, title: 'Security score', season: '2026-2027', missions: [{ id: 'mission-1', name: 'Mission 1', maxPoints: 10 }] });
 await call('updateMembershipStatus', coach.idToken, { teamId, userId: student.localId, status: 'suspended' });
 await callFails('createQuestion', student.idToken, { questionId: `revoked-question-${suffix}`, teamId, visibility: 'team', title: 'Revoked question', body: 'This commit must be denied.', category: 'Programming' });
 await callFails('createVideo', student.idToken, { videoId: `revoked-video-${suffix}`, teamId, visibility: 'team', category: 'CAD', title: 'Revoked video', description: 'This commit must be denied.', externalUrl: 'https://example.com/revoked', sourceAttribution: 'Test' });
-await callFails('createScoreSession', student.idToken, { sessionId: `revoked-score-${suffix}`, teamId, scoreDefinitionId: definition.definitionId, title: 'Revoked score', scoreType: 'practice', sessionDate: new Date().toISOString(), missions: [{ missionId: 'mission-1', points: 10, completed: true }] });
 await callFails('createReport', student.idToken, { teamId, targetType: 'content', targetResource: `questions/${question.questionId}`, reasonCode: 'revoked-report' });
 
 globalThis.console.log('Phase 5 integration passed: team question/video authorization, revocation denial, anonymous poll constraints, sanitized result visibility, and deduplicated notification deep link.');

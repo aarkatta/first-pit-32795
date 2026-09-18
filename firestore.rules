@@ -311,29 +311,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    function canReadScore(data) {
-      return isPlatformAdmin() || (signedIn() && data.teamId is string && isActiveMember(data.teamId));
-    }
-
-    match /scoreDefinitions/{definitionId} {
-      allow get, list: if canReadScore(resource.data) && resource.data.active == true;
-      allow create, update, delete: if false;
-    }
-
-    match /scoreSessions/{sessionId} {
-      allow get, list: if canReadScore(resource.data);
-      allow create, update, delete: if false;
-    }
-
-    match /scoreSessionHistory/{historyId} {
-      allow get, list: if canReadScore(resource.data);
-      allow create, update, delete: if false;
-    }
-
-    match /phase6Operations/{operationId} {
-      allow read, write: if false;
-    }
-
     match /{document=**} {
       allow read, write: if false;
     }

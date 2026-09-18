@@ -72,18 +72,16 @@ async function requireActiveTeam(uid: string, teamId: string) {
 
 async function recentTeamRecords(teamId: string, searchTokens: string[]) {
   const db = getFirestore();
-  const [tasks, goals, scores] = await Promise.all([
+  const [tasks, goals] = await Promise.all([
     db.collection('tasks').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
-    db.collection('goals').where('teamId', '==', teamId).limit(MAX_SCAN).get(),
-    db.collection('scoreSessions').where('teamId', '==', teamId).limit(MAX_SCAN).get()
+    db.collection('goals').where('teamId', '==', teamId).limit(MAX_SCAN).get()
   ]);
   const records = [
     ...tasks.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description)).map((snapshot) => {
       const projectId = typeof snapshot.data().projectId === 'string' ? `project=${encodeURIComponent(snapshot.data().projectId)}&` : '';
       return result('Task', teamId, snapshot.id, String(snapshot.data().title ?? 'Task'), String(snapshot.data().description ?? ''), `/coordination?${projectId}task=${encodeURIComponent(snapshot.id)}`);
     }),
-    ...goals.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description)).map((snapshot) => result('Goal', teamId, snapshot.id, String(snapshot.data().title ?? 'Goal'), String(snapshot.data().description ?? ''), `/milestones?goal=${encodeURIComponent(snapshot.id)}`)),
-    ...scores.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().notes, snapshot.data().robotProgramContext)).map((snapshot) => result('Score', teamId, snapshot.id, String(snapshot.data().title ?? 'Score session'), String(snapshot.data().notes ?? ''), `/scorer?session=${encodeURIComponent(snapshot.id)}`))
+    ...goals.docs.filter((snapshot) => textMatches(searchTokens, snapshot.data().title, snapshot.data().description)).map((snapshot) => result('Goal', teamId, snapshot.id, String(snapshot.data().title ?? 'Goal'), String(snapshot.data().description ?? ''), `/milestones?goal=${encodeURIComponent(snapshot.id)}`))
   ];
   return records;
 }
@@ -102,8 +100,6 @@ export const DASHBOARD_AREAS = [
 ] as const;
 
 const OPEN_TASK_STATUSES = ['todo', 'inProgress', 'review'];
-/** Enough sessions for a readable trend line without scanning a season. */
-export const DASHBOARD_SCORE_LIMIT = 12;
 
 export function areaProgress(counts: Array<{ taskCount: number; completedTaskCount: number }>) {
   return DASHBOARD_AREAS.map((area, index) => {
@@ -119,7 +115,6 @@ export const getDashboard = async (request: Phase7Request) => {
   const db = getFirestore();
   const taskQuery = db.collection('tasks').where('teamId', '==', teamId);
   const goalQuery = db.collection('goals').where('teamId', '==', teamId);
-  const scoreQuery = db.collection('scoreSessions').where('teamId', '==', teamId);
   const unreadNotificationQuery = db.collection('notifications').where('recipientUserId', '==', auth.uid).where('teamId', '==', teamId).where('readAt', '==', null);
   // Count aggregations cost one read per 1,000 matches, so per-area progress
   // stays bounded however many tasks a team accumulates.
@@ -128,7 +123,7 @@ export const getDashboard = async (request: Phase7Request) => {
     const [total, completed] = await Promise.all([areaQuery.count().get(), areaQuery.where('status', '==', 'completed').count().get()]);
     return { taskCount: total.data().count, completedTaskCount: completed.data().count };
   }));
-  const [team, tasks, upcomingTasks, goals, completedGoals, scores, notifications, unreadNotificationsSnapshot, taskCount, completedTaskCount, goalCount, completedGoalCount, scoreCount, unreadNotificationCount, areaCounts] = await Promise.all([
+  const [team, tasks, upcomingTasks, goals, completedGoals, notifications, unreadNotificationsSnapshot, taskCount, completedTaskCount, goalCount, completedGoalCount, unreadNotificationCount, areaCounts] = await Promise.all([
     db.doc(`teams/${teamId}`).get(),
     taskQuery.orderBy('updatedAt', 'desc').limit(5).get(),
     // The range filter drops tasks without a due date, which have no place on
@@ -136,14 +131,12 @@ export const getDashboard = async (request: Phase7Request) => {
     taskQuery.where('status', 'in', OPEN_TASK_STATUSES).where('dueAt', '>', Timestamp.fromMillis(0)).orderBy('dueAt', 'asc').limit(5).get(),
     goalQuery.orderBy('updatedAt', 'desc').limit(20).get(),
     goalQuery.where('status', '==', 'completed').orderBy('updatedAt', 'desc').limit(3).get(),
-    scoreQuery.orderBy('sessionDate', 'desc').limit(DASHBOARD_SCORE_LIMIT).get(),
     db.collection('notifications').where('recipientUserId', '==', auth.uid).where('teamId', '==', teamId).orderBy('createdAt', 'desc').limit(10).get(),
     unreadNotificationQuery.orderBy('createdAt', 'desc').limit(50).get(),
     taskQuery.count().get(),
     taskQuery.where('status', '==', 'completed').count().get(),
     goalQuery.count().get(),
     goalQuery.where('status', '==', 'completed').count().get(),
-    scoreQuery.count().get(),
     unreadNotificationQuery.count().get(),
     areaCountsPromise
   ]);
@@ -152,7 +145,6 @@ export const getDashboard = async (request: Phase7Request) => {
   const goalFields = ['title', 'status', 'taskCount', 'completedTaskCount', 'dueAt', 'updatedAt'];
   const taskRecords = tasks.docs.map((snapshot) => publicRecord(snapshot, taskFields));
   const goalRecords = goals.docs.map((snapshot) => publicRecord(snapshot, goalFields));
-  const scoreRecords = scores.docs.map((snapshot) => publicRecord(snapshot, ['title', 'scoreType', 'totalPoints', 'sessionDate', 'updatedAt']));
   const notificationRecords = notifications.docs.map((snapshot) => publicRecord(snapshot, ['teamId', 'title', 'body', 'type', 'deepLink', 'mandatory', 'readAt', 'createdAt']));
   const unreadNotifications = unreadNotificationsSnapshot.docs.map((snapshot) => snapshot.data());
   const unreadSummary = summarizeUnreadNotifications(unreadNotifications);
@@ -163,7 +155,6 @@ export const getDashboard = async (request: Phase7Request) => {
     upcomingTasks: upcomingTasks.docs.map((snapshot) => publicRecord(snapshot, taskFields)),
     goals: goalRecords,
     completedGoals: completedGoals.docs.map((snapshot) => publicRecord(snapshot, goalFields)),
-    scores: scoreRecords,
     areas: areaProgress(areaCounts),
     notifications: notificationRecords,
     summary: {
@@ -171,7 +162,6 @@ export const getDashboard = async (request: Phase7Request) => {
       completedTaskCount: completedTaskCount.data().count,
       goalCount: goalCount.data().count,
       completedGoalCount: completedGoalCount.data().count,
-      scoreCount: scoreCount.data().count,
       unreadNotificationCount: unreadNotificationCount.data().count,
       ...unreadSummary
     }

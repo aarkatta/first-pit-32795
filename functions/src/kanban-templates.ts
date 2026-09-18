@@ -80,8 +80,7 @@ function category(id: string, name: string, color: string, areaId: string | null
  * The starter catalogue. These describe the *process* an FLL team runs — the
  * season's own missions, rubrics, and materials are FIRST's to publish, so no
  * template ships season content; a coach renames the cards to match the season
- * in a couple of minutes. Mirrors the reasoning behind the scorer's starter
- * definition.
+ * in a couple of minutes.
  */
 export const BUILT_IN_PROJECT_TEMPLATES: ProjectTemplate[] = [
   {

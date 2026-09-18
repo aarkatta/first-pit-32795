@@ -16,13 +16,13 @@ import { handleApiRequest, moderationCaseVersion, phase2OperationReceipt, report
  */
 const EXPECTED_CALLABLES = [
   'acceptAnswer', 'acceptInvitation', 'addProjectColumn', 'approveJoinRequest', 'archiveProject',
-  'assignTeamRole', 'closePoll', 'completeFileUpload', 'correctScoreSession', 'createAnswer',
+  'assignTeamRole', 'closePoll', 'completeFileUpload', 'createAnswer',
   'createFileMetadata', 'createGoal', 'createInvitation', 'createKanbanTask', 'createPoll',
   'createProject', 'createProjectFromTemplate', 'createQuestion', 'createQuestionComment', 'createReport',
-  'createScoreDefinition', 'createScoreSession', 'createTask', 'createTeam', 'createVideo',
-  'deleteProjectTemplate', 'ensureDefaultProject', 'exportScoreReport', 'getDashboard', 'getPollResults',
+  'createTask', 'createTeam', 'createVideo',
+  'deleteProjectTemplate', 'ensureDefaultProject', 'getDashboard', 'getPollResults',
   'globalSearch', 'importProjectTasks', 'leaveTeam', 'linkFileToTask', 'listPolls', 'listProjectTemplates',
-  'listScoreDefinitions', 'listScoreSessions', 'listTeamMembers', 'markNotificationRead', 'moveTaskCard',
+  'listTeamMembers', 'markNotificationRead', 'moveTaskCard',
   'recordVideoWatch', 'rejectJoinRequest', 'removeProjectColumn', 'reorderProjectColumns', 'requestAccountDeletion',
   'requestToJoinTeam', 'resolveImportAssignees', 'revokeInvitation', 'saveProjectAsTemplate', 'searchQuestions', 'searchVideos', 'setAccountType',
   'toggleSavedQuestion', 'toggleVideoFavorite', 'transferTeamLeadership', 'updateGoal', 'updateMembershipStatus',

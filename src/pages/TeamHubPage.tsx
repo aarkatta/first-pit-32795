@@ -20,7 +20,7 @@ import { useOnlineStatus } from '@/lib/use-online-status';
 const WORKSPACE_LINKS = [
   { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, and team files' },
   { to: '/knowledge', label: 'Knowledge', hint: 'Questions, how-to videos, and polls' },
-  { to: '/scorer', label: 'Scorer', hint: 'Practice and match scoring history' },
+  { to: '/scorer', label: 'Scorer', hint: 'Official FIRST robot game scoresheet' },
   { to: '/profile', label: 'Profile & settings', hint: 'Your account and notification choices' }
 ];
 
@@ -218,7 +218,7 @@ export function TeamHubPage() {
           <span className="eyebrow">LEAVE THIS TEAM</span>
           <h3>Leave {teamName}</h3>
           <p>
-            Leaving removes your access to this team's tasks, files, and scores. A coach has to invite you back.
+            Leaving removes your access to this team's tasks and files. A coach has to invite you back.
             {coachCount === 1 && isCoachOrLeader(activeTeam) ? ' You are currently the only coach, so transfer leadership before leaving.' : ''}
           </p>
           {confirmingLeave ? (
