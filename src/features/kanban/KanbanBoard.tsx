@@ -47,15 +47,20 @@ import {
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import {
+  MAX_TASK_ATTACHMENTS,
+  UploadAbortedError,
   formatFileSize,
   getTeamFilesByIds,
   linkFileToTask,
   listActiveTeamGoals,
   listTeamFiles,
   updateTask,
+  uploadTeamFile,
   type SubtaskInput,
   type TeamFile
 } from '@/lib/phase3-service';
+import { loadFileSharing, type FileSharing } from '@/lib/coordination-data';
+import { ATTACHMENT_ACCEPT, attachmentProblem } from '@/lib/task-attachments';
 import { dateTimeInputValue, formatDueDate, toDate } from '@/lib/dates';
 import { createOperationId } from '@/lib/ids';
 
@@ -138,6 +143,10 @@ export function TaskDetails({
   attachableFiles = NO_ATTACHMENTS,
   onReloadAttachments,
   onAttachFile,
+  fileSharing = 'unknown',
+  onUploadFile,
+  uploadProgress = null,
+  uploadError = null,
   onConflictResolved,
   onClose,
   onSave
@@ -166,6 +175,13 @@ export function TaskDetails({
   attachableFiles?: TeamFile[];
   onReloadAttachments?: () => void;
   onAttachFile?: (fileId: string) => void;
+  /** The team's file-sharing policy; 'unknown' until it has been read. */
+  fileSharing?: FileSharing | 'unknown';
+  /** Uploads a new file and attaches it to this card (coaches and team leaders). */
+  onUploadFile?: (file: File) => void;
+  /** 0–1 while an upload is running, otherwise null. */
+  uploadProgress?: number | null;
+  uploadError?: string | null;
   onConflictResolved?: () => void;
   onClose: () => void;
   onSave: (changes: { title: string; description: string; priority: TrackerTask['priority']; assignedTo: string | null; labels: string[]; dueAt: string | null; startAt: string | null; endAt: string | null; categoryId: string | null; goalId: string | null; subtasks: SubtaskInput[] }, expectedVersion: number) => void;
@@ -361,6 +377,21 @@ export function TaskDetails({
         <section className="task-attachments" aria-labelledby="task-attachments-heading">
           <h3 id="task-attachments-heading">Attachments</h3>
           <AttachmentList files={attachments} status={attachmentsStatus} onRetry={() => onReloadAttachments?.()} />
+          {canManage && onUploadFile && fileSharing === 'disabled' ? (
+            <p className="mb-attachment-note">Team files are turned off for this team. Turn them on in <strong>Manage team → Team settings</strong> to attach files.</p>
+          ) : null}
+          {canManage && onUploadFile && fileSharing === 'teamOnly' ? (
+            attachments.length >= MAX_TASK_ATTACHMENTS ? <p className="mb-attachment-note">This card has the most files it can hold ({MAX_TASK_ATTACHMENTS}).</p> : (
+              <div className="mb-attachment-upload">
+                <label className={`button secondary${uploadProgress !== null || busy ? ' is-disabled' : ''}`}>
+                  Upload a file
+                  <input className="visually-hidden" type="file" accept={ATTACHMENT_ACCEPT} disabled={busy || uploadProgress !== null} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUploadFile(file); }} />
+                </label>
+                <small>{uploadProgress !== null ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'PDF, image (PNG, JPG, WebP), text, CSV or ZIP · up to 10 MB'}</small>
+              </div>
+            )
+          ) : null}
+          {uploadError ? <p className="mb-attachment-note" role="alert">{uploadError}</p> : null}
           {canManage && onAttachFile && attachableFiles.length ? (
             <form className="inline-create" onSubmit={(event) => { event.preventDefault(); if (!fileToAttach) return; onAttachFile(fileToAttach); setFileToAttach(''); }}>
               <label>Attach a team file
@@ -414,6 +445,10 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
   const [attachmentsStatus, setAttachmentsStatus] = useState<AttachmentsStatus>('ready');
   const [attachmentsAttempt, setAttachmentsAttempt] = useState(0);
   const [teamFiles, setTeamFiles] = useState<TeamFile[]>([]);
+  const [fileSharing, setFileSharing] = useState<FileSharing | 'unknown'>('unknown');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadAbort = useRef<AbortController | null>(null);
   const [goals, setGoals] = useState<TeamGoal[]>([]);
   // A single clock keeps every overdue/today badge in a render consistent, and the
   // minute tick keeps them honest during a long working session.
@@ -575,11 +610,49 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
     // with file sharing off is denied here and simply gets no picker.
     if (!openTaskId || !canManage) return undefined;
     let active = true;
+    setUploadError(null);
+    void loadFileSharing(firestore, teamId)
+      .then((sharing) => { if (active) setFileSharing(sharing); })
+      .catch(() => { if (active) setFileSharing('unknown'); });
     void listTeamFiles(firestore, teamId)
       .then((page) => { if (active) setTeamFiles(page.files); })
       .catch(() => { if (active) setTeamFiles([]); });
     return () => { active = false; };
   }, [canManage, firestore, openTaskId, teamId]);
+  useEffect(() => {
+    // Closing the card, or switching team, stops an upload that is still running.
+    uploadAbort.current?.abort();
+    uploadAbort.current = null;
+    setUploadProgress(null);
+  }, [openTaskId, teamId]);
+  useEffect(() => () => { uploadAbort.current?.abort(); }, []);
+
+  function uploadToTask(task: TrackerTask, file: File) {
+    const problem = attachmentProblem(file);
+    if (problem) { setUploadError(problem); return; }
+    const controller = new AbortController();
+    uploadAbort.current?.abort();
+    uploadAbort.current = controller;
+    setUploadError(null);
+    setUploadProgress(0);
+    void uploadTeamFile({
+      teamId,
+      fileId: createOperationId(),
+      file,
+      linkedTaskIds: [task.id],
+      signal: controller.signal,
+      activeTeamId: () => activeTeamRef.current,
+      onProgress: (value) => { if (!controller.signal.aborted) setUploadProgress(value); }
+    })
+      .then(() => { if (!controller.signal.aborted) setAttachmentsAttempt((attempt) => attempt + 1); })
+      .catch((uploadFailure: unknown) => {
+        if (uploadFailure instanceof UploadAbortedError || controller.signal.aborted) return;
+        setUploadError(getRequestState(uploadFailure, onlineRef.current).message);
+      })
+      .finally(() => {
+        if (uploadAbort.current === controller) { uploadAbort.current = null; setUploadProgress(null); }
+      });
+  }
   useEffect(() => {
     // Milestones are the top of the work-breakdown tree, so the board itself
     // needs them — for the grouping bands, the Board setup picker and the card
@@ -902,6 +975,10 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
         attachableFiles={attachableFiles}
         onReloadAttachments={() => setAttachmentsAttempt((attempt) => attempt + 1)}
         onAttachFile={(fileId) => void run(() => linkFileToTask(teamId, fileId, selectedTask.id)).then((linked) => { if (linked) setAttachmentsAttempt((attempt) => attempt + 1); })}
+        fileSharing={fileSharing}
+        onUploadFile={(file) => uploadToTask(selectedTask, file)}
+        uploadProgress={uploadProgress}
+        uploadError={uploadError}
         onConflictResolved={() => setTaskConflict(false)}
         onClose={() => { setSelectedTask(null); setTaskConflict(false); }}
         onSave={(changes, expectedVersion) => void run(() => updateTask({ teamId, taskId: selectedTask.id, operationId: operationId(), expectedVersion, ...changes }).catch((nextError) => {

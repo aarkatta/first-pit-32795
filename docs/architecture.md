@@ -289,6 +289,21 @@ existing server path already turns into `moderationStatus: 'removed'` — the
 rules then hide the question from every member. No new callable, rule or index
 was needed.
 
+### Task card attachments
+
+A task card's **Attachments** section (2026-09-19) lets a coach or team leader
+**Upload a file** straight onto the card: `uploadTeamFile` with
+`linkedTaskIds: [taskId]`, so the existing `createFileMetadata` callable adds
+the file to the team's files and to the card's `attachmentFileIds` in one
+step, then `completeFileUpload` checks its bytes. The card shows progress and
+a plain error for a wrong type or a file over 10 MB (`attachmentProblem` in
+`src/lib/task-attachments.ts`, mirroring `ALLOWED_FILE_TYPES`). **Attach a team
+file** still links an existing one. With **Team files** off the card says so
+and points to Manage team → Team settings. A card holds at most 10 files
+(`MAX_TASK_ATTACHMENTS`). Uploading stays coach/team-leader only because
+`createFileMetadata` requires a team admin; students see the files but get no
+upload control. No callable, rule or index changed.
+
 ### Invitations are links, not emails
 
 First Pit sends no email for invitations — there is no mail provider.

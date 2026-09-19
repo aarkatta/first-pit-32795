@@ -161,3 +161,32 @@ describe('TaskDetails people and attachments', () => {
     expect(onAttachFile).toHaveBeenCalledWith('file-9');
   });
 });
+
+describe('TaskDetails file upload', () => {
+  it('lets a coach upload a file straight onto the card when team files are on', () => {
+    const onUploadFile = vi.fn();
+    render(<TaskDetails task={task} canManage busy={false} fileSharing="teamOnly" onUploadFile={onUploadFile} onClose={vi.fn()} onSave={vi.fn()} />);
+    const file = new File(['%PDF-1.4'], 'rubric.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText('Upload a file'), { target: { files: [file] } });
+    expect(onUploadFile).toHaveBeenCalledWith(file);
+    expect(screen.getByText(/up to 10 MB/)).toBeInTheDocument();
+  });
+
+  it('shows upload progress and any error', () => {
+    render(<TaskDetails task={task} canManage busy={false} fileSharing="teamOnly" onUploadFile={vi.fn()} uploadProgress={0.42} uploadError="rubric.pdf is larger than 10 MB." onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.getByText('Uploading… 42%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload a file')).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('larger than 10 MB');
+  });
+
+  it('tells a coach how to turn team files on', () => {
+    render(<TaskDetails task={task} canManage busy={false} fileSharing="disabled" onUploadFile={vi.fn()} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.getByText(/Team files are turned off/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Upload a file')).not.toBeInTheDocument();
+  });
+
+  it('offers no upload to a student', () => {
+    render(<TaskDetails task={task} canManage={false} canEdit busy={false} fileSharing="teamOnly" onUploadFile={vi.fn()} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByLabelText('Upload a file')).not.toBeInTheDocument();
+  });
+});
