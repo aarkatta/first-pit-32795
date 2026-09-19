@@ -1310,6 +1310,11 @@ textarea:focus-visible,
 .mb-attachment-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .mb-attachment-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcf8; font-size: 12px; }
 .mb-attachment-list a { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.mb-attachment-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.mb-attachment-upload label.button { cursor: pointer; }
+.mb-attachment-upload label.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.mb-attachment-upload label:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mb-attachment-upload small { color: var(--muted); }
 .mb-attachment-list small { color: var(--muted); font-size: 10px; }
 
 .mb-board-stats__busy { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
