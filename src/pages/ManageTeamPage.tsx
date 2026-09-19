@@ -14,8 +14,9 @@ export function ManageTeamPage() {
   const administering = status === 'ready' && teams.length > 0 && isCoachOrLeader(activeTeam);
   return (
     <div className="page-stack">
-      <TeamHubPage />
-      {administering ? <TeamAdminPage /> : null}
+      {/* Administration sits inside the overview so Leave this team and
+          Joining another team stay at the very bottom of the page. */}
+      <TeamHubPage>{administering ? <TeamAdminPage /> : null}</TeamHubPage>
     </div>
   );
 }

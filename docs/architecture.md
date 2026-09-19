@@ -20,6 +20,8 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Scorer](#scorer)
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
 - [App shell and navigation](#app-shell-and-navigation)
+- [Manage team](#manage-team)
+- [Landing page](#landing-page)
 - [Authentication hardening](#authentication-hardening)
 - [Calendar and Google Calendar integration (removed)](#calendar-and-google-calendar-integration-removed)
 - [v1 launch hardening (2026-08-29)](#v1-launch-hardening-2026-08-29)
@@ -34,7 +36,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 
 ### MVP includes
 
-Dashboard, Questions, How-to Videos, Polls, Scorer, Roles, Tracker, Storage Area, Notifications, Profile Customization, and core safety/admin controls. Chat and the calendar were built and later removed; see their sections below.
+Dashboard, Questions, Polls, Resources, Scorer (a link to FIRST's official scoresheet), Roles, Tracker, Storage Area, Notifications, Profile Customization, and core safety/admin controls. Chat, the calendar, How-to Videos and the team-defined scorer were built and later removed from the product; see their sections below.
 
 ### Explicitly deferred
 
@@ -223,6 +225,70 @@ and decides one thing: who may create a team (decision of 2026-09-17).
   a team" and "Create another team" are never shown to students or parents, and
   `/teams/new` explains the refusal instead of showing the form.
 
+### Team name and number
+
+`teams/{teamId}` carries `name` (2–80 characters, whitespace collapsed;
+`requireTeamName`) and an optional FIRST LEGO League `teamNumber` (1–8 digits or
+null; `optionalTeamNumber`, both in `functions/src/phase2.ts`). Create team
+offers the number as an optional field — teams are often numbered after they
+register. Afterwards a coach or team leader edits both together from the Manage
+team banner through `updateTeamDetails`, which re-checks the role inside its
+transaction and writes a `team.details.updated` audit record; an empty number
+clears it. Clients show "Name · Team #12345" (`teamNumberSuffix` in
+`src/lib/domain.ts`) on Home and Manage team. Team documents reach the client
+once per membership change, not live, so a successful save is applied locally
+through `patchTeam` on the team context rather than waiting for a re-read.
+
+### Team settings panel
+
+Administration shows two team settings, each as an On/Off switch with its
+current state (2026-09-19): **Team files** (`fileSharing`: `teamOnly` / `disabled`
+— attachments on task cards are refused while off) and **Join requests**
+(`membershipApproval`: `coachApproval` / `inviteOnly`). The panel used to be
+"Private by design" with toggles for `directMessaging` and
+`messageRetentionDays`; those fields outlived team chat, drive no feature, and
+are no longer shown, though `updateTeamPolicy` still accepts them and stored
+values are untouched. Discoverability is always private and has no setting.
+Below the two switches, **Team messaging**, **Message history limit** and **Team
+discovery** appear greyed out as "Coming soon" placeholders (`PLANNED_SETTINGS`
+in `TeamAdminPage.tsx`): always Off, disabled, and wired to nothing. Making any
+of them real is a product and youth-safety decision (public discovery is an MVP
+non-goal in `AGENTS.md`).
+
+### Administrative record
+
+The **Audit history** panel (coaches and team leaders; the `auditEvents` read
+rule already limits it to team admins) lists changes in plain language, newest
+first — "Dana Ruiz changed Amir Khan's role from student to mentor" — with a
+time on each line (2026-09-19). `describeAuditEvent` in `src/lib/audit-log.ts`
+turns each record into one line, naming people from the roster ("Former member"
+once they have gone) and invitees from the loaded invitations ("someone" for
+older ones). Task, milestone and card edits (`kanban.task.*`, `task.*`,
+`goal.*`) are audited too but left out as everyday board work; board setup,
+settings, membership and moderation changes are listed. A safety report's
+reporter is never named. The page reads 100 events, shows 10 at a time, and
+"Show more" reads the next 100 with a `startAfter` cursor on the existing
+`teamId` + `createdAt desc` index. Earlier the panel printed only a count.
+
+### Safety reports
+
+Every team question in the Knowledge base has **Report**. It opens a short form
+(`ReportQuestionForm` in `KnowledgePage.tsx`): one required reason — Unkind or
+bullying, Not appropriate for kids, Shares personal information, Something
+else (`REPORT_REASONS` in `src/lib/safety-reports.ts`, stored as `reasonCode`) —
+and an optional note of up to 500 characters (`description`). The reporter
+sees "Thanks. Your coaches will take a look." Reports filed before
+2026-09-19 carry `knowledge-content` and read as "No reason given".
+
+Coaches work the queue in Manage team → **Safety reports**: the reported
+question's title (read with `getDoc`, linked to `/knowledge?question=<id>`),
+the reason, the note, and the date. The reporter is never named. **Keep and
+resolve** sends `updateModerationCase` with `action: 'none'`; **Remove
+question** asks once more, then sends `action: 'remove-content'`, which the
+existing server path already turns into `moderationStatus: 'removed'` — the
+rules then hide the question from every member. No new callable, rule or index
+was needed.
+
 ### Invitations are links, not emails
 
 First Pit sends no email for invitations — there is no mail provider.
@@ -231,9 +297,37 @@ name, 7-day expiry, audit record) and returns its id; the coach sends the
 invite link (`/join?invite=<id>`) themselves. The Administration section says
 so, copies the link to the clipboard on creation, and keeps **Copy link** on
 every pending invitation. The invitee must sign in as, and verify, the invited
-address before `acceptInvitation` succeeds. Sending real invitation emails
-(for example Firebase's Trigger Email extension) is an open product decision,
-not a bug.
+address before `acceptInvitation` succeeds.
+
+**Email invite (2026-09-18).** To save the coach retyping the message, the
+Administration section offers **✉ Email invite with Gmail** under the
+confirmation of a new invitation, and **Email invite** on every pending one.
+Each opens Gmail's compose screen (`https://mail.google.com/mail/?view=cm&…`) in
+a new tab, in whichever Gmail account the browser is signed in to, with the
+recipient, subject ("Join <team> · Team #<n> on First Pit"), and body already
+written: role, join link, the three sign-in steps, the 7-day expiry, and the
+coach's display name. `src/lib/invite-email.ts` builds it (tested); the coach
+presses Send, so the message comes from someone the family knows. The server
+still sends nothing, stores nothing new, and needs no mail provider.
+`inviteMailtoHref` (a `mailto:` link for non-Gmail users) exists but is not
+shown — a second option confused coaches.
+
+Sending real invitation emails from First Pit (for example Firebase's Trigger
+Email extension, or Resend/Postmark with SPF/DKIM on first-pit.com) remains an
+open product decision, not a bug: it needs a provider, DNS work, and a youth
+safety decision, because many invitees are minors.
+
+**Accepting.** `/join?invite=<id>` reads the invitation directly; the rule
+admits the invited, verified address only. Two failure modes are handled:
+
+- *Stale token.* Rules read `email_verified` from the ID token, and
+  `user.reload()` does not refresh it, so a newly verified invitee kept a
+  `false` claim for up to an hour and was told "This invitation is not for your
+  account". `refreshVerificationStatus` now forces `getIdToken(true)` once the
+  address is verified, and `JoinTeamPage` refreshes the token once and retries
+  before reporting a permission error.
+- *Wrong account.* If the read is still refused, the message names the address
+  the invitee is signed in as, so a mismatch is obvious.
 
 ### Safe policy defaults
 
@@ -747,7 +841,27 @@ Phase 5 stores Questions, How-to Videos, and Polls in top-level Firestore collec
 - Polls use transaction-guarded one-vote-per-user documents, single/multiple choice validation, role audiences, anonymous mode, expiration, close-now, results visibility, aggregate counts, `pollHistory`, audit events, and deterministic notification IDs/deep links. Result aggregates are returned only through server-controlled output that enforces each poll's `resultsVisibility`; direct reads and list output must not bypass that setting.
 - `remove-content` moderation actions update the referenced Phase 5 item, and the read rules hide removed questions/videos from subsequent access.
 
-As of 2026-09-18 the Knowledge page has three tabs: Questions, Polls, and Resources (static curated links in `src/lib/knowledge-resources.ts`). The Videos tab and question comments were removed from the UI; the video and comment callables, rules and data remain server-side, and old `?tab=videos` / `?video=` links open the Questions tab.
+### The Knowledge base page (as of 2026-09-18)
+
+`/knowledge` is titled **Knowledge base** and has three tabs:
+
+- **Questions** — the team's recent questions (bounded, "Load more" cursor),
+  an "Ask your team" form, and per question: Answers, Mark helpful, Save and
+  Report. Opening **Answers** widens the card and lists one answer per row, the
+  accepted answer first and highlighted, followed by a **Your answer** form.
+  The question author or a knowledge editor can accept an answer.
+- **Polls** — create, vote, close, and authorized results.
+- **Resources** — curated external FLL links (FIRST season materials, FIN
+  Playbook, FLL Tutorials, Prime Lessons, the Excel in FLL guide, the BIOGLOW
+  missions video, and the official score calculator), each opening in a new
+  tab. The list is static and identical for every team:
+  `src/lib/knowledge-resources.ts`. Deep link: `/knowledge?tab=resources`.
+
+Removed from the UI, with their callables, rules and data left server-side:
+the How-to Videos tab (old `?tab=videos` / `?video=` links open Questions),
+question comments (neither listed nor postable; comments are no longer
+fetched), and the "Knowledge & Decisions" banner with its question search and
+Team/Shared-library scope (`searchQuestions` is no longer called).
 
 Acceptance and rules coverage lives in `tests/phase5-emulator-integration.mjs` and `tests/firestore-rules-phase5.integration.mjs`.
 
@@ -760,7 +874,8 @@ As of 2026-09-18 First Pit no longer stores scores. The Scorer page
 scoresheet at `https://eventhub.firstinspires.org/scoresheet`, which always
 matches the current season's missions and rules. It is a link rather than an
 iframe because that site sends `X-Frame-Options: SAMEORIGIN`, which browsers
-and the iOS web view enforce.
+and the iOS web view enforce. Below it, an information-only **Manage scoring —
+coming soon** card announces in-app practice tracking; it has no controls.
 
 The team-defined scorer this replaced (Phase 6: `scoreDefinitions`,
 `scoreSessions`, `scoreSessionHistory`, `phase6Operations`, and the
@@ -867,7 +982,12 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
   files (`/files`) has no entry and is reached from task cards. The phone's
   bottom bar carries Home, Tracker, Knowledge base and Manage team; Scorer,
   View profile and Sign out sit in the ☰ menu.
-- **Top bar:** online status and the notification **bell**
+- **Top bar:** the **active team** (badge and name), then online status and
+  the notification **bell**. The team sits on every page so a coach with
+  several teams always sees which one they are working in; with more than one
+  team it is the team switcher (a dropdown), otherwise just the name. It
+  replaced the switcher that sat at the top of the sidebar and the one in the
+  phone's ☰ menu (2026-09-19). The notification **bell**
   (`NotificationBell`) — a live unread count for the active team (99+ cap, at
   most 100 documents read), a dropdown of the eight most recent that is read
   only while open, and "See all" to `/notifications`. Notifications are no
@@ -881,13 +1001,48 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
   Coaches do not get the overview's short roster preview; the full roster is
   below it. `/hub`, `/admin` and `/team/admin` redirect to `/team`, so stored
   links, emailed `next=` paths and notifications keep working. Sign-in and team
-  creation land on `/team`.
+  creation land on `/team`. See *Manage team* below.
 - **Removed pages:** Search (`/search` redirects to Home; the ⌕ top-bar icon is
   gone), and the development-only State lab (`/states`) and Emulators
   (`/emulators`) pages, which now fall through to not-found.
 - **Layout width:** pages sit in a centred 1440px column, except the four
   Tracker routes, which use the full width beside the sidebar (`wideRoutes` →
   `.app-main--wide`) because the board is a wide table.
+
+## Manage team
+
+`/team` (`ManageTeamPage` = `TeamHubPage` overview + `TeamAdminPage`), as of
+2026-09-18:
+
+- **Banner** — "Team name · Team #number" (the number in accent colour, omitted
+  until set), the viewer's role, active member and coach counts, and created
+  date. Coaches and team leaders get **Edit team name & number**, which opens an
+  inline form (name 2–80 characters, number up to 8 digits, empty clears it)
+  saved through `updateTeamDetails`. Others see the name and number only. The
+  banner's ghost buttons keep a dark hover state; the global
+  `.button--ghost:hover` would otherwise whiten them and hide their white
+  label.
+- **Your memberships**, and for non-coaches a short roster preview and **Leave
+  team** (with confirmation; the sole coach must transfer leadership first).
+- **Administration** (coaches and team leaders only, re-checked by every
+  callable): invite a member by email and role → the link is copied, and **✉
+  Email invite with Gmail** opens a pre-written Gmail message (see *Invitations
+  are links, not emails*); safety defaults; roster with role changes, suspension
+  and removal; invitations (pending ones offer **Email invite**, **Copy link**
+  and **Revoke**); join approvals; moderation queue; audit history.
+
+## Landing page
+
+`src/features/landing/landing-page.tsx` is the signed-out home. Under the hero's
+"Get started" call to action it shows two **coming soon** store badges — "Coming
+soon to the App Store" (Apple mark) and "Coming soon to Google Play" (Play mark)
+— drawn as inline SVG from simple-icons (CC0) paths, so no dependency was added.
+They are not links, because there are no store listings yet. The Apple and
+Google marks are their owners' trademarks and "coming soon" is not one of their
+official badge forms: when the apps ship, replace these with the official
+"Download on the App Store" / "Get it on Google Play" artwork, linked to the
+listings. The feature grid and audience copy describe Resources and the
+official scoresheet rather than videos and stored scores.
 
 ## Authentication hardening
 
@@ -945,7 +1100,11 @@ offline so nobody is stranded.
 `user.reload()` mutates the existing `User` and fires no auth-state change, so
 `refreshVerificationStatus` returns the new value and callers act on it; the
 gate navigates with a full page load once verification succeeds rather than
-pretending React would re-render.
+pretending React would re-render. `reload()` also leaves the ID token alone,
+and Firestore rules and callables read `email_verified` from the token, so
+`refreshVerificationStatus` forces `getIdToken(true)` as soon as the address is
+verified (2026-09-18) — otherwise the first invitation read after verifying is
+refused.
 
 **This changes behavior for existing accounts:** anyone already signed in with
 an unverified password account meets the gate on their next protected
@@ -993,6 +1152,22 @@ work — Firebase's hosted handler applies the code and then forwards to
 `auth/configuration-not-found` and `auth/unauthorized-domain` to plain-language
 messages, so a missing provider surfaces as guidance rather than a stack trace.
 This is console configuration; it cannot be asserted from the repository.
+
+**Production state (checked 2026-09-18).** The site is served at
+`www.first-pit.com`; Authorized domains include `www.first-pit.com`,
+`first-pit.com`, `first-pit-32795.firebaseapp.com`, `first-pit-32795.web.app`,
+the Vercel domain and `localhost`. A new custom domain must be added there
+first, or Google sign-in fails with "Sign-in is not enabled for this site
+address". Keep `VITE_FIREBASE_AUTH_DOMAIN` at `first-pit-32795.firebaseapp.com`.
+Auth email uses Firebase's default sender, `noreply@first-pit-32795.firebaseapp.com`
+— no custom SMTP and no custom email domain are configured.
+
+**"I never got the verification email."** Firebase only mails an account that
+exists. Before suspecting delivery, confirm the account was created (Firebase
+console → Authentication → Users, or the Identity Toolkit `accounts:lookup`
+API) with exactly the address expected, and that it signed up with a password —
+Google sign-ins are already verified and never receive one. Then check spam for
+the sender above.
 
 ---
 
@@ -1151,6 +1326,26 @@ npm run test:release
 Then run the rules and emulator suites listed in `README.md`. The web build must
 use production Firebase configuration with `VITE_USE_FIREBASE_EMULATORS=false`.
 The parser rejects emulator mode whenever Vite builds with `MODE=production`.
+
+### Deploying
+
+- **Web:** merging to `main` deploys to Vercel automatically (project
+  `first-pit-32795-prod`); pull requests get preview deployments.
+- **Firebase is separate.** Any change to `firestore.rules`,
+  `firestore.indexes.json`, `storage.rules` or `functions/` must also be deployed
+  with the CLI, or the live site calls functions and queries that production
+  does not have yet:
+
+  ```bash
+  firebase deploy --only firestore:rules,firestore:indexes,functions --project production
+  ```
+
+  The CLI asks before deleting functions that no longer exist in the code
+  (e.g. `updateTeamNumber`, replaced by `updateTeamDetails`) — answer yes once
+  the replacement is deployed in the same run. New composite indexes build for
+  a few minutes after deploy; queries that need them fail until they show as
+  Enabled under Firestore → Indexes.
+- Deploy Firebase before, or together with, a web release that depends on it.
 
 ### Responsive and accessibility matrix
 

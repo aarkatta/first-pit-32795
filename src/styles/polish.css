@@ -43,14 +43,12 @@
   transform: rotate(-6deg) scale(1.06);
 }
 
-.team-switcher--sidebar,
 .profile-button {
   border-radius: var(--radius-md);
   box-shadow: var(--edge-3d-dark);
   transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
-.team-switcher--sidebar:hover,
 .profile-button:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -160,6 +158,70 @@
 .top-action:active {
   transform: translateY(0) scale(0.96);
   box-shadow: var(--elev-0);
+}
+
+/* Active team, on every page: coaches with several teams always see which one they are in. */
+.topbar-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 280px;
+  min-height: 40px;
+  padding: 0 4px 0 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: white;
+  box-shadow: var(--edge-3d), var(--elev-0);
+}
+
+.topbar-team .team-badge {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.topbar-team select,
+.topbar-team__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.topbar-team select {
+  width: auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.topbar-team__name {
+  padding-right: 8px;
+}
+
+.topbar-team:focus-within {
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 640px) {
+  .topbar-team {
+    max-width: 42vw;
+  }
+
+  .topbar-team .team-badge {
+    display: none;
+  }
 }
 
 .connection-status i {

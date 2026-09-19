@@ -57,7 +57,11 @@ describe('AppShell route and canonical profile metadata', () => {
     // Administration is a coach-only tab inside Manage team, not a sidebar entry.
     expect(screen.queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Manage team' })).toHaveLength(2);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team' }), { target: { value: 'team-2' } });
+    // The active team is shown in the top bar on every page, not the sidebar.
+    const switcher = screen.getByRole('combobox', { name: 'Switch active team' });
+    expect(within(screen.getByRole('banner')).getByRole('combobox', { name: 'Switch active team' })).toBe(switcher);
+    expect(within(screen.getByRole('complementary', { name: 'First Pit workspace navigation' })).queryByRole('combobox')).not.toBeInTheDocument();
+    fireEvent.change(switcher, { target: { value: 'team-2' } });
     expect(setActiveTeamId).toHaveBeenCalledWith('team-2');
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
@@ -92,9 +96,20 @@ describe('AppShell route and canonical profile metadata', () => {
     expect(within(secondary).queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();
     expect(within(secondary).queryByRole('link', { name: 'Team admin' })).not.toBeInTheDocument();
     expect(within(secondary).getByRole('link', { name: 'View profile' })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Switch active team from mobile menu' }), { target: { value: 'team-1' } });
-    expect(setActiveTeamId).toHaveBeenCalledWith('team-1');
+    // The team switcher lives in the top bar on every page, not in the menu.
+    expect(within(secondary).queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out from mobile menu' })).toBeInTheDocument();
+  });
+
+  it('names a lone team in the top bar without a dropdown', () => {
+    mocks.useTeamContext.mockReturnValue({
+      teams: [{ teamId: 'team-1', role: 'coach', status: 'active', team: { name: 'Robotics' } }],
+      activeTeamId: 'team-1',
+      setActiveTeamId
+    });
+    render(<MemoryRouter initialEntries={['/']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Home content</p></AppShell></MemoryRouter>);
+    expect(within(screen.getByRole('banner')).getByText('Robotics')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Switch active team' })).not.toBeInTheDocument();
   });
 
   it('renders an offline retry state when sign-out fails', async () => {
