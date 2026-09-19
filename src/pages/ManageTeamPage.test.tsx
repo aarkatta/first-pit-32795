@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ useTeamContext: vi.fn() }));
 vi.mock('@/lib/team-context', () => ({ useTeamContext: mocks.useTeamContext }));
-vi.mock('./TeamHubPage', () => ({ TeamHubPage: () => <p>Team overview</p> }));
+vi.mock('./TeamHubPage', () => ({ TeamHubPage: ({ children }: { children?: ReactNode }) => <div><p>Team overview</p>{children}<p>Leave and join</p></div> }));
 vi.mock('./TeamAdminPage', () => ({ TeamAdminPage: () => <p>Team administration</p> }));
 
 import { ManageTeamPage } from './ManageTeamPage';
@@ -20,6 +21,8 @@ describe('ManageTeamPage', () => {
     render(<ManageTeamPage />);
     expect(screen.getByText('Team overview')).toBeInTheDocument();
     expect(screen.getByText('Team administration')).toBeInTheDocument();
+    // Leave this team and Joining another team stay below administration.
+    expect(screen.getByText('Team administration').compareDocumentPosition(screen.getByText('Leave and join')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 

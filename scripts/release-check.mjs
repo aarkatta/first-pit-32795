@@ -26,7 +26,7 @@ const indexHtml = read('index.html');
 if (!packageJson.dependencies?.['@capacitor/core']) throw new Error('Capacitor core is not installed.');
 if (!packageJson.devDependencies?.['@capacitor/cli']) throw new Error('Capacitor CLI is not installed.');
 if (!capacitorConfig.includes("appId: 'com.firstpit.app'")) throw new Error('Capacitor app ID is not configured.');
-if (!capacitorConfig.includes("contentInset: 'automatic'")) throw new Error('iOS safe-area content inset is not configured.');
+if (!capacitorConfig.includes("contentInset: 'never'")) throw new Error('iOS content inset must be \'never\': the page pads itself for safe areas.');
 if (vercelConfig.outputDirectory !== 'dist' || !Array.isArray(vercelConfig.rewrites) || vercelConfig.rewrites.length === 0) {
   throw new Error('Vercel SPA output or rewrite configuration is incomplete.');
 }
@@ -34,6 +34,28 @@ if (!envSource.includes('Firebase emulators cannot be enabled in production')) {
   throw new Error('Production emulator guard is missing.');
 }
 if (!indexHtml.includes('viewport-fit=cover')) throw new Error('Safe-area viewport metadata is missing.');
+
+// Universal Links: iOS fetches this file from the production domain, and it
+// must be JSON at exactly this path (no redirect, not the SPA's index.html).
+const aasaPath = 'public/.well-known/apple-app-site-association';
+if (!existsSync(join(root, aasaPath))) throw new Error(`${aasaPath} is missing.`);
+let aasa;
+try {
+  aasa = JSON.parse(read(aasaPath));
+} catch {
+  throw new Error(`${aasaPath} is not valid JSON.`);
+}
+const aasaAppIds = (aasa.applinks?.details ?? []).flatMap((detail) => detail.appIDs ?? []);
+if (!aasaAppIds.some((id) => /^[A-Z0-9]{10}\.com\.firstpit\.app$/.test(id))) {
+  throw new Error(`${aasaPath} must list <TEAMID>.com.firstpit.app in applinks.details[].appIDs.`);
+}
+if (!vercelConfig.rewrites.every((rewrite) => rewrite.source.includes('\\.well-known/'))) {
+  throw new Error('The Vercel SPA rewrite must exclude /.well-known/ so the association file is served as-is.');
+}
+const aasaHeader = (vercelConfig.headers ?? []).find((entry) => entry.source === '/.well-known/apple-app-site-association');
+if (!aasaHeader?.headers?.some((header) => header.key.toLowerCase() === 'content-type' && header.value === 'application/json')) {
+  throw new Error('vercel.json must serve the association file as application/json.');
+}
 
 // Browser-tab icon, iOS home-screen icon, and link-preview metadata. Without these a
 // shared First Pit link renders as a bare grey URL and the tab shows a blank page icon.
@@ -102,4 +124,4 @@ for (const file of sourceFiles) {
   if (content && suspiciousSecrets.test(content)) throw new Error(`Potential secret found in ${file}.`);
 }
 
-console.log('Release check passed: Capacitor metadata, Vercel routing, safe-area metadata, brand/social metadata and assets, and the production emulator guard are present.');
+console.log('Release check passed: Capacitor metadata, Vercel routing, Universal Links association, safe-area metadata, brand/social metadata and assets, and the production emulator guard are present.');

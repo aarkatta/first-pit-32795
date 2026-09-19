@@ -8,6 +8,7 @@ import { canEditKnowledge, type Answer, type Question } from '@/lib/domain';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { acceptAnswer, closePoll, createAnswer, createPoll, createQuestion, getPollResults, getQuestionTarget, isKnowledgeTargetInContext, listPolls, listQuestionAnswers, listQuestionsByIds, listTeamQuestions, loadPersonalKnowledgeRecords, toggleSavedQuestion, votePoll, voteQuestion, type KnowledgeCursor, type PollListItem, type ThreadQuestion } from '@/lib/phase5-service';
 import { createReport } from '@/lib/phase2-service';
+import { REPORT_NOTE_MAX, REPORT_REASONS, type ReportReasonCode } from '@/lib/safety-reports';
 import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { toDate } from '@/lib/dates';
@@ -66,6 +67,9 @@ export function KnowledgePage() {
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [targetMismatch, setTargetMismatch] = useState<'question' | null>(null);
   const [busy, setBusy] = useState(false);
+  // The Report form is open under one question at a time.
+  const [reportingQuestionId, setReportingQuestionId] = useState<string | null>(null);
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<string>>(new Set());
   const [newQuestion, setNewQuestion] = useState({ title: '', body: '', category: 'Programming', tags: '' });
   const [newPoll, setNewPoll] = useState({ question: '', options: 'Yes\nNo', expiresAt: '', anonymous: true });
   const personalGeneration = useRef(0);
@@ -180,6 +184,8 @@ export function KnowledgePage() {
     answerOperation.current = null;
     pollOperation.current = null;
     reportOperation.current = null;
+    setReportingQuestionId(null);
+    setReportedQuestionIds(new Set());
     setQuestions([]);
     setQuestionCursor(null);
     setHasMoreQuestions(false);
@@ -399,15 +405,22 @@ export function KnowledgePage() {
   }
 
   /** Retained per target so a double-clicked report replays one receipt. */
-  function reportKnowledgeContent(reportTeamId: string, targetResource: string, reasonCode: string, description: string) {
-    if (!reportTeamId) return;
+  async function reportKnowledgeContent(reportTeamId: string, targetResource: string, reasonCode: string, description: string | undefined) {
+    if (!reportTeamId) return false;
     const operationId = reportOperation.current?.fingerprint === targetResource ? reportOperation.current.id : createResourceId('report');
     reportOperation.current = { fingerprint: targetResource, id: operationId };
     // Built as a value first: `operationId` is the server's idempotency key for the
     // report, and passing it inline would be an excess-property error until the
     // shared input type carries it.
-    const report = { teamId: reportTeamId, targetType: 'content' as const, targetResource, reasonCode, description, operationId };
-    void run(() => createReport(report));
+    const report = { teamId: reportTeamId, targetType: 'content' as const, targetResource, reasonCode, ...(description ? { description } : {}), operationId };
+    return run(() => createReport(report));
+  }
+
+  async function submitReport(question: Question, reason: ReportReasonCode, note: string) {
+    const sent = await reportKnowledgeContent(question.teamId ?? '', `questions/${question.id}`, reason, note.trim() || undefined);
+    if (!sent) return;
+    setReportingQuestionId(null);
+    setReportedQuestionIds((current) => new Set(current).add(question.id));
   }
 
   function submitPoll(event: FormEvent<HTMLFormElement>) {
@@ -457,8 +470,10 @@ export function KnowledgePage() {
                 <button type="button" aria-expanded={expandedQuestionId === question.id} aria-controls={`thread-${question.id}`} disabled={busy} onClick={() => toggleThread(question)}>{expandedQuestionId === question.id ? 'Hide answers' : 'Answers'}</button>
                 <button type="button" disabled={busy || !online} onClick={() => submitVote(question)}>{votedQuestionIds.has(question.id) ? 'Helpful ✓' : 'Mark helpful'}</button>
                 <button type="button" disabled={busy} onClick={() => void run(async () => { await toggleSavedQuestion(question.id); })}>{savedQuestionIds.includes(question.id) ? 'Saved' : 'Save question'}</button>
-                <button type="button" disabled={busy || !question.teamId} onClick={() => reportKnowledgeContent(question.teamId ?? '', `questions/${question.id}`, 'knowledge-content', 'Reported from Questions.')}>Report</button>
+                <button type="button" aria-expanded={reportingQuestionId === question.id} disabled={busy || !question.teamId || reportedQuestionIds.has(question.id)} onClick={() => setReportingQuestionId(reportingQuestionId === question.id ? null : question.id)}>{reportedQuestionIds.has(question.id) ? 'Reported' : 'Report'}</button>
               </div>
+              {reportingQuestionId === question.id ? <ReportQuestionForm questionId={question.id} questionTitle={question.title} busy={busy} online={online} onSubmit={(reason, note) => void submitReport(question, reason, note)} onCancel={() => setReportingQuestionId(null)} /> : null}
+              {reportedQuestionIds.has(question.id) ? <p className="report-sent" role="status">Thanks. Your coaches will take a look.</p> : null}
               {expandedQuestionId === question.id ? <div id={`thread-${question.id}`} className="question-thread">
                 {threadStatus === 'loading' ? <StatePanel variant="loading" title="Loading answers" message="Fetching the answers to this question." /> : null}
                 {threadStatus === 'error' ? <StatePanel {...getRequestState(threadError, online)} title="Answers could not load" actionLabel="Retry answers" onAction={() => void loadThread(question)} /> : null}
@@ -488,6 +503,37 @@ export function KnowledgePage() {
 export function PollCard({ poll, result, busy, canManage, submitted, onClose, onVote, onResults }: { poll: PollListItem; result: { totalVotes: number; optionVoteCounts: Record<string, number>; anonymous: boolean } | null; busy: boolean; canManage: boolean; submitted: boolean; onClose: () => void; onVote: (choices: string[]) => Promise<boolean>; onResults: () => void }) {
   const [choices, setChoices] = useState<string[]>([]);
   return <article id={`poll-${poll.id}`} tabIndex={-1} className="latest-poll"><span className="eyebrow">TEAM POLL · {poll.status} · {poll.anonymous ? 'ANONYMOUS' : 'NAMED'}</span><strong>{poll.question}</strong><div className="form-stack">{poll.options.map((option) => <label className="checkbox-label" key={option.id}><input type={poll.selection === 'single' ? 'radio' : 'checkbox'} name={`poll-${poll.id}`} checked={choices.includes(option.id)} disabled={submitted || poll.status !== 'open'} onChange={() => setChoices((current) => poll.selection === 'single' ? [option.id] : current.includes(option.id) ? current.filter((id) => id !== option.id) : [...current, option.id])} />{option.label}</label>)}</div>{result ? <div className="poll-results" aria-live="polite"><strong>{result.totalVotes} authorized vote{result.totalVotes === 1 ? '' : 's'}</strong>{poll.options.map((option) => <p key={option.id}>{option.label}: {result.optionVoteCounts[option.id] ?? 0}</p>)}</div> : <p className="muted">Results are hidden until this poll’s configured visibility rule allows them.</p>}<div className="form-actions"><button type="button" disabled={busy || submitted || poll.status !== 'open' || choices.length === 0} onClick={() => void onVote(choices).then((saved) => { if (saved) setChoices([]); })}>{submitted ? 'Vote submitted' : 'Submit vote'}</button>{poll.resultsVisible ? <button className="button button--ghost" type="button" disabled={busy} onClick={onResults}>Refresh authorized results</button> : null}{canManage && poll.status === 'open' ? <button className="text-button" type="button" disabled={busy} onClick={onClose}>Close now</button> : null}</div></article>;
+}
+
+/** The Report form under a question: a reason (required) and an optional note. */
+export function ReportQuestionForm({ questionId, questionTitle, busy, online, onSubmit, onCancel }: {
+  questionId: string;
+  questionTitle: string;
+  busy: boolean;
+  online: boolean;
+  onSubmit: (reason: ReportReasonCode, note: string) => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState<ReportReasonCode | ''>('');
+  const [note, setNote] = useState('');
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (reason) onSubmit(reason, note);
+  }
+  return (
+    <form className="report-form" aria-label={`Report ${questionTitle}`} onSubmit={submit}>
+      <fieldset>
+        <legend>What's wrong with this question?</legend>
+        {REPORT_REASONS.map((option) => <label key={option.code}><input type="radio" name={`report-reason-${questionId}`} value={option.code} checked={reason === option.code} onChange={() => setReason(option.code)} required />{option.label}</label>)}
+      </fieldset>
+      <label>Anything a coach should know? (optional)<textarea value={note} maxLength={REPORT_NOTE_MAX} onChange={(event) => setNote(event.target.value)} /></label>
+      <p className="muted">Only your team's coaches see reports, and they are not told who sent it.</p>
+      <div className="form-actions">
+        <button className="button button--small" type="submit" disabled={busy || !online || !reason}>Send report</button>
+        <button className="button button--ghost button--small" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
 }
 
 export function KnowledgeTargetMismatch({ targetType }: { targetType: 'question' }) {

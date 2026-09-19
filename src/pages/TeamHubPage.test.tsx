@@ -1,12 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ useAuth: vi.fn(), useTeamContext: vi.fn(), useAccountType: vi.fn(), updateTeamDetails: vi.fn() }));
+const mocks = vi.hoisted(() => ({ useAuth: vi.fn(), useTeamContext: vi.fn(), useAccountType: vi.fn(), updateTeamDetails: vi.fn(), listTeamMembers: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
 vi.mock('@/lib/team-context', () => ({ useTeamContext: mocks.useTeamContext }));
 vi.mock('@/lib/account-type', () => ({ useAccountType: mocks.useAccountType }));
 vi.mock('@/lib/team-service', () => ({ updateTeamDetails: mocks.updateTeamDetails }));
+vi.mock('@/lib/directory', () => ({ listTeamMembers: mocks.listTeamMembers }));
 
 import { TeamHubPage } from './TeamHubPage';
 
@@ -14,6 +15,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.useAuth.mockReturnValue({ user: { uid: 'user-1', email: 'coach@example.com' } });
   mocks.useAccountType.mockReturnValue({ status: 'ready', accountType: 'coach' });
+  mocks.listTeamMembers.mockResolvedValue({ members: [] });
 });
 
 describe('TeamHubPage', () => {
@@ -77,7 +79,34 @@ describe('TeamHubPage', () => {
     expect(screen.getByRole('heading', { name: 'Robotics' })).toBeInTheDocument();
     // The administration sections sit below the overview on the same page now.
     expect(screen.queryByRole('link', { name: /manage roster and invitations/i })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Open' }).length).toBeGreaterThan(0);
+    // Coaches see the full roster in administration, so no teammates row or
+    // workspace-links panel here.
+    expect(screen.queryByRole('region', { name: 'Teammates' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open' })).not.toBeInTheDocument();
+  });
+
+  it('shows only the active team when the coach has several', () => {
+    const robotics = { teamId: 'team-1', role: 'coach', status: 'active', team: { name: 'Robotics', id: 'team-1' } };
+    const builders = { teamId: 'team-2', role: 'coach', status: 'active', team: { name: 'Builders', id: 'team-2' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [robotics, builders], activeTeam: robotics });
+    render(<MemoryRouter><TeamHubPage /></MemoryRouter>);
+    expect(screen.getByRole('heading', { name: 'Robotics' })).toBeInTheDocument();
+    expect(screen.queryByText('Builders')).not.toBeInTheDocument();
+    expect(screen.getByText(/One of your 2 teams\. Everything below is for Robotics only/)).toBeInTheDocument();
+  });
+
+  it('shows a student a compact teammates row', async () => {
+    const membership = { teamId: 'team-1', role: 'student', status: 'active', team: { name: 'Robotics', id: 'team-1' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [membership], activeTeam: membership });
+    mocks.listTeamMembers.mockResolvedValue({ members: [
+      { userId: 'coach-1', displayName: 'Coach Kim', role: 'coach', status: 'active' },
+      { userId: 'user-1', displayName: 'Ava', role: 'student', status: 'active' }
+    ] });
+    render(<MemoryRouter><TeamHubPage /></MemoryRouter>);
+    const row = await screen.findByRole('region', { name: 'Teammates' });
+    expect(await within(row).findByText('Coach Kim')).toBeInTheDocument();
+    expect(within(row).getByText('Ava')).toBeInTheDocument();
+    expect(screen.queryByText(/CURRENT MEMBERSHIP/)).not.toBeInTheDocument();
   });
 
   it('lets a coach edit the team name and number together', async () => {

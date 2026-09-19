@@ -4,8 +4,19 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon\\.ico$|favicon\\.svg$|apple-touch-icon\\.png$|og-image\\.png$|robots\\.txt$).*)",
+      "source": "/((?!assets/|\\.well-known/|favicon\\.ico$|favicon\\.svg$|apple-touch-icon\\.png$|og-image\\.png$|robots\\.txt$).*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
     }
   ]
 }

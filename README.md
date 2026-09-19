@@ -19,8 +19,13 @@ and the release runbook.
 - Firebase Authentication with sign-in, sign-up, sign-out, recovery, and protected routes
 - Firebase client bootstrap with emulator support, invoked from `src/main.tsx`
 - Team context and switcher backed by active Firestore memberships
-- Server-side team creation with baseline policies, settings, and audit logging — limited to coach and mentor accounts (account type chosen once at sign-up)
-- Manage team: one page with the team overview for everyone and, for coaches and team leaders, administration — invite links (shared by the coach; no invitation email is sent), join approvals, role assignment, membership lifecycle, and leadership transfer
+- Server-side team creation with baseline policies, settings, and audit logging — limited to coach and mentor accounts (account type chosen once at sign-up), with an optional FLL team number
+- Manage team: one page with the team overview for everyone ("Team name · Team #number") and, for coaches and team leaders, administration — editing the team name and number, invite links, join approvals, role assignment, membership lifecycle, and leadership transfer
+- Email invite: a one-click button opens Gmail compose in a new tab with the invitation already written; First Pit itself sends no email
+- Sidebar in the order Home, Tracker, Scorer, Knowledge base, Manage team, View profile, Sign out
+- Knowledge base: team questions with answers (accepted answer first), polls, and a Resources tab of curated FLL links
+- Scorer: a link to FIRST's official robot game scoresheet (it cannot be embedded), with in-app scoring marked coming soon
+- A landing page with "coming soon" App Store and Google Play badges
 - A notification bell in the top bar with a live unread count and the latest notifications
 - Deny-first safety policies for messaging, file sharing, parent visibility, and private discoverability
 - Privacy defaults with mandatory safety notifications for least-exposing profiles
@@ -102,7 +107,8 @@ The individual scripts behind them, for iterating on one thing:
 - The app uses `BrowserRouter`.
 - `vercel.json` rewrites client routes to `index.html`, excluding `/assets/*` and the
   files served from `public/`, so a stale asset URL returns a 404 instead of HTML.
-- The same shell remains compatible with a future Capacitor iOS build.
+- The same shell is packaged for iOS with Capacitor: `npm run ios:build`, then
+  `npm run ios:open` (see *Capacitor iOS* in `docs/architecture.md`).
 
 ## Brand and social assets
 
@@ -135,7 +141,18 @@ keys listed in `.env.production.example` for the Production and Preview environm
 Every `VITE_*` value is inlined into the browser bundle and is therefore public. Server
 secrets and service-account credentials belong in Cloud Functions configuration, never
 in a `VITE_*` variable. Deploy Firestore rules, Storage rules, indexes, and Functions
-with the Firebase CLI separately — Vercel only hosts the web client.
+with the Firebase CLI separately — Vercel only hosts the web client:
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes,functions --project production
+```
+
+Merging to `main` deploys the web client; the Firebase deploy is a separate,
+manual step, and a web change that relies on a new callable, rule or index does
+not work in production until it has run. A custom domain (production is
+`www.first-pit.com`) must also be added to Firebase Authentication → Settings →
+Authorized domains, or Google sign-in is refused there. See the *Deploying*
+section of `docs/architecture.md`.
 
 ## Documentation
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
@@ -12,20 +12,12 @@ import { useTeamContext } from '@/lib/team-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
-/**
- * The hub is the first screen after sign-in, so everything on it has to describe
- * *this* team. It used to print a fixed motto and a static list of module names,
- * which meant two different teams rendered identical copy and none of the chips
- * went anywhere.
- */
-const WORKSPACE_LINKS = [
-  { to: '/coordination', label: 'Coordination', hint: 'Tracker, goals, and team files' },
-  { to: '/knowledge', label: 'Knowledge', hint: 'Questions, polls, and FLL resources' },
-  { to: '/scorer', label: 'Scorer', hint: 'Official FIRST robot game scoresheet' },
-  { to: '/profile', label: 'Profile & settings', hint: 'Your account and notification choices' }
-];
+type TeamHubPageProps = {
+  /** Rendered after the team's own content and before Leave / Join, which sit at the bottom of the page. */
+  children?: ReactNode;
+};
 
-export function TeamHubPage() {
+export function TeamHubPage({ children }: TeamHubPageProps = {}) {
   const { user } = useAuth();
   const { status, activeTeam, teams, error, retry, patchTeam } = useTeamContext();
   const [savedDetails, setSavedDetails] = useState<Record<string, TeamDetails>>({});
@@ -146,7 +138,7 @@ export function TeamHubPage() {
       const result = await updateTeamDetails(teamId, detailsDraft);
       const details = { name: result.name, teamNumber: result.teamNumber };
       setSavedDetails((current) => ({ ...current, [teamId]: details }));
-      // Updates the sidebar switcher and Home too, without a re-read.
+      // Updates the top-bar team switcher and Home too, without a re-read.
       patchTeam(teamId, details);
       setDetailsDraft(null);
     } catch (saveError) {
@@ -168,6 +160,9 @@ export function TeamHubPage() {
             {rosterStatus === 'ready' && coachCount > 0 ? ` · ${coachCount} coach${coachCount === 1 ? '' : 'es'}` : ''}
             {createdLabel ? ` · created ${createdLabel}` : ''}
           </p>
+          {/* Everything on this page belongs to the active team only; a coach with
+              several teams switches from the top bar. */}
+          {teams.length > 1 ? <p className="team-hero__scope">One of your {teams.length} teams. Everything below is for {teamName} only — switch teams from the team menu at the top of the page.</p> : null}
           {activeTeam && isCoachOrLeader(activeTeam) ? (
             detailsDraft === null ? (
               <button className="button button--ghost button--small team-number-edit" type="button" disabled={!online} onClick={() => setDetailsDraft({ name: activeTeam.team ? teamName : '', teamNumber: teamNumber ?? '' })}>
@@ -201,23 +196,11 @@ export function TeamHubPage() {
       ) : null}
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
 
-      <section className="member-grid" aria-label="Your team memberships">
-        {teams.map((membership, index) => (
-          <article key={membership.teamId}>
-            <span className={`big-avatar color-${index % 6}`}>
-              {(membership.team?.name ?? 'Team').split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()}
-            </span>
-            <strong>{membership.team?.name ?? 'Unnamed team'}</strong>
-            <small>{membership.role} · active</small>
-          </article>
-        ))}
-      </section>
-
-      <section className="split-panels">
-        <article className="feature-panel">
-          <span className="eyebrow">CURRENT MEMBERSHIP</span>
-          <h3>{activeTeam?.role ?? 'Member'} workspace</h3>
-          <p>Signed in as {user?.email ?? 'a team member'}. Only verified active memberships enter this team context.</p>
+      {/* Coaches and team leaders get the full roster in the administration
+          section below, so only other members see this compact list. */}
+      {!isCoachOrLeader(activeTeam) ? (
+        <section className="card teammates" aria-label="Teammates">
+          <span className="eyebrow">TEAMMATES</span>
           {rosterStatus === 'loading' ? <p><small>Loading the roster…</small></p> : null}
           {rosterStatus === 'error' ? (
             <StatePanel
@@ -228,34 +211,17 @@ export function TeamHubPage() {
               onAction={() => void loadRoster()}
             />
           ) : null}
-          {/* Coaches get the full roster in the administration section below. */}
-          {rosterStatus === 'ready' && members.length > 0 && !isCoachOrLeader(activeTeam) ? (
-            <div>
-              {members.slice(0, 8).map((member) => (
-                <span key={member.userId}>{member.displayName} · {member.role}</span>
-              ))}
-              {members.length > 8 ? <span>+{members.length - 8} more</span> : null}
-            </div>
+          {rosterStatus === 'ready' && members.length > 0 ? (
+            <ul className="teammates__list">
+              {members.slice(0, 12).map((member) => <li key={member.userId}>{member.displayName} <small>{member.role}</small></li>)}
+              {members.length > 12 ? <li><small>+{members.length - 12} more</small></li> : null}
+            </ul>
           ) : null}
-          {rosterStatus === 'ready' && members.length === 0 ? (
-            <p><small>You are the only person on this team so far.</small></p>
-          ) : null}
-        </article>
-        <article className="feature-panel">
-          <span className="eyebrow">WORKSPACE ACCESS</span>
-          <h3>Everything scoped to {teamName}</h3>
-          <p>Authentication, database rules, and server authorization keep each team workspace isolated.</p>
-          {WORKSPACE_LINKS.map((link) => (
-            <div className="list-row" key={link.to}>
-              <span>
-                <strong>{link.label}</strong>
-                <small>{link.hint}</small>
-              </span>
-              <Link className="text-button" to={link.to}>Open</Link>
-            </div>
-          ))}
-        </article>
-      </section>
+          {rosterStatus === 'ready' && members.length === 0 ? <p><small>You are the only person on this team so far.</small></p> : null}
+        </section>
+      ) : null}
+
+      {children}
 
       <section className="split-panels">
         <article className="feature-panel">

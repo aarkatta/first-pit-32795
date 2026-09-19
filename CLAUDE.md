@@ -25,6 +25,8 @@ npm run test:watch
 npm run build            # vite build -> dist/
 npm run functions:build  # tsc for the functions workspace -> functions/lib/
 npm run template:build   # regenerates public/first-pit-task-template.xlsx
+npm run ios:build        # production bundle -> checked -> cap sync ios (needs .env.ios.local + ios/App/App/GoogleService-Info.plist)
+npm run ios:open         # open the iOS shell in Xcode
 ```
 
 Run a single test file or case:
@@ -108,7 +110,8 @@ template (`npm run template:build`), so edit it there, once.
   on any team (`teamCreationRefusal`, `phase2.ts`).
 - **Team role** (a membership's `role`) decides everything inside a team.
   Administration — invitations, roles, policy, moderation, audit, board setup,
-  import, templates, file attachments — is coach/team-leader (`requireTeamAdmin`).
+  import, templates, file attachments, and the team name and number
+  (`updateTeamDetails`) — is coach/team-leader (`requireTeamAdmin`).
 - **Tracker task editors** are coaches, team leaders **and students**
   (`TASK_EDITOR_ROLES` / `requireTaskEditor`): they add, edit and move any task.
   Mentors and parents view the board.
@@ -179,7 +182,7 @@ nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option
   *assignable* set and excludes it.
 - Navigation (`AppShell.tsx`): sidebar Home, Tracker, Scorer, Knowledge base,
   Manage team, View profile, Sign out (Team files has no entry; it is reached
-  from task cards); top bar online status + notification bell. **Manage team**
+  from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is the team overview for everyone plus, for
   coaches/team leaders, the `TeamAdminPage` sections below it; `/hub`, `/admin`
   and `/team/admin` redirect there. Search, State lab and Emulators pages were
@@ -237,6 +240,14 @@ generated reports have been removed; the phase numbers survive only in the
 `phase{N}-service.ts` / `functions/src/phase{N}.ts` filenames and in the `phase3Operations` Firestore
 collection name. Renaming the files is a safe mechanical change; renaming the
 collection needs a data migration.
+
+## Deploying
+
+Merging to `main` deploys the web client to Vercel. Firebase is a separate,
+manual step — `firebase deploy --only firestore:rules,firestore:indexes,functions
+--project production` — and a web change that needs a new callable, rule or
+index is broken in production until it runs. Production is served at
+`www.first-pit.com`; see *Deploying* in `docs/architecture.md`.
 
 ## Local setup
 

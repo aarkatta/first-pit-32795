@@ -78,7 +78,9 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const [signOutState, setSignOutState] = useState<RequestState | null>(null);
   const [profile, setProfile] = useState<{ displayName: string; photoURL: string | null } | null>(null);
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
-  const isAdmin = isCoachOrLeader(teams.find((team) => team.teamId === activeTeamId));
+  const activeTeam = teams.find((team) => team.teamId === activeTeamId);
+  const activeTeamName = activeTeam?.team?.name ?? 'Unnamed team';
+  const isAdmin = isCoachOrLeader(activeTeam);
   const mobileItems = navItems.filter((item) => item.mobile);
   const secondaryItems = navItems.filter((item) => !item.mobile);
   const currentPageLabel = pageLabel(location.pathname);
@@ -126,19 +128,6 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
           <span>{appName}</span>
         </Link>
 
-        {authStatus === 'authenticated' && teams.length > 0 ? (
-          <label className="team-switcher team-switcher--sidebar">
-            <span className="team-badge" aria-hidden="true">{(teams.find((team) => team.teamId === activeTeamId)?.team?.name ?? 'FP').slice(0, 2).toUpperCase()}</span>
-            <span className="team-switcher__copy">
-              <strong>{teams.find((team) => team.teamId === activeTeamId)?.team?.name ?? 'Active team'}</strong>
-              <small>{isAdmin ? 'Coach workspace' : 'Team workspace'}</small>
-            </span>
-            <select aria-label="Switch active team" value={activeTeamId ?? ''} onChange={(event) => setActiveTeamId(event.target.value)}>
-              {teams.map(({ teamId, team }) => <option key={teamId} value={teamId}>{team?.name ?? 'Unnamed team'}</option>)}
-            </select>
-          </label>
-        ) : null}
-
         <nav className="sidebar-nav" aria-label="Primary">
           {navItems.map((item) => (
             <NavLink key={item.to} className="sidebar-nav__link" to={item.to} end={item.to === '/'}>
@@ -178,12 +167,21 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
             <h1>{currentPageLabel}</h1>
           </div>
           <div className="top-actions">
+            {authStatus === 'authenticated' && activeTeam ? (
+              <div className="topbar-team" title={isAdmin ? 'Coach workspace' : 'Team workspace'}>
+                <span className="team-badge" aria-hidden="true">{activeTeamName.slice(0, 2).toUpperCase()}</span>
+                {teams.length > 1 ? (
+                  <select aria-label="Switch active team" value={activeTeamId ?? ''} onChange={(event) => setActiveTeamId(event.target.value)}>
+                    {teams.map(({ teamId, team }) => <option key={teamId} value={teamId}>{team?.name ?? 'Unnamed team'}</option>)}
+                  </select>
+                ) : <strong className="topbar-team__name">{activeTeamName}</strong>}
+              </div>
+            ) : null}
             <span className={`connection-status connection-status--${online ? 'online' : 'offline'}`}><i aria-hidden="true" />{online ? 'Online' : 'Offline'}</span>
             {authStatus === 'authenticated' && user && activeTeamId ? <NotificationBell teamId={activeTeamId} userId={user.uid} online={online} /> : null}
             {authStatus === 'authenticated' ? <details className="mobile-secondary-nav" ref={mobileMenuRef}>
               <summary className="top-action" aria-label="Open workspace menu"><span aria-hidden="true">☰</span></summary>
               <div className="mobile-secondary-nav__panel">
-                {teams.length > 0 ? <label className="mobile-team-switcher">Active team<select aria-label="Switch active team from mobile menu" value={activeTeamId ?? ''} onChange={(event) => setActiveTeamId(event.target.value)}>{teams.map(({ teamId, team }) => <option key={teamId} value={teamId}>{team?.name ?? 'Unnamed team'}</option>)}</select></label> : null}
                 <nav className="mobile-secondary-nav__links" aria-label="Mobile secondary navigation">
                   {secondaryItems.map((item) => <NavLink key={item.to} to={item.to} onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">{item.icon}</span>{item.label}</NavLink>)}
                   <NavLink to="/profile" onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">◉</span>View profile</NavLink>

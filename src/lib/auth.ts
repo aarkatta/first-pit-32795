@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core';
 import {
   applyActionCode,
   browserLocalPersistence,
@@ -12,6 +11,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -22,6 +22,10 @@ import {
   type User,
   type UserCredential
 } from 'firebase/auth';
+import { isNativeShell } from './native-shell';
+import { publicWebOrigin } from './public-origin';
+
+export { isNativeShell };
 
 export class VerificationEmailDeliveryError extends Error {
   readonly user: User;
@@ -30,22 +34,6 @@ export class VerificationEmailDeliveryError extends Error {
     super('The account was created, but the verification email could not be sent.', { cause });
     this.name = 'VerificationEmailDeliveryError';
     this.user = user;
-  }
-}
-
-/**
- * True inside the Capacitor iOS shell.
- *
- * The shell runs the same bundle from a `capacitor://` origin, where a popup
- * has no opener to post back to, so the sign-in flow has to differ. Wrapped in
- * a try/catch because `Capacitor` is a web shim in a plain browser and must
- * never be the reason sign-in fails.
- */
-export function isNativeShell(): boolean {
-  try {
-    return Capacitor.isNativePlatform();
-  } catch {
-    return false;
   }
 }
 
@@ -81,7 +69,7 @@ export const EMAIL_ACTION_PATH = '/auth/action';
  * per-branch preview deployment will not be — see `sendVerification`.
  */
 export function emailActionCodeSettings(next?: string | null): ActionCodeSettings {
-  const url = new URL(EMAIL_ACTION_PATH, window.location.origin);
+  const url = new URL(EMAIL_ACTION_PATH, publicWebOrigin());
   if (next) url.searchParams.set('next', next);
   return { url: url.toString(), handleCodeInApp: false };
 }
@@ -168,16 +156,17 @@ function googleProvider(): GoogleAuthProvider {
  * Google sign-in doubles as sign-up: Firebase creates the account on first use.
  * Google has already verified the address, so no verification email is sent.
  *
- * Resolves to `null` when a redirect has been started — the page is navigating
- * away and the result arrives on the next load via `completeGoogleRedirect`.
- * The redirect path covers the Capacitor shell, where popups cannot work, and
- * a desktop browser that blocks the popup outright.
+ * On the web it opens a popup, falling back to a redirect when the browser
+ * blocks it; that path resolves to `null` because the page is navigating away
+ * and the result arrives on the next load via `completeGoogleRedirect`.
+ *
+ * In the iOS shell neither can work: a popup has no opener at a `capacitor://`
+ * origin and the redirect cannot return to the app. The native Google SDK
+ * (`@capacitor-firebase/authentication`, `skipNativeAuth`) signs in instead
+ * and hands its ID token to the JS SDK, which owns the session as on the web.
  */
 export async function signInWithGoogle(auth: Auth): Promise<UserCredential | null> {
-  if (isNativeShell()) {
-    await signInWithRedirect(auth, googleProvider(), browserPopupRedirectResolver);
-    return null;
-  }
+  if (isNativeShell()) return signInWithGoogleNative(auth);
   try {
     return await signInWithPopup(auth, googleProvider());
   } catch (error) {
@@ -187,18 +176,32 @@ export async function signInWithGoogle(auth: Auth): Promise<UserCredential | nul
   }
 }
 
+async function signInWithGoogleNative(auth: Auth): Promise<UserCredential> {
+  // Loaded on demand so the web bundle never carries the plugin.
+  const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+  const result = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true });
+  const idToken = result.credential?.idToken;
+  if (!idToken) throw new Error('Google sign-in did not return an ID token.');
+  return signInWithCredential(auth, GoogleAuthProvider.credential(idToken, result.credential?.accessToken));
+}
+
 /**
  * Collects the result of a redirect sign-in. Returns `null` on a normal load
  * where no redirect was in flight, so callers can invoke it unconditionally.
+ * The shell never redirects, and its Auth has no redirect resolver to ask.
  */
 export function completeGoogleRedirect(auth: Auth): Promise<UserCredential | null> {
+  if (isNativeShell()) return Promise.resolve(null);
   return getRedirectResult(auth);
 }
 
 /** A closed or superseded popup is a user gesture, not a failure worth reporting. */
 export function isDismissedPopup(error: unknown): boolean {
   const code = authErrorCode(error);
-  return code.includes('auth/popup-closed-by-user') || code.includes('auth/cancelled-popup-request');
+  return code.includes('auth/popup-closed-by-user')
+    || code.includes('auth/cancelled-popup-request')
+    // The native Google sheet (iOS shell) reports a dismissal this way.
+    || /user canceled the sign-in flow/i.test(code);
 }
 
 /**
@@ -231,8 +234,18 @@ export async function sendPasswordRecovery(auth: Auth, email: string): Promise<v
   await sendPasswordResetEmail(auth, email.trim());
 }
 
-export function signOutCurrentUser(auth: Auth): Promise<void> {
-  return signOut(auth);
+export async function signOutCurrentUser(auth: Auth): Promise<void> {
+  await signOut(auth);
+  // In the shell, also end the native Google session so the next Google
+  // sign-in offers the account picker instead of silently reusing it.
+  if (isNativeShell()) {
+    try {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      await FirebaseAuthentication.signOut();
+    } catch {
+      // The web session is already gone, which is what signing out means.
+    }
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PollListItem } from '@/lib/phase5-service';
-import { KnowledgeTargetMismatch, PollCard } from './KnowledgePage';
+import { KnowledgeTargetMismatch, PollCard, ReportQuestionForm } from './KnowledgePage';
 
 const poll: PollListItem = {
   id: 'poll-1',
@@ -42,5 +42,25 @@ describe('Knowledge direct-target context', () => {
     expect(screen.getByText('Linked question belongs to another team')).toBeInTheDocument();
     expect(screen.getByText(/active team was not changed automatically/i)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+describe('ReportQuestionForm', () => {
+  it('needs a reason, then sends it with the optional note', () => {
+    const onSubmit = vi.fn();
+    render(<ReportQuestionForm questionId="q-1" questionTitle="Why is our robot slow?" busy={false} online onSubmit={onSubmit} onCancel={vi.fn()} />);
+    const send = screen.getByRole('button', { name: 'Send report' });
+    expect(send).toBeDisabled();
+    expect(screen.getByText(/not told who sent it/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Not appropriate for kids' }));
+    fireEvent.change(screen.getByRole('textbox', { name: /anything a coach should know/i }), { target: { value: 'Rude joke' } });
+    fireEvent.click(send);
+    expect(onSubmit).toHaveBeenCalledWith('inappropriate', 'Rude joke');
+  });
+
+  it('cannot be sent while offline', () => {
+    render(<ReportQuestionForm questionId="q-1" questionTitle="Q" busy={false} online={false} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Something else' }));
+    expect(screen.getByRole('button', { name: 'Send report' })).toBeDisabled();
   });
 });

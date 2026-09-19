@@ -16,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { isNativeShell } from '@/lib/native-shell';
 import { cn } from '@/lib/utils';
 import { useReveal } from './use-reveal';
 
@@ -471,11 +472,14 @@ export function LandingPage() {
               </Button>
             </div>
             <p className="mt-5 text-[15px] text-muted">No public profiles. Invite-only. Made with young teams in mind.</p>
-            {/* Not links: there is no store listing yet. */}
-            <ul className="m-0 mt-6 flex list-none flex-wrap items-center gap-3 p-0" aria-label="Mobile apps coming soon">
-              <StoreBadge store="apple" />
-              <StoreBadge store="google" />
-            </ul>
+            {/* Not links: there is no store listing yet. Hidden inside the iOS
+                app, which is already the thing they advertise. */}
+            {isNativeShell() ? null : (
+              <ul className="m-0 mt-6 flex list-none flex-wrap items-center gap-3 p-0" aria-label="Mobile apps coming soon">
+                <StoreBadge store="apple" />
+                <StoreBadge store="google" />
+              </ul>
+            )}
           </div>
 
           <div className="relative flex justify-center lg:justify-end">
