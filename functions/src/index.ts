@@ -24,7 +24,9 @@ import {
   assertNotLastCoach,
   auditRecord,
   requireAccountType,
-  teamCreationRefusal
+  requireOperationReceipt,
+  teamCreationRefusal,
+  teamOperationRef
 } from './phase2.js';
 import {
   completeFileUpload as completeFileUploadCommand,
@@ -77,6 +79,11 @@ import {
   voteQuestion as voteQuestionCommand
 } from './phase5.js';
 import { getDashboard as getDashboardCommand, globalSearch as globalSearchCommand, updateProfileSettings as updateProfileSettingsCommand } from './phase7.js';
+import {
+  provisionTeamMember as provisionTeamMemberCommand,
+  resetTeamMemberPassword as resetTeamMemberPasswordCommand,
+  setInitialPassword as setInitialPasswordCommand
+} from './team-members.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -287,19 +294,11 @@ function phase2Data(request: Phase2Request) {
  * never disagree.
  */
 function phase2OperationRef(request: Phase2Request, teamId: string, kind: string) {
-  const operationId = requireString(getInput(request, 'operationId'), 'Operation ID', 120);
-  return getFirestore().doc(`phase2Operations/${teamId}_${kind}_${operationId}`);
+  return teamOperationRef(teamId, kind, getInput(request, 'operationId'));
 }
 
-export function phase2OperationReceipt(
-  receipt: Record<string, unknown>,
-  expected: { teamId: string; actorUserId: string; kind: string }
-): Record<string, unknown> {
-  if (receipt.teamId !== expected.teamId || receipt.createdBy !== expected.actorUserId || receipt.kind !== expected.kind) {
-    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
-  }
-  return receipt;
-}
+/** Kept as a named export because `index.test.ts` pins the helper surface. */
+export const phase2OperationReceipt = requireOperationReceipt;
 
 async function requireTeamDocument(teamId: string) {
   const snapshot = await getFirestore().doc(`teams/${teamId}`).get();
@@ -882,6 +881,12 @@ export const listTeamMembers = onCall(async (request) => {
 
   return { members, truncated: memberships.size === ROSTER_LIMIT };
 });
+
+// Coach-provisioned member accounts — the second onboarding path beside
+// createInvitation / acceptInvitation. See functions/src/team-members.ts.
+export const provisionTeamMember = onCall(async (request) => provisionTeamMemberCommand(request as CallableRequest<Record<string, unknown>>));
+export const resetTeamMemberPassword = onCall(async (request) => resetTeamMemberPasswordCommand(request as CallableRequest<Record<string, unknown>>));
+export const setInitialPassword = onCall(async (request) => setInitialPasswordCommand(request as CallableRequest<Record<string, unknown>>));
 
 export const createTask = onCall(async (request) => createTaskCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateTask = onCall(async (request) => updateTaskCommand(request as CallableRequest<Record<string, unknown>>));

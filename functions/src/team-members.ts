@@ -1,6 +1,22 @@
 import { randomInt } from 'node:crypto';
-import { HttpsError } from 'firebase-functions/v2/https';
-import { requireAssignableRole, type AccountType, type AssignableRole } from './phase2.js';
+import { getAuth } from 'firebase-admin/auth';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import {
+  assertTeamAdminInTransaction,
+  auditRecord,
+  getInput,
+  requireAssignableRole,
+  requireAuth,
+  requireEmail,
+  requireOperationReceipt,
+  requireString,
+  requireTeamAdmin,
+  requireTeamId,
+  teamOperationRef,
+  type AccountType,
+  type AssignableRole
+} from './phase2.js';
 
 /**
  * Coach-provisioned member accounts.
@@ -177,4 +193,223 @@ export function assertProvisionedByTeam(userData: Record<string, unknown> | unde
   if (!userData || userData.provisionedByTeamId !== teamId) {
     throw new HttpsError('failed-precondition', 'This member signed up on their own, so only they can change their password. Ask them to use "Forgot password" on the sign-in screen.');
   }
+}
+
+/**
+ * Looks up an account by address, distinguishing "no such account" from a
+ * lookup that failed. A failed lookup must not read as "address is free" —
+ * that is how a provision would collide with an existing account.
+ */
+async function findUserByEmail(email: string) {
+  try {
+    return await getAuth().getUserByEmail(email);
+  } catch (error) {
+    if ((error as { code?: string }).code === 'auth/user-not-found') return null;
+    throw new HttpsError('internal', 'The email address could not be checked. Try again.');
+  }
+}
+
+const EXISTING_ACCOUNT_MESSAGE = 'That email address already has a First Pit account. Send them an invitation instead, so they can accept it themselves.';
+
+/**
+ * Creates a team member's account and hands the coach a single-use password.
+ *
+ * The password is in the return value and nowhere else: not in the operation
+ * receipt, not in the member's profile, not in a log line. A replay of a
+ * successful call therefore cannot reproduce it, and says so.
+ */
+export async function provisionTeamMember(request: CallableRequest<Record<string, unknown>>) {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const displayName = requirePersonName(getInput(request, 'displayName'));
+  const email = requireEmail(getInput(request, 'email'));
+  const role = requireProvisionableRole(getInput(request, 'role'));
+  const db = getFirestore();
+  const operationRef = teamOperationRef(teamId, PROVISION_OPERATION_KIND, getInput(request, 'operationId'));
+
+  // Checked before the account is created so a retry never mints a second
+  // Auth user for the same operation.
+  const priorOperation = await operationRef.get();
+  if (priorOperation.exists) {
+    const receipt = requireOperationReceipt(priorOperation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: PROVISION_OPERATION_KIND });
+    return {
+      userId: requireString(receipt.userId, 'Stored member ID'),
+      email,
+      displayName,
+      role,
+      temporaryPassword: null,
+      replayed: true
+    };
+  }
+
+  // Attaching an existing account to a team without that person acting is
+  // exactly what the invitation flow exists to prevent, so this path refuses
+  // and points at it. `createUser` below is the real guard against a race.
+  if (await findUserByEmail(email)) throw new HttpsError('already-exists', EXISTING_ACCOUNT_MESSAGE);
+
+  const temporaryPassword = generateTemporaryPassword();
+  let created;
+  try {
+    // `emailVerified` stays false: nobody has proved this mailbox. Only
+    // invitation reads require the claim (firestore.rules), so a provisioned
+    // member works everywhere else and still has to verify before accepting an
+    // invitation to a second team.
+    created = await getAuth().createUser({ email, emailVerified: false, password: temporaryPassword, displayName });
+  } catch (error) {
+    if ((error as { code?: string }).code === 'auth/email-already-exists') throw new HttpsError('already-exists', EXISTING_ACCOUNT_MESSAGE);
+    throw new HttpsError('internal', 'The member account could not be created. Try again.');
+  }
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      await assertTeamAdminInTransaction(transaction, teamId, admin);
+      const now = FieldValue.serverTimestamp();
+      // The profile carries the defaults `bootstrapUserProfile` would otherwise
+      // backfill on first sign-in — which the `users` update rule forbids.
+      transaction.set(db.doc(`users/${created.uid}`), {
+        uid: created.uid,
+        email,
+        displayName,
+        photoURL: null,
+        accountType: accountTypeForRole(role),
+        accountTypeSetAt: now,
+        provisionedByTeamId: teamId,
+        provisionedBy: admin.uid,
+        provisionedAt: now,
+        mustSetPassword: true,
+        createdAt: now,
+        updatedAt: now
+      });
+      transaction.set(db.doc(`memberships/${teamId}_${created.uid}`), {
+        teamId,
+        userId: created.uid,
+        role,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now
+      });
+      transaction.set(db.collection('auditEvents').doc(), auditRecord({
+        type: 'membership.changed',
+        actorUserId: admin.uid,
+        teamId,
+        targetUserId: created.uid,
+        metadata: { role, status: 'active', action: 'member.provisioned' }
+      }));
+      // `create`, not `set`: if a concurrent call claimed this operation ID the
+      // whole transaction aborts and the compensation below runs.
+      transaction.create(operationRef, {
+        teamId,
+        createdBy: admin.uid,
+        kind: PROVISION_OPERATION_KIND,
+        userId: created.uid,
+        createdAt: now
+      });
+    });
+  } catch (error) {
+    // Nothing references the account yet, so leave no orphan Auth user behind.
+    // This is the one place in the codebase where a write spans Auth and
+    // Firestore, and it is why the Auth call comes second-to-last.
+    await getAuth().deleteUser(created.uid).catch(() => undefined);
+    throw error;
+  }
+
+  return { userId: created.uid, email, displayName, role, temporaryPassword, replayed: false };
+}
+
+/**
+ * Issues a fresh single-use password for an account this team provisioned.
+ *
+ * Confined by `assertProvisionedByTeam`: a coach can help the student they
+ * created an account for, and can never touch the personal account of a mentor
+ * or parent who signed up on their own.
+ */
+export async function resetTeamMemberPassword(request: CallableRequest<Record<string, unknown>>) {
+  const teamId = requireTeamId(request);
+  const admin = await requireTeamAdmin(request, teamId);
+  const userId = requireString(getInput(request, 'userId'), 'Member ID');
+  const db = getFirestore();
+  const operationRef = teamOperationRef(teamId, PASSWORD_RESET_OPERATION_KIND, getInput(request, 'operationId'));
+
+  const priorOperation = await operationRef.get();
+  if (priorOperation.exists) {
+    requireOperationReceipt(priorOperation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: PASSWORD_RESET_OPERATION_KIND });
+    // The password was never stored, so a replay cannot return one.
+    return { userId, temporaryPassword: null, replayed: true };
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  // The Firestore transaction runs first so the administrative record exists
+  // before the credential changes. If the Auth update then fails the audit
+  // shows an attempted reset, which is what a moderation review needs to see;
+  // the reverse order can change a member's password leaving no trace.
+  await db.runTransaction(async (transaction) => {
+    await assertTeamAdminInTransaction(transaction, teamId, admin);
+    const userRef = db.doc(`users/${userId}`);
+    const membershipRef = db.doc(`memberships/${teamId}_${userId}`);
+    const [user, membership] = await Promise.all([transaction.get(userRef), transaction.get(membershipRef)]);
+    // Membership decides "not found": someone who is not on this team is not a
+    // member the coach may ask about at all. A missing profile falls through to
+    // `assertProvisionedByTeam`, whose message is the useful one — a member
+    // First Pit holds no provisioning record for is one the coach cannot reset.
+    const membershipData = membership.data();
+    if (!membership.exists) throw new HttpsError('not-found', 'That member is not on this team.');
+    if (membershipData?.status !== 'active') throw new HttpsError('failed-precondition', 'That member is not active on this team.');
+    assertProvisionedByTeam(user.data(), teamId);
+    const now = FieldValue.serverTimestamp();
+    transaction.update(userRef, { mustSetPassword: true, updatedAt: now });
+    transaction.set(db.collection('auditEvents').doc(), auditRecord({
+      type: 'administrative.action',
+      actorUserId: admin.uid,
+      teamId,
+      targetUserId: userId,
+      metadata: { action: PASSWORD_RESET_OPERATION_KIND, role: String(membershipData?.role ?? 'student') }
+    }));
+    transaction.create(operationRef, {
+      teamId,
+      createdBy: admin.uid,
+      kind: PASSWORD_RESET_OPERATION_KIND,
+      userId,
+      createdAt: now
+    });
+  });
+
+  try {
+    await getAuth().updateUser(userId, { password: temporaryPassword });
+  } catch {
+    throw new HttpsError('internal', 'The password was not changed. Try the reset again.');
+  }
+
+  return { userId, temporaryPassword, replayed: false };
+}
+
+/**
+ * The member replaces the password their coach gave them with one only they
+ * know. Enforced server-side rather than by a client `updatePassword` plus a
+ * "done" call, so `mustSetPassword` can only clear when the password really
+ * changed.
+ *
+ * No audit event: this is a person changing their own password, not an
+ * administrative action taken on them.
+ */
+export async function setInitialPassword(request: CallableRequest<Record<string, unknown>>) {
+  const auth = requireAuth(request);
+  const newPassword = requireNewPassword(getInput(request, 'newPassword'));
+  const db = getFirestore();
+  const userRef = db.doc(`users/${auth.uid}`);
+  const snapshot = await userRef.get();
+  const profile = snapshot.data();
+  if (!snapshot.exists || profile?.mustSetPassword !== true) {
+    throw new HttpsError('failed-precondition', 'Your password has already been set. Use "Forgot password" on the sign-in screen to change it.');
+  }
+  const email = String(profile?.email ?? '');
+  if (newPassword.trim().toLowerCase() === email.toLowerCase() || newPassword.trim().toLowerCase() === email.split('@')[0].toLowerCase()) {
+    throw new HttpsError('invalid-argument', 'Your password cannot be your email address. Pick a few words only you would put together.');
+  }
+
+  await getAuth().updateUser(auth.uid, { password: newPassword });
+  // Clearing the flag second is the safe order: a failure here re-prompts a
+  // member whose password is already theirs, where the reverse would let
+  // someone past the gate with the password their coach still knows.
+  await userRef.update({ mustSetPassword: false, passwordSetAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  return { userId: auth.uid };
 }

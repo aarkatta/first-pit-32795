@@ -412,6 +412,34 @@ export function isReplayOfOwnCreate(
   return false;
 }
 
+/**
+ * Idempotency receipt for a team mutation, at `phase2Operations/{teamId}_{kind}_{operationId}`.
+ *
+ * Shared because the receipt path IS the replay contract: a second
+ * implementation that spelled the path differently would silently stop
+ * deduplicating, and the duplicate audit events would only surface in a
+ * moderation review months later.
+ */
+export function teamOperationRef(teamId: string, kind: string, operationId: unknown) {
+  const id = requireString(operationId, 'Operation ID', 120);
+  return getFirestore().doc(`phase2Operations/${teamId}_${kind}_${id}`);
+}
+
+/**
+ * Confirms a stored receipt belongs to this team, actor and operation kind
+ * before its result is replayed. Reusing another operation's ID is a caller
+ * error, not a replay.
+ */
+export function requireOperationReceipt(
+  receipt: Record<string, unknown>,
+  expected: { teamId: string; actorUserId: string; kind: string }
+): Record<string, unknown> {
+  if (receipt.teamId !== expected.teamId || receipt.createdBy !== expected.actorUserId || receipt.kind !== expected.kind) {
+    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+  }
+  return receipt;
+}
+
 export function expiryTimestamp(days = 7) {
   return Timestamp.fromMillis(Date.now() + days * 24 * 60 * 60 * 1000);
 }
