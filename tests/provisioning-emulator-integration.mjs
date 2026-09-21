@@ -181,6 +181,14 @@ const receipt = await readDocument(`phase2Operations/${teamId}_member.provision_
 if (JSON.stringify(receipt).toLowerCase().includes(provisioned.temporaryPassword.toLowerCase())) throw new Error('The operation receipt stored the temporary password.');
 if (receipt.userId?.stringValue !== studentId) throw new Error('The operation receipt does not name the created member.');
 
+// The roster tells a coach which accounts they may reset, and tells nobody else.
+const coachRoster = await call('listTeamMembers', coach.idToken, { teamId });
+const studentRow = coachRoster.members.find((member) => member.userId === studentId);
+if (studentRow?.provisionedByThisTeam !== true) throw new Error('The coach roster does not mark the provisioned member.');
+if (studentRow?.mustSetPassword !== true) throw new Error('The coach roster does not show that the member still owes a password.');
+const coachRow = coachRoster.members.find((member) => member.userId === coach.localId);
+if (coachRow?.provisionedByThisTeam !== false) throw new Error('The coach roster wrongly marks a self-registered account as provisioned.');
+
 // The password the coach was handed actually works.
 let studentSession = await signInSucceeds(studentEmail, provisioned.temporaryPassword, 'provisioned student');
 if (studentSession.idToken === undefined) throw new Error('The provisioned student received no session.');
@@ -209,6 +217,14 @@ studentSession = await signInSucceeds(studentEmail, chosenPassword, 'the member-
 
 // The gate closes behind them.
 await callFails('setInitialPassword', studentSession.idToken, { newPassword: 'another good one' }, 'FAILED_PRECONDITION');
+
+// A teammate has no business knowing who has not finished signing in.
+const memberRoster = await call('listTeamMembers', studentSession.idToken, { teamId });
+for (const member of memberRoster.members) {
+  if ('mustSetPassword' in member || 'provisionedByThisTeam' in member) {
+    throw new Error('listTeamMembers leaked provisioning fields to a non-admin.');
+  }
+}
 
 // --- Coach-initiated reset --------------------------------------------------
 await callFails('resetTeamMemberPassword', outsider.idToken, { teamId, userId: studentId }, 'PERMISSION_DENIED');

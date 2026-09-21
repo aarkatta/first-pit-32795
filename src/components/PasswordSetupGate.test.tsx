@@ -78,9 +78,9 @@ describe('PasswordSetupGate', () => {
     expect(mocks.setInitialPassword).toHaveBeenCalledTimes(1);
   });
 
-  it('offers a way out when the account is not theirs', () => {
+  it('offers a way out when the account is not theirs', async () => {
     renderGate();
     fireEvent.click(screen.getByRole('button', { name: /not you\? sign out/i }));
-    expect(mocks.signOutCurrentUser).toHaveBeenCalled();
+    await waitFor(() => expect(mocks.signOutCurrentUser).toHaveBeenCalled());
   });
 });

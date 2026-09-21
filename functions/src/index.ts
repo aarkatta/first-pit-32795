@@ -875,7 +875,15 @@ export const listTeamMembers = onCall(async (request) => {
       status: String(membership.status ?? 'active'),
       displayName,
       photoURL: typeof profile.photoURL === 'string' && profile.photoURL.startsWith('https://') ? profile.photoURL : null,
-      initials: displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()
+      initials: displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase(),
+      // Admins only: which accounts this team created, and which are still on
+      // the password their coach handed over. Teammates have no business
+      // knowing who has not finished signing in, so the fields are omitted
+      // rather than sent as false.
+      ...(isAdmin ? {
+        provisionedByThisTeam: profile.provisionedByTeamId === teamId,
+        mustSetPassword: profile.mustSetPassword === true
+      } : {})
     };
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));
 

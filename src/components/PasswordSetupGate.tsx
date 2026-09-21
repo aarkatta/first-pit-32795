@@ -75,7 +75,7 @@ export function PasswordSetupGate({ user, auth, online }: PasswordSetupGateProps
         ) : null}
         {requestState ? <StatePanel {...requestState} autoFocus /> : null}
 
-        <form className="stacked-form" onSubmit={submit}>
+        <form className="form-stack" onSubmit={submit}>
           <label htmlFor="new-password">
             New password
             <input

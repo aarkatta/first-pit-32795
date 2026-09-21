@@ -1391,3 +1391,37 @@ textarea:focus-visible,
 }
 
 .invite-email-action { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: -4px 0 0; }
+
+/* Administration tabs — the same shape as the tracker's TrackerTabs, but this
+   page switches panels in place rather than routing. */
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 12px; background: #eef1ee; }
+.admin-tabs__tab { padding: 8px 16px; border: 0; border-radius: 9px; background: transparent; color: #5b665f; font-size: 13px; font-weight: 700; cursor: pointer; }
+.admin-tabs__tab:hover { background: rgba(255, 255, 255, 0.7); color: #2f3a34; }
+.admin-tabs__tab--active { background: #fff; color: #1f2a24; box-shadow: 0 1px 3px rgba(20, 30, 24, 0.14); }
+.admin-tabs__tab:focus-visible { outline: 2px solid var(--focus, #3048a9); outline-offset: 2px; }
+
+/* Roster additions for provisioned accounts. */
+.roster-table__pending { display: block; color: #9a4a06; font-weight: 700; }
+.roster-footnote { margin: 14px 0 0; color: var(--muted); }
+
+/* Choosing a role when adding a member: a radio list, so every option's
+   consequence is readable without opening a select. */
+.role-choice { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.role-choice legend { margin-bottom: 4px; color: var(--text-soft); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.role-choice__option { display: flex; align-items: start; gap: 10px; padding: 10px 12px; border: 1px solid #e2e6e3; border-radius: 10px; cursor: pointer; }
+.role-choice__option:hover { border-color: #c3ccc6; background: #fafbfa; }
+.role-choice__option input { margin-top: 3px; }
+.role-choice__option span { display: grid; gap: 2px; font-weight: 400; }
+.role-choice__option small { color: var(--muted); }
+.role-choice__option:has(input:checked) { border-color: #3048a9; background: #f4f6ff; }
+
+/* The one screen where a starter password is visible. */
+.credentials-card { border-left: 4px solid #e0a03a; }
+.credentials-card__fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 18px 0; }
+.credentials-card__fields dt { color: var(--text-soft); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.credentials-card__fields dd { margin: 0; }
+.credentials-card__fields code { padding: 4px 10px; border-radius: 8px; background: #f1f3f1; font-size: 14px; }
+.credentials-card__password { font-size: 16px !important; font-weight: 700; letter-spacing: 0.02em; user-select: all; }
+.credentials-card__preview { margin-top: 16px; }
+.credentials-card__preview summary { color: var(--text-soft); font-size: 13px; font-weight: 700; cursor: pointer; }
+.credentials-card__preview pre { margin: 12px 0 0; padding: 14px; border-radius: 10px; background: #f6f7f6; font-size: 13px; white-space: pre-wrap; }

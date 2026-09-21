@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as DirectoryModule from '@/lib/directory';
@@ -47,7 +47,7 @@ vi.mock('@/lib/phase2-service', () => ({
   updateTeamPolicy: mocks.updateTeamPolicy
 }));
 
-import { TeamAdminPage } from './TeamAdminPage';
+import { AdministrationPage } from './AdministrationPage';
 
 const roster: TeamRoster = {
   members: [
@@ -97,12 +97,36 @@ beforeEach(() => {
   });
 });
 
-describe('TeamAdminPage membership administration', () => {
+/**
+ * Administration is tabbed, so most assertions open their tab first. The
+ * roster moved to Manage team and is covered by ManageTeamPage.test.tsx.
+ */
+function renderPage() {
+  return render(<MemoryRouter><AdministrationPage /></MemoryRouter>);
+}
+
+async function openTab(name: string) {
+  fireEvent.click(await screen.findByRole('tab', { name }));
+}
+
+describe('AdministrationPage', () => {
+  it('opens on Invitations and keeps the other sections out of view until asked', async () => {
+    renderPage();
+    expect(await screen.findByRole('tab', { name: 'Invitations', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Email' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Team files' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Priya Nair')).not.toBeInTheDocument();
+
+    // The roster is Manage team's job now.
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /back to manage team/i })).toHaveAttribute('href', '/team');
+  });
+
   it('creates an invite link, says no email was sent, and copies the link', async () => {
     mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_c3R1ZGVudA' });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
     fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'student@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
     await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledWith('team-1', 'student@example.com', 'student'));
@@ -111,7 +135,9 @@ describe('TeamAdminPage membership administration', () => {
     expect(notice).toHaveTextContent(link);
     expect(notice).toHaveTextContent('already copied to your clipboard');
     expect(writeText).toHaveBeenCalledWith(link);
-    // Gmail compose opens in a new tab with the invitation already written.
+    // Gmail compose opens in a new tab with the invitation already written. An
+    // invitation link is safe in a URL; a password never is, which is why
+    // CredentialsCard copies instead.
     const gmailInvite = screen.getByRole('link', { name: '✉ Email invite with Gmail to student@example.com' });
     expect(gmailInvite).toHaveAttribute('target', '_blank');
     const gmail = new URL(gmailInvite.getAttribute('href') ?? '');
@@ -119,14 +145,13 @@ describe('TeamAdminPage membership administration', () => {
     expect(gmail.searchParams.get('to')).toBe('student@example.com');
     expect(gmail.searchParams.get('su')).toBe('Join Robotics on First Pit');
     expect(gmail.searchParams.get('body')).toContain(link);
-    expect(screen.queryByRole('link', { name: 'Use another email app' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Invitation sent/)).not.toBeInTheDocument();
     Reflect.deleteProperty(navigator, 'clipboard');
   });
 
   it('still shows the invite link when the clipboard is unavailable', async () => {
     mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_abc' });
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
     fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'parent@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
     const notice = await screen.findByText(/or send them this link:/);
@@ -134,32 +159,48 @@ describe('TeamAdminPage membership administration', () => {
     expect(notice).not.toHaveTextContent('copied');
   });
 
-  it('lays the roster out as a table with one row per member', async () => {
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
-    const table = await screen.findByRole('table');
-    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Member', 'Role', 'Status', 'Actions']);
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows).toHaveLength(2);
-    expect(within(rows[0]).getByText('Dana Ruiz')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('(you)')).toBeInTheDocument();
-    // You cannot suspend yourself, so that action is not offered on your own row.
-    expect(within(rows[0]).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
-    expect(within(rows[1]).getByRole('combobox', { name: 'Role for Amir Khan' })).toHaveValue('student');
-    expect(within(rows[1]).getByRole('button', { name: 'Suspend' })).toBeInTheDocument();
+  it('lists pending invitations with a working revoke action', async () => {
+    mocks.revokeInvitation.mockResolvedValue({ invitationId: 'team-1_abc', status: 'revoked' });
+    renderPage();
+    expect(await screen.findByText('new@example.com')).toBeInTheDocument();
+    expect(screen.getByText(/mentor · pending/i)).toBeInTheDocument();
+    const emailInvite = screen.getByRole('link', { name: 'Email invite to new@example.com with Gmail (opens in a new tab)' });
+    expect(new URL(emailInvite.getAttribute('href') ?? '').searchParams.get('body')).toContain('as a mentor.');
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    await waitFor(() => expect(mocks.revokeInvitation).toHaveBeenCalledWith('team-1', 'team-1_abc'));
   });
 
-  it('renders display names rather than raw user ids', async () => {
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
-    expect(await screen.findByText('Dana Ruiz')).toBeInTheDocument();
-    expect(screen.getByText('Amir Khan')).toBeInTheDocument();
-    expect(screen.queryByText('student-1')).not.toBeInTheDocument();
-    expect(screen.queryByText('applicant-9876543210')).not.toBeInTheDocument();
+  it('shows join requests by display name rather than raw user id', async () => {
+    renderPage();
+    await openTab('Join requests');
     expect(screen.getByText('Priya Nair')).toBeInTheDocument();
+    expect(screen.queryByText('applicant-9876543210')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
+  it('shows each team setting with its state and flips only that setting', async () => {
+    mocks.updateTeamPolicy.mockResolvedValue({});
+    renderPage();
+    await openTab('Team settings');
+    const files = await screen.findByRole('switch', { name: 'Team files' });
+    expect(files).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText('Team files: Off')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Join requests' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Join requests: On')).toBeInTheDocument();
+    // Planned settings are greyed-out placeholders that cannot be switched on.
+    for (const name of ['Team messaging (coming soon)', 'Message history limit (coming soon)', 'Team discovery (coming soon)']) {
+      const placeholder = screen.getByRole('switch', { name });
+      expect(placeholder).toBeDisabled();
+      expect(placeholder).toHaveAttribute('aria-checked', 'false');
+    }
+    fireEvent.click(files);
+    await waitFor(() => expect(mocks.updateTeamPolicy).toHaveBeenCalledWith('team-1', { fileSharing: 'teamOnly' }));
   });
 
   it('sends the stored version with a moderation update', async () => {
     mocks.updateModerationCase.mockResolvedValue({ caseId: 'case-1', version: 4 });
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
+    await openTab('Safety');
     fireEvent.click(await screen.findByRole('button', { name: 'Keep and resolve' }));
     await waitFor(() => expect(mocks.updateModerationCase).toHaveBeenCalledWith({
       teamId: 'team-1',
@@ -172,7 +213,8 @@ describe('TeamAdminPage membership administration', () => {
 
   it('shows what was reported and removes the question after a confirmation', async () => {
     mocks.updateModerationCase.mockResolvedValue({ caseId: 'case-1', version: 4 });
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
+    await openTab('Safety');
     const link = await screen.findByRole('link', { name: 'Why is our robot slow?' });
     expect(link).toHaveAttribute('href', '/knowledge?question=q-1');
     expect(screen.getByText(/Unkind or bullying/)).toBeInTheDocument();
@@ -187,7 +229,8 @@ describe('TeamAdminPage membership administration', () => {
 
   it('keeps the queue working when a reported question can no longer be read', async () => {
     mocks.getDoc.mockRejectedValue(new Error('permission-denied'));
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
+    await openTab('Safety');
     expect(await screen.findByText('Reported content (no longer available)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove question' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Keep and resolve' })).toBeInTheDocument();
@@ -195,45 +238,16 @@ describe('TeamAdminPage membership administration', () => {
 
   it('explains a concurrent moderation edit instead of failing generically', async () => {
     mocks.updateModerationCase.mockRejectedValue(Object.assign(new Error('aborted'), { code: 'functions/aborted' }));
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
+    await openTab('Safety');
     fireEvent.click(await screen.findByRole('button', { name: 'Keep and resolve' }));
     expect(await screen.findByText(/another coach updated this case/i)).toBeInTheDocument();
     expect(screen.getByText(/refreshed with their change/i)).toBeInTheDocument();
   });
 
-  it('lists pending invitations with a working revoke action', async () => {
-    mocks.revokeInvitation.mockResolvedValue({ invitationId: 'team-1_abc', status: 'revoked' });
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
-    expect(await screen.findByText('new@example.com')).toBeInTheDocument();
-    expect(screen.getByText(/mentor · pending/i)).toBeInTheDocument();
-    const emailInvite = screen.getByRole('link', { name: 'Email invite to new@example.com with Gmail (opens in a new tab)' });
-    expect(new URL(emailInvite.getAttribute('href') ?? '').searchParams.get('body')).toContain('as a mentor.');
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
-    await waitFor(() => expect(mocks.revokeInvitation).toHaveBeenCalledWith('team-1', 'team-1_abc'));
-  });
-
-  it('shows each team setting with its state and flips only that setting', async () => {
-    mocks.updateTeamPolicy.mockResolvedValue({});
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
-    const files = await screen.findByRole('switch', { name: 'Team files' });
-    expect(files).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByText('Team files: Off')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Join requests' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText('Join requests: On')).toBeInTheDocument();
-    // Planned settings are greyed-out placeholders that cannot be switched on.
-    for (const name of ['Team messaging (coming soon)', 'Message history limit (coming soon)', 'Team discovery (coming soon)']) {
-      const placeholder = screen.getByRole('switch', { name });
-      expect(placeholder).toBeDisabled();
-      expect(placeholder).toHaveAttribute('aria-checked', 'false');
-    }
-    fireEvent.click(files);
-    await waitFor(() => expect(mocks.updateTeamPolicy).toHaveBeenCalledWith('team-1', { fileSharing: 'teamOnly' }));
-    fireEvent.click(await screen.findByRole('switch', { name: 'Join requests' }));
-    await waitFor(() => expect(mocks.updateTeamPolicy).toHaveBeenCalledWith('team-1', { membershipApproval: 'inviteOnly' }));
-  });
-
   it('lists administrative changes in plain language and skips task activity', async () => {
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
+    renderPage();
+    await openTab('Audit');
     expect(await screen.findByText("Dana Ruiz changed Amir Khan's role from student to mentor")).toBeInTheDocument();
     expect(screen.getByText('Dana Ruiz invited new@example.com as a mentor')).toBeInTheDocument();
     expect(screen.queryByText(/moved|administrative change/)).not.toBeInTheDocument();
@@ -242,9 +256,18 @@ describe('TeamAdminPage membership administration', () => {
   });
 
   it('orders the audit history newest first', async () => {
-    render(<MemoryRouter><TeamAdminPage /></MemoryRouter>);
-    await screen.findByText('Dana Ruiz');
+    renderPage();
+    await screen.findByRole('tab', { name: 'Audit' });
     const auditQuery = mocks.getDocs.mock.calls.map(([value]) => value).find((value) => value.name === 'auditEvents');
     expect(auditQuery.constraints).toContainEqual({ type: 'orderBy', field: 'createdAt', direction: 'desc' });
+  });
+
+  it('refuses the page to a member who is not a coach', async () => {
+    mocks.useTeamContext.mockReturnValue({
+      activeTeam: { teamId: 'team-1', userId: 'student-1', role: 'student', status: 'active', team: { id: 'team-1', name: 'Robotics' } }
+    });
+    renderPage();
+    expect(await screen.findByText(/coach access required/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
   });
 });

@@ -27,6 +27,13 @@ const navItems = [
   { to: '/team', label: 'Manage team', icon: '▤', mobile: true }
 ];
 
+/**
+ * Administration sits next to Manage team, and only for a coach or team leader.
+ * Hiding it is presentation only — `AdministrationPage` refuses anyone else on
+ * its own and every callable behind it re-checks the role.
+ */
+const adminNavItem = { to: '/admin', label: 'Administration', icon: '⚙', mobile: false };
+
 function getBrandMark(appName: string) {
   return appName.trim().split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -45,6 +52,7 @@ const routeLabels: { to: string; label: string }[] = [
   // Reached from the top-bar bell rather than the navigation.
   { to: '/notifications', label: 'Notifications' },
   { to: '/files', label: 'Team files' },
+  { to: '/admin', label: 'Administration' },
   { to: '/profile', label: 'Profile & settings' },
   { to: '/settings', label: 'Profile & settings' },
   { to: '/teams/new', label: 'Create a team' },
@@ -81,8 +89,11 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const activeTeam = teams.find((team) => team.teamId === activeTeamId);
   const activeTeamName = activeTeam?.team?.name ?? 'Unnamed team';
   const isAdmin = isCoachOrLeader(activeTeam);
-  const mobileItems = navItems.filter((item) => item.mobile);
-  const secondaryItems = navItems.filter((item) => !item.mobile);
+  const visibleNavItems = isAdmin
+    ? navItems.flatMap((item) => (item.to === '/team' ? [item, adminNavItem] : [item]))
+    : navItems;
+  const mobileItems = visibleNavItems.filter((item) => item.mobile);
+  const secondaryItems = visibleNavItems.filter((item) => !item.mobile);
   const currentPageLabel = pageLabel(location.pathname);
 
   useEffect(() => {
@@ -129,7 +140,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
         </Link>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.to} className="sidebar-nav__link" to={item.to} end={item.to === '/'}>
               <span aria-hidden="true">{item.icon}</span>{item.label}
             </NavLink>

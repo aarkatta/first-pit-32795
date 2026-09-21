@@ -21,6 +21,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
 - [App shell and navigation](#app-shell-and-navigation)
 - [Manage team](#manage-team)
+- [Administration](#administration)
 - [Landing page](#landing-page)
 - [Authentication hardening](#authentication-hardening)
 - [Calendar and Google Calendar integration (removed)](#calendar-and-google-calendar-integration-removed)
@@ -343,6 +344,71 @@ admits the invited, verified address only. Two failure modes are handled:
   before reporting a permission error.
 - *Wrong account.* If the read is still refused, the message names the address
   the invitee is signed in as, so a mismatch is obvious.
+
+### Coach-provisioned member accounts (2026-09-21)
+
+The second way onto a team, beside invitations. A coach opens **Manage team →
+＋ Add a member**, gives a name, an email address (typed twice) and a role;
+`provisionTeamMember` creates the Firebase Auth account with a generated
+single-use password and returns it once. The coach passes the credentials on
+from their own mailbox, and `PasswordSetupGate` makes the member replace the
+password before they reach any team data.
+
+Why it exists: the invitation flow asks the invitee to create an account,
+verify their address and accept — three handoffs, and the middle one routinely
+fails because Firebase's `noreply@<authDomain>` sender lands in spam (see
+`authEmailSender`). A student stuck at the verification gate could not be
+helped by anyone, because by design no coach held any lever over their account.
+
+**What the design holds onto.**
+
+- *The password is returned once and stored nowhere* — not in the
+  `phase2Operations` receipt, not in the profile, not in a log line. A replay of
+  the same `operationId` returns `temporaryPassword: null` and says to use
+  **Reset password**. `CredentialsCard` copies to the clipboard and deliberately
+  builds no URL: `invite-email.ts` can hand Gmail a pre-written compose screen
+  because an invitation link is safe in a query string, and a live password is
+  not — it would land in the coach's browser history.
+- *An address that already has an account is refused* (`already-exists`, with a
+  message pointing at invitations). Attaching someone's existing personal
+  account to a team without them acting is what the invitation flow prevents,
+  and that stays true.
+- *A coach's reset reaches only accounts their own team created.*
+  `resetTeamMemberPassword` requires `users/{uid}.provisionedByTeamId === teamId`
+  and an active membership, so a coach can never take over the personal account
+  of a mentor or parent who signed up themselves. Every reset writes an
+  `administrative.action` audit event; the Firestore transaction commits before
+  the Auth password changes, so a failure leaves an audited attempt rather than
+  an untraceable password change.
+- *`emailVerified` stays false.* Nobody proved the mailbox, and saying otherwise
+  would be a claim First Pit cannot support. Only invitation reads require the
+  claim (`firestore.rules`), so a provisioned member works everywhere else and
+  still has to verify before accepting an invitation to a *second* team.
+  `ProtectedRoute` exempts them from `EmailVerificationGate` on
+  `provisionedByTeamId`, and puts `PasswordSetupGate` ahead of it.
+- *The forced change is enforced server-side.* `setInitialPassword` refuses
+  unless `mustSetPassword` is still set, and sets the password itself, so the
+  flag cannot clear without the password really changing. The browser cannot
+  write the flag (the `users` rules pin which keys an owner may touch).
+- *`accountType` follows the coach's chosen role*, keeping a provisioned student
+  a student for `teamCreationRefusal`.
+
+**Known risks, accepted.** A mistyped address now produces a working account
+whose credentials the coach is about to email, where under the invitation flow
+the same typo was inert — the invitation simply became unreadable and expired.
+The compensating controls are the confirm-address field and the **Has not
+signed in yet** badge on the roster. And the password travels through two
+mailboxes in plain text; the forced change limits, but does not remove, how
+long it is useful.
+
+**Open product decision.** Provisioning moves consent from the family to the
+coach: no invitee acts, and the audit trail names the coach as the only actor.
+COPPA's verifiable parental consent is not satisfied by either path today (the
+invitation flow proves control of a mailbox, which may be the child's own), but
+provisioning makes First Pit the party creating identities for minors on a third
+party's say-so. Recording the coach's confirmation that the family agreed — a
+checkbox written into the audit event, or making the parent's address the
+provisioning field for students — is the cheap mitigation and is not built.
 
 ### Safe policy defaults
 
@@ -1026,25 +1092,56 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
 
 ## Manage team
 
-`/team` (`ManageTeamPage` = `TeamHubPage` overview + `TeamAdminPage`), as of
-2026-09-18:
+`/team` (`ManageTeamPage`), as of 2026-09-21, is the roster and nothing else.
+The administration that used to sit below it moved to `/admin`.
 
 - **Banner** — "Team name · Team #number" (the number in accent colour, omitted
-  until set), the viewer's role, active member and coach counts, and created
-  date. Coaches and team leaders get **Edit team name & number**, which opens an
+  until set), the viewer's role, the active member count, and the created date.
+  Coaches and team leaders get **Edit team name & number**, which opens an
   inline form (name 2–80 characters, number up to 8 digits, empty clears it)
-  saved through `updateTeamDetails`. Others see the name and number only. The
-  banner's ghost buttons keep a dark hover state; the global
-  `.button--ghost:hover` would otherwise whiten them and hide their white
-  label.
-- **Your memberships**, and for non-coaches a short roster preview and **Leave
-  team** (with confirmation; the sole coach must transfer leadership first).
-- **Administration** (coaches and team leaders only, re-checked by every
-  callable): invite a member by email and role → the link is copied, and **✉
-  Email invite with Gmail** opens a pre-written Gmail message (see *Invitations
-  are links, not emails*); safety defaults; roster with role changes, suspension
-  and removal; invitations (pending ones offer **Email invite**, **Copy link**
-  and **Revoke**); join approvals; moderation queue; audit history.
+  saved through `updateTeamDetails`, and a link to **Administration**. Others see
+  the name and number only. The banner's ghost buttons keep a dark hover state;
+  the global `.button--ghost:hover` would otherwise whiten them and hide their
+  white label.
+- **Team members** — one table for everyone (`RosterTable`). A coach or team
+  leader also gets the role select, **Suspend**/**Restore**, **Make leader**,
+  and **Reset password** on rows the team provisioned; a member sees names,
+  roles and statuses only. A **Has not signed in yet** badge marks anyone still
+  owing a password change.
+- **＋ Add a member** (coaches and team leaders) — `AddMemberDialog` →
+  `provisionTeamMember` → `CredentialsCard`. See *Coach-provisioned member
+  accounts*. Someone who already has a First Pit account is refused here and
+  pointed at an invitation.
+- **Leave team** (with confirmation; the sole coach must transfer leadership
+  first) and **Joining or starting another team**.
+
+`TeamHubPage` no longer exists — its hero, leave and join blocks are part of
+`ManageTeamPage`.
+
+## Administration
+
+`/admin` (`AdministrationPage`), coach and team leader only, re-checked by every
+callable behind it. One `loadAdminData` read feeds five tabs:
+
+- **Invitations** — invite by email and role → the link is copied, and **✉ Email
+  invite with Gmail** opens a pre-written Gmail message (see *Invitations are
+  links, not emails*); pending invitations offer **Email invite**, **Copy link**
+  and **Revoke**.
+- **Join requests** — approve or reject, with the team ID to share.
+- **Team settings** — Team files and Join requests, plus the greyed-out planned
+  settings.
+- **Safety** — the moderation queue, with optimistic-concurrency conflicts
+  explained rather than reported generically.
+- **Audit** — the administrative record, paginated.
+
+The sidebar shows the **Administration** entry only to coaches and team leaders;
+hiding it is presentation only. `/team/admin` redirects here, `/hub` redirects to
+`/team`, and `/admin` is no longer a redirect.
+
+`listTeamMembers` adds two admin-only fields, `provisionedByThisTeam` and
+`mustSetPassword`, omitted entirely for other members — a teammate has no
+business knowing who has not finished signing in. **Reset password** appears only
+where the first is true, because the server refuses the rest.
 
 ## Landing page
 

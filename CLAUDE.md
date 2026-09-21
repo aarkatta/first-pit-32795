@@ -132,7 +132,8 @@ membership, safety, plus the shared validators `requireTeamId`, `requireTeamAdmi
 `auditRecord`, …), `phase3.ts` (tracker/goals/notifications/files),
 `kanban.ts`, `kanban-templates.ts` (board presets and team-saved templates),
 `phase5.ts` (Q&A/videos/polls), `phase7.ts`
-(dashboard/search/profile), `standard-plan.ts` (the seeded season plan). There is no `phase4.ts` — chat was removed from the
+(dashboard/search/profile), `team-members.ts` (coach-provisioned accounts),
+`standard-plan.ts` (the seeded season plan). There is no `phase4.ts` — chat was removed from the
 product — and no `phase6.ts`: the scorer now links out to FIRST's official
 scoresheet and stores nothing. `phase2.ts` is the shared validation/authorization toolkit — reuse its
 helpers instead of re-deriving auth checks. There is also one
@@ -155,11 +156,25 @@ A callable must return stored dates as **ISO strings** — a raw Firestore
 `Timestamp` reaches the browser as `{_seconds, _nanoseconds}`, which `toDate()`
 cannot read (see `pickPublicFields` in `phase7.ts`).
 
-Invitations are **not emailed** by First Pit: `createInvitation` stores the
-invitation and the coach shares the `/join?invite=<id>` link themselves. Team
-admin's **Email invite** opens Gmail's compose screen in a new tab with the
-message written (`src/lib/invite-email.ts`) — no server email, no provider,
+There are **two ways onto a team**.
+
+*Invitations* are **not emailed** by First Pit: `createInvitation` stores the
+invitation and the coach shares the `/join?invite=<id>` link themselves.
+Administration's **Email invite** opens Gmail's compose screen in a new tab with
+the message written (`src/lib/invite-email.ts`) — no server email, no provider,
 nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option.
+
+*Provisioning* (`functions/src/team-members.ts`) is for someone with no First Pit
+account: `provisionTeamMember` creates the Auth account and returns a generated
+password **once**, the coach passes it on from their own mailbox, and
+`PasswordSetupGate` forces the member to replace it before they reach any team
+data. Rules that module exists to hold: the password is never stored, logged or
+put in a URL (`CredentialsCard` copies, it does not build a Gmail link); an
+address that already has an account is refused so consent stays with the
+invitation flow; `resetTeamMemberPassword` only reaches accounts where
+`users/{uid}.provisionedByTeamId` is this team; and `emailVerified` stays false
+because nobody proved the mailbox. See *Coach-provisioned member accounts* in
+`docs/architecture.md`.
 
 ### Client structure
 
@@ -181,11 +196,14 @@ nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option
   client includes `teamLeader`; `functions/src/phase2.ts` `TEAM_ROLES` is the
   *assignable* set and excludes it.
 - Navigation (`AppShell.tsx`): sidebar Home, Tracker, Scorer, Knowledge base,
-  Manage team, View profile, Sign out (Team files has no entry; it is reached
+  Manage team, Administration (coaches/team leaders only), View profile, Sign out
+  (Team files has no entry; it is reached
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
-  (`/team`, `ManageTeamPage`) is the team overview for everyone plus, for
-  coaches/team leaders, the `TeamAdminPage` sections below it; `/hub`, `/admin`
-  and `/team/admin` redirect there. Search, State lab and Emulators pages were
+  (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
+  ＋ Add a member, and leaving a team. **Administration** (`/admin`,
+  `AdministrationPage`) is coach-only and tabs over invitations, join requests,
+  team settings, safety and audit; `/team/admin` redirects there and `/hub`
+  redirects to `/team`. Search, State lab and Emulators pages were
   removed (`/search` → Home). Tracker routes render full-width
   (`wideRoutes` → `.app-main--wide`); other pages use a centred 1440px column.
 - The tracker is four routes presented as tabs by
