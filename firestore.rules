@@ -113,7 +113,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.userId == userId
         && request.resource.data.keys().hasAll(['userId', 'profileVisibility', 'searchable', 'allowParentVisibility', 'privateConversations'])
-        && request.resource.data.keys().hasOnly(['userId', 'profileVisibility', 'searchable', 'allowParentVisibility', 'privateConversations', 'isMinor', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['userId', 'profileVisibility', 'searchable', 'allowParentVisibility', 'privateConversations', 'updatedAt'])
         && request.resource.data.profileVisibility == 'teamOnly'
         && request.resource.data.searchable == false
         && request.resource.data.allowParentVisibility == false

@@ -17,7 +17,7 @@ describe('Phase 7 client service contracts', () => {
   });
 
   it('preserves every callable name, payload, empty input, and returned data', async () => {
-    const profile = { displayName: 'Student', photoURL: null, theme: 'system' as const, highContrast: true, reducedMotion: false, fontScale: 'large' as const, emailNotifications: true, pushNotifications: false, isMinor: true };
+    const profile = { displayName: 'Student', photoURL: null, theme: 'system' as const, highContrast: true, reducedMotion: false, fontScale: 'large' as const, emailNotifications: true, pushNotifications: false };
     const cases: Array<[string, () => Promise<unknown>, unknown]> = [
       ['getDashboard', () => getDashboard('team-1'), { teamId: 'team-1' }],
       ['requestAccountDeletion', () => requestAccountDeletion(), {}],

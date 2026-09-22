@@ -1050,8 +1050,22 @@ The `test:phase7-emulator` workflow covers these representative paths:
 Dashboard notification links are normalized to known internal routes and map
 legacy `/tracker` and `/calendar` links to the current coordination route.
 Profile settings persist display name, picture URL, theme, accessibility
-preferences, notification preferences, and the privacy-safe minor flag. Safety
-notifications are always written as enabled.
+preferences and notification preferences. Safety notifications are always
+written as enabled.
+
+**The "I am under 18" checkbox was removed (2026-09-21).** It stored a
+self-declared `privacySettings/{uid}.isMinor` that nothing read — no rule,
+callable or screen behaved differently — while the code comments claimed it
+gated youth-safety behaviour. It was also untrustworthy (a student could
+untick it) and collected information about children that was not used. Now:
+the rules refuse the key on a client write, `updateProfileSettings` and
+`updatePrivacySettings` ignore it from older clients and delete any stored
+value on the next save, and the profile no longer reads `privacySettings` at
+all, since every field in it is a fixed default. If youth-safety behaviour is
+ever needed, key it off the coach-assigned team role (`student`), not a
+self-declaration. Saving the profile also no longer calls
+`updatePrivacySettings` as a second write; that callable is now unused by the
+web client and stays deployed only so tabs on an older bundle can still save.
 
 ---
 

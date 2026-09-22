@@ -90,10 +90,6 @@ export function updateTeamPolicy(teamId: string, policy: TeamPolicyUpdate) {
   return call<{ teamId: string } & TeamPolicyUpdate, { teamId: string } & TeamPolicyUpdate>('updateTeamPolicy', { teamId, ...policy });
 }
 
-export function updatePrivacySettings(input: { isMinor?: boolean } = {}) {
-  return call<{ profileVisibility: 'teamOnly'; searchable: false; isMinor?: boolean }, { userId: string; profileVisibility: 'teamOnly'; searchable: false }>('updatePrivacySettings', { profileVisibility: 'teamOnly', searchable: false, ...input });
-}
-
 export function createReport(input: {
   teamId: string;
   targetType: 'user' | 'content';

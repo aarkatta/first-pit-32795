@@ -674,28 +674,29 @@ export const updateTeamPolicy = onCall(async (request: Phase2Request) => {
   return { teamId, ...policy };
 });
 
+/**
+ * Re-asserts the fixed privacy defaults on the caller's own record.
+ *
+ * The web client no longer calls this: `updateProfileSettings` writes the same
+ * document, and saving the profile used to call both. It stays deployed so a
+ * tab still running an older bundle can save, and it scrubs the retired
+ * `isMinor` field the same way. Nothing a caller can change here is sensitive
+ * any more, so it writes no audit event. Safe to delete once no client calls it.
+ */
 export const updatePrivacySettings = onCall(async (request: Phase2Request) => {
   const auth = requireCallableAuth(request);
   const profileVisibility = getInput(request, 'profileVisibility') ?? 'teamOnly';
   const searchable = getInput(request, 'searchable') ?? false;
   if (profileVisibility !== 'teamOnly' || searchable !== false) throw new HttpsError('failed-precondition', 'Phase 2 privacy defaults keep profiles team-only and not searchable.');
-  const isMinor = getInput(request, 'isMinor');
-  if (isMinor !== undefined && typeof isMinor !== 'boolean') throw new HttpsError('invalid-argument', 'Minor status must be boolean.');
-  const db = getFirestore();
-  const privacyRef = db.doc(`privacySettings/${auth.uid}`);
-  // `isMinor` drives youth-safety defaults across the product, so the write and
-  // its audit trail have to land together or not at all.
-  await db.runTransaction(async (transaction) => {
-    await transaction.get(privacyRef);
-    const now = FieldValue.serverTimestamp();
-    transaction.set(privacyRef, { userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(isMinor === undefined ? {} : { isMinor }), updatedAt: now }, { merge: true });
-    transaction.set(db.collection('auditEvents').doc(), auditRecord({
-      type: 'sensitive.updated',
-      actorUserId: auth.uid,
-      targetResource: `privacySettings/${auth.uid}`,
-      metadata: { action: 'privacy.updated' }
-    }));
-  });
+  await getFirestore().doc(`privacySettings/${auth.uid}`).set({
+    userId: auth.uid,
+    profileVisibility: 'teamOnly',
+    searchable: false,
+    allowParentVisibility: false,
+    privateConversations: false,
+    isMinor: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
   return { userId: auth.uid, profileVisibility: 'teamOnly' as const, searchable: false as const };
 });
 

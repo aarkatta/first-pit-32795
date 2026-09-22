@@ -8,7 +8,6 @@ import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { getProfileFirestore, loadProfileSettings, type LoadedProfileSettings, type NotificationPreferences, type UserSettings } from '@/lib/profile-settings';
 import { requestAccountDeletion, updateProfileSettings } from '@/lib/phase7-service';
-import { updatePrivacySettings } from '@/lib/phase2-service';
 import { usePreferences } from '@/lib/preferences-context';
 
 export function ProfilePage() {
@@ -53,12 +52,8 @@ export function ProfilePage() {
         displayName: settings.profile.displayName,
         photoURL: settings.profile.photoURL,
         ...settings.preferences,
-        ...settings.notifications,
-        ...(typeof settings.privacy.isMinor === 'boolean' ? { isMinor: settings.privacy.isMinor } : {})
+        ...settings.notifications
       });
-      // The privacy record is a separate server-owned document; saving the
-      // profile alone left the minor flag and visibility unenforced.
-      await updatePrivacySettings(typeof settings.privacy.isMinor === 'boolean' ? { isMinor: settings.privacy.isMinor } : {});
       if (activeUserId.current !== startedUserId) return;
       setMessage({ title: 'Profile saved', body: 'Your profile and preferences are saved. Safety notifications remain enabled.' });
     } catch (error) {
@@ -112,7 +107,7 @@ export function ProfilePage() {
           <article className="feature-panel"><span className="eyebrow">NOTIFICATIONS</span><h3>Choose your updates</h3><p>Assignments, moderation, and safety notices cannot be suppressed.</p><div className="form-stack"><label className="checkbox-row"><input type="checkbox" checked={settings.notifications.emailNotifications} onChange={(event) => updateNotifications({ emailNotifications: event.target.checked })} /> Email notifications</label><label className="checkbox-row"><input type="checkbox" checked={settings.notifications.pushNotifications} onChange={(event) => updateNotifications({ pushNotifications: event.target.checked })} /> Push notifications</label><label className="checkbox-row"><input type="checkbox" checked disabled /> Safety notifications (always on)</label></div></article>
         </section>
         <section className="split-panels">
-          <article className="feature-panel"><span className="eyebrow">PRIVACY</span><h3>Team-only by default</h3><p>Parent visibility and private conversations follow explicit team policy.</p><div><span>Visibility: team members</span><span>Searchable: no</span><span>Public profile: no</span></div><label className="checkbox-row"><input type="checkbox" checked={settings.privacy.isMinor === true} onChange={(event) => setSettings({ ...settings, privacy: { ...settings.privacy, isMinor: event.target.checked } })} /> I am under 18</label></article>
+          <article className="feature-panel"><span className="eyebrow">PRIVACY</span><h3>Team-only by default</h3><p>Parent visibility and private conversations follow explicit team policy.</p><div><span>Visibility: team members</span><span>Searchable: no</span><span>Public profile: no</span></div></article>
           <article className="feature-panel"><span className="eyebrow">SESSION & ACCOUNT</span><h3>Account controls</h3><p>Use a reset email to update your password. Sign out stays available in the team shell.</p><div className="form-actions"><button className="button button--ghost" type="button" disabled={busy || !online || !user.email} onClick={() => void sendRecovery()}>Send password reset</button><button className="button button--danger" type="button" disabled={busy || !online} onClick={() => void deleteAccount()}>Request account deletion</button></div></article>
         </section>
         <button className="button" type="submit" disabled={busy || !online}>{busy ? 'Saving…' : 'Save profile & preferences'}</button>

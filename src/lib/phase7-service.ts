@@ -70,6 +70,6 @@ export function requestAccountDeletion() {
   return call<Record<string, never>, { status: 'pending' }>('requestAccountDeletion', {});
 }
 
-export function updateProfileSettings(input: { displayName: string; photoURL: string | null; theme: 'light' | 'dark' | 'system'; highContrast: boolean; reducedMotion: boolean; fontScale: 'default' | 'large'; emailNotifications: boolean; pushNotifications: boolean; isMinor?: boolean }) {
+export function updateProfileSettings(input: { displayName: string; photoURL: string | null; theme: 'light' | 'dark' | 'system'; highContrast: boolean; reducedMotion: boolean; fontScale: 'default' | 'large'; emailNotifications: boolean; pushNotifications: boolean }) {
   return call<typeof input, { userId: string; saved: true; safetyNotifications: true }>('updateProfileSettings', input);
 }

@@ -15,7 +15,6 @@ export type PrivacySettings = {
   searchable: false;
   allowParentVisibility: false;
   privateConversations: false;
-  isMinor?: boolean;
   updatedAt?: unknown;
 };
 
