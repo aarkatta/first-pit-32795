@@ -197,6 +197,9 @@ export function ManageTeamPage() {
       {adding && teamId ? (
         <AddMemberDialog
           teamId={teamId}
+          teamName={teamName}
+          teamNumber={teamNumber}
+          coachName={user?.displayName ?? null}
           online={online}
           onAdded={(member) => {
             setAdding(false);
@@ -259,14 +262,6 @@ export function ManageTeamPage() {
           />
         ) : null}
 
-        {canAdminister ? (
-          <p className="roster-footnote">
-            <small>
-              Someone who already has a First Pit account — another coach, a mentor — joins by
-              invitation instead, on <Link to="/admin">the Administration page</Link>.
-            </small>
-          </p>
-        ) : null}
       </section>
 
       <section className="split-panels">

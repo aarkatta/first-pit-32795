@@ -5,6 +5,7 @@ vi.mock('./callable', () => ({ call }));
 
 import {
   describePasswordProblem,
+  isExistingAccountError,
   MAX_MEMBER_PASSWORD_LENGTH,
   MIN_MEMBER_PASSWORD_LENGTH,
   provisionTeamMember,
@@ -54,5 +55,15 @@ describe('provisioning callables', () => {
     call.mockResolvedValue({ userId: 'member-1' });
     void setInitialPassword('my robot is fast');
     expect(call).toHaveBeenLastCalledWith('setInitialPassword', { newPassword: 'my robot is fast' });
+  });
+});
+
+describe('isExistingAccountError', () => {
+  it('recognises the already-exists refusal, and nothing else', () => {
+    expect(isExistingAccountError({ code: 'functions/already-exists' })).toBe(true);
+    expect(isExistingAccountError({ code: 'already-exists' })).toBe(true);
+    expect(isExistingAccountError({ code: 'functions/permission-denied' })).toBe(false);
+    expect(isExistingAccountError(new Error('already-exists'))).toBe(false);
+    expect(isExistingAccountError(null)).toBe(false);
   });
 });

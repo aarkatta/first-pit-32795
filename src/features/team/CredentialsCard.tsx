@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { copyToClipboard } from '@/lib/clipboard';
 import { credentialsMessage, credentialsSubject } from '@/lib/member-credentials';
 import type { ProvisionedMember } from '@/lib/team-members';
 
@@ -9,15 +10,6 @@ type CredentialsCardProps = {
   coachName?: string | null;
   onDone: () => void;
 };
-
-async function copy(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The one time the starter password is visible.
@@ -53,7 +45,7 @@ export function CredentialsCard({ member, teamName, teamNumber, coachName, onDon
   });
 
   async function runCopy(kind: 'message' | 'password', text: string) {
-    const ok = await copy(text);
+    const ok = await copyToClipboard(text);
     setCopied(ok ? kind : null);
     setCopyFailed(!ok);
   }

@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   getDocs: vi.fn(),
   getDoc: vi.fn(),
   revokeInvitation: vi.fn(),
-  createInvitation: vi.fn(),
   approveJoinRequest: vi.fn(),
   updateModerationCase: vi.fn(),
   updateTeamPolicy: vi.fn()
@@ -38,7 +37,6 @@ vi.mock('@/lib/directory', async (importOriginal) => ({
 vi.mock('@/lib/phase2-service', () => ({
   approveJoinRequest: mocks.approveJoinRequest,
   assignTeamRole: vi.fn(),
-  createInvitation: mocks.createInvitation,
   rejectJoinRequest: vi.fn(),
   revokeInvitation: mocks.revokeInvitation,
   transferTeamLeadership: vi.fn(),
@@ -110,53 +108,19 @@ async function openTab(name: string) {
 }
 
 describe('AdministrationPage', () => {
-  it('opens on Invitations and keeps the other sections out of view until asked', async () => {
+  it('opens on Invitations as a status list, with no second way to add someone', async () => {
     renderPage();
     expect(await screen.findByRole('tab', { name: 'Invitations', selected: true })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Email' })).toBeInTheDocument();
+    expect(await screen.findByText('new@example.com')).toBeInTheDocument();
+    // Adding a member is always Manage team -> + Add a member.
+    expect(screen.queryByRole('textbox', { name: 'Email' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create invite link/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /manage team → ＋ add a member/i })).toHaveAttribute('href', '/team');
+
     expect(screen.queryByRole('switch', { name: 'Team files' })).not.toBeInTheDocument();
     expect(screen.queryByText('Priya Nair')).not.toBeInTheDocument();
-
-    // The roster is Manage team's job now.
+    // The roster is Manage team's job too.
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /back to manage team/i })).toHaveAttribute('href', '/team');
-  });
-
-  it('creates an invite link, says no email was sent, and copies the link', async () => {
-    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_c3R1ZGVudA' });
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    renderPage();
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'student@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
-    await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledWith('team-1', 'student@example.com', 'student'));
-    const link = `${window.location.origin}/join?invite=team-1_c3R1ZGVudA`;
-    const notice = await screen.findByText(/Invitation created for student@example\.com\. First Pit does not send email itself/);
-    expect(notice).toHaveTextContent(link);
-    expect(notice).toHaveTextContent('already copied to your clipboard');
-    expect(writeText).toHaveBeenCalledWith(link);
-    // Gmail compose opens in a new tab with the invitation already written. An
-    // invitation link is safe in a URL; a password never is, which is why
-    // CredentialsCard copies instead.
-    const gmailInvite = screen.getByRole('link', { name: '✉ Email invite with Gmail to student@example.com' });
-    expect(gmailInvite).toHaveAttribute('target', '_blank');
-    const gmail = new URL(gmailInvite.getAttribute('href') ?? '');
-    expect(gmail.host).toBe('mail.google.com');
-    expect(gmail.searchParams.get('to')).toBe('student@example.com');
-    expect(gmail.searchParams.get('su')).toBe('Join Robotics on First Pit');
-    expect(gmail.searchParams.get('body')).toContain(link);
-    expect(screen.queryByText(/Invitation sent/)).not.toBeInTheDocument();
-    Reflect.deleteProperty(navigator, 'clipboard');
-  });
-
-  it('still shows the invite link when the clipboard is unavailable', async () => {
-    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_abc' });
-    renderPage();
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Email' }), { target: { value: 'parent@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
-    const notice = await screen.findByText(/or send them this link:/);
-    expect(notice).toHaveTextContent(`${window.location.origin}/join?invite=team-1_abc`);
-    expect(notice).not.toHaveTextContent('copied');
   });
 
   it('lists pending invitations with a working revoke action', async () => {

@@ -1402,7 +1402,6 @@ textarea:focus-visible,
 
 /* Roster additions for provisioned accounts. */
 .roster-table__pending { display: block; color: #9a4a06; font-weight: 700; }
-.roster-footnote { margin: 14px 0 0; color: var(--muted); }
 
 /* Choosing a role when adding a member: a radio list, so every option's
    consequence is readable without opening a select. */

@@ -156,11 +156,15 @@ A callable must return stored dates as **ISO strings** — a raw Firestore
 `Timestamp` reaches the browser as `{_seconds, _nanoseconds}`, which `toDate()`
 cannot read (see `pickPublicFields` in `phase7.ts`).
 
-There are **two ways onto a team**.
+There are **two ways onto a team, and one entry point**: a coach always adds
+someone with **Manage team → ＋ Add a member**, and First Pit picks the
+mechanism. Do not add a second place to create members or invitations.
 
-*Invitations* are **not emailed** by First Pit: `createInvitation` stores the
-invitation and the coach shares the `/join?invite=<id>` link themselves.
-Administration's **Email invite** opens Gmail's compose screen in a new tab with
+*Invitations* are for an address that already has an account —
+`provisionTeamMember` refuses it with `already-exists` and the dialog offers an
+invitation instead. They are **not emailed** by First Pit: `createInvitation`
+stores the invitation and the coach shares the `/join?invite=<id>` link
+themselves. **Email invite** opens Gmail's compose screen in a new tab with
 the message written (`src/lib/invite-email.ts`) — no server email, no provider,
 nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option.
 
@@ -201,7 +205,7 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
   ＋ Add a member, and leaving a team. **Administration** (`/admin`,
-  `AdministrationPage`) is coach-only and tabs over invitations, join requests,
+  `AdministrationPage`) is coach-only and tabs over the invitations list, join requests,
   team settings, safety and audit; `/team/admin` redirects there and `/hub`
   redirects to `/team`. Search, State lab and Emulators pages were
   removed (`/search` → Home). Tracker routes render full-width

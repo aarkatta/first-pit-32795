@@ -310,9 +310,10 @@ upload control. No callable, rule or index changed.
 First Pit sends no email for invitations — there is no mail provider.
 `createInvitation` stores a pending invitation (normalized email, role, team
 name, 7-day expiry, audit record) and returns its id; the coach sends the
-invite link (`/join?invite=<id>`) themselves. The Administration section says
-so, copies the link to the clipboard on creation, and keeps **Copy link** on
-every pending invitation. The invitee must sign in as, and verify, the invited
+invite link (`/join?invite=<id>`) themselves. Since 2026-09-21 invitations are
+created only from **Manage team → ＋ Add a member**, when the address already
+has an account; the dialog copies the link on creation, and Administration's
+Invitations tab keeps **Copy link** on every pending invitation. The invitee must sign in as, and verify, the invited
 address before `acceptInvitation` succeeds.
 
 **Email invite (2026-09-18).** To save the coach retyping the message, the
@@ -1108,10 +1109,15 @@ The administration that used to sit below it moved to `/admin`.
   and **Reset password** on rows the team provisioned; a member sees names,
   roles and statuses only. A **Has not signed in yet** badge marks anyone still
   owing a password change.
-- **＋ Add a member** (coaches and team leaders) — `AddMemberDialog` →
-  `provisionTeamMember` → `CredentialsCard`. See *Coach-provisioned member
-  accounts*. Someone who already has a First Pit account is refused here and
-  pointed at an invitation.
+- **＋ Add a member** (coaches and team leaders) — **the only way to add
+  anyone**, decided 2026-09-21. `AddMemberDialog` calls `provisionTeamMember`:
+  a new address gets an account and `CredentialsCard` shows the starter
+  password; an address that already has an account is refused
+  (`already-exists`, `isExistingAccountError`), and the same dialog offers
+  **Invite <email> as a <role>**, which calls `createInvitation`, copies the
+  link and offers **Email invite with Gmail**. The coach never has to know in
+  advance which mechanism an address needs. See *Coach-provisioned member
+  accounts*.
 - **Leave team** (with confirmation; the sole coach must transfer leadership
   first) and **Joining or starting another team**.
 
@@ -1123,10 +1129,9 @@ The administration that used to sit below it moved to `/admin`.
 `/admin` (`AdministrationPage`), coach and team leader only, re-checked by every
 callable behind it. One `loadAdminData` read feeds five tabs:
 
-- **Invitations** — invite by email and role → the link is copied, and **✉ Email
-  invite with Gmail** opens a pre-written Gmail message (see *Invitations are
-  links, not emails*); pending invitations offer **Email invite**, **Copy link**
-  and **Revoke**.
+- **Invitations** — a status list only, with no create form: invitations are
+  created from **＋ Add a member**. Pending invitations offer **Email invite**,
+  **Copy link** and **Revoke** (see *Invitations are links, not emails*).
 - **Join requests** — approve or reject, with the team ID to share.
 - **Team settings** — Team files and Join requests, plus the greyed-out planned
   settings.

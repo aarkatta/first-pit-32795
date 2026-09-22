@@ -1,5 +1,5 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, startAfter, where, type Firestore, type QueryDocumentSnapshot } from 'firebase/firestore';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { StatePanel } from '@/components/StatePanel';
@@ -15,13 +15,12 @@ import {
   type TeamPolicy
 } from '@/lib/domain';
 import { useTeamContext } from '@/lib/team-context';
-import { inviteEmailBody, inviteEmailSubject, inviteGmailHref, type InviteEmailInput } from '@/lib/invite-email';
+import { copyToClipboard } from '@/lib/clipboard';
+import { inviteEmailBody, inviteEmailSubject, inviteGmailHref, inviteLink, type InviteEmailInput } from '@/lib/invite-email';
 import { shareText } from '@/lib/native-links';
 import { isNativeShell } from '@/lib/native-shell';
-import { publicWebOrigin } from '@/lib/public-origin';
 import {
   approveJoinRequest,
-  createInvitation,
   rejectJoinRequest,
   revokeInvitation,
   updateModerationCase,
@@ -83,20 +82,6 @@ const AUDIT_LIMIT = 100;
  */
 const INVITATION_STATUSES: InvitationStatus[] = ['pending', 'accepted', 'revoked', 'expired'];
 const MODERATION_STATUSES: ModerationStatus[] = ['open', 'investigating', 'resolved', 'dismissed'];
-
-function inviteLink(invitationId: string) {
-  return `${publicWebOrigin()}/join?invite=${encodeURIComponent(invitationId)}`;
-}
-
-async function copyToClipboard(text: string) {
-  try {
-    if (!navigator.clipboard) return false;
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function parseInvitation(id: string, data: Record<string, unknown>): InvitationRow {
   return {
@@ -276,10 +261,6 @@ export function AdministrationPage() {
   const [error, setError] = useState<Error | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // The invite just created, so the notice can offer to email it.
-  const [lastInvite, setLastInvite] = useState<{ id: string; email: string; role: string } | null>(null);
-  const [email, setEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'student' | 'parent' | 'mentor' | 'coach'>('student');
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<AdminTab>('invitations');
   const requestGeneration = useRef(0);
@@ -374,22 +355,6 @@ export function AdministrationPage() {
     finally { setBusy(false); }
   }
 
-  function submitInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!teamId) return;
-    const invitee = email;
-    void run(async () => {
-      const { invitationId } = await createInvitation(teamId, invitee, inviteRole);
-      setEmail('');
-      // First Pit does not send email, so the coach has to deliver the link.
-      // Saying "sent" here used to make coaches wait for an email that never came.
-      const link = inviteLink(invitationId);
-      const copied = await copyToClipboard(link);
-      setLastInvite({ id: invitationId, email: invitee, role: inviteRole });
-      setNotice(`Invitation created for ${invitee}. First Pit does not send email itself — use ${nativeShell ? 'Send invite' : 'Email invite'} to open your email app with the message written, or send them this link${copied ? ' (already copied to your clipboard)' : ''}: ${link}. It works for 7 days, only when they sign in as ${invitee}.`);
-    });
-  }
-
   function inviteEmailFor(invitation: { id: string; email: string; role: string }): InviteEmailInput {
     return {
       email: invitation.email,
@@ -412,7 +377,6 @@ export function AdministrationPage() {
 
   async function copyInviteLink(invitationId: string) {
     const link = inviteLink(invitationId);
-    setLastInvite(null);
     setNotice(await copyToClipboard(link) ? `Invite link copied: ${link}` : `Invite link: ${link}`);
   }
 
@@ -437,14 +401,7 @@ export function AdministrationPage() {
 
       {!online ? <StatePanel variant="offline" title="You are offline" message="This page is read-only until the connection returns." /> : null}
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
-      {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => { setNotice(null); setLastInvite(null); }} /> : null}
-      {notice && lastInvite ? (
-        <p className="invite-email-action">
-          {nativeShell
-            ? <button className="button" type="button" onClick={() => void shareInvite(lastInvite)}>✉ Send invite to {lastInvite.email}</button>
-            : <a className="button" href={inviteGmailHref(inviteEmailFor(lastInvite))} target="_blank" rel="noopener noreferrer">✉ Email invite with Gmail to {lastInvite.email}</a>}
-        </p>
-      ) : null}
+      {notice ? <StatePanel variant="success" title="Invitation" message={notice} actionLabel="Dismiss" onAction={() => setNotice(null)} /> : null}
       <div className="admin-tabs" role="tablist" aria-label="Administration sections">
         {ADMIN_TABS.map((entry) => (
           <button
@@ -463,21 +420,15 @@ export function AdministrationPage() {
       </div>
 
       {tab === 'invitations' ? (
-        <section className="split-panels" role="tabpanel" id="admin-panel-invitations" aria-labelledby="admin-tab-invitations">
-<article className="feature-panel">
-        <span className="eyebrow">INVITE A MEMBER</span>
-        <h3>Grow the private roster</h3>
-        <p>Create an invite link for someone's email address, then send it to them yourself — First Pit does not email invitations. Links expire after 7 days. Team discovery stays private.</p>
-        <form className="form-stack" onSubmit={submitInvite}>
-          <label>Email<input id="invite-member" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)}><option value="student">Student</option><option value="parent">Parent</option><option value="mentor">Mentor</option><option value="coach">Coach</option></select></label>
-          <button className="button" type="submit" disabled={locked}>{busy ? 'Creating…' : 'Create invite link'}</button>
-        </form>
-        <p><small>The invitee opens the link, signs in with that same email address and verifies it, then accepts. Pending links stay under Invitations, with <strong>Email invite</strong> (opens Gmail in a new tab with the message written) and <strong>Copy link</strong>.</small></p>
-        </article>
-<article className="feature-panel">
+        <section role="tabpanel" id="admin-panel-invitations" aria-labelledby="admin-tab-invitations">
+          <article className="feature-panel">
         <span className="eyebrow">INVITATIONS</span>
         <h3>{pendingInvitations.length} pending invitation{pendingInvitations.length === 1 ? '' : 's'}</h3>
+        <p>
+          To add someone, use <Link to="/team">Manage team → ＋ Add a member</Link>. It invites an
+          address that already has a First Pit account and creates the account for one that does
+          not. This list is where you track, resend and revoke invitations.
+        </p>
         {data.invitations.length === 0 ? <p>No invitations have been sent for this team yet.</p> : null}
         {data.invitations.map((invitation) => (
           <div className="list-row" key={invitation.id}>
@@ -505,7 +456,7 @@ export function AdministrationPage() {
 
       {tab === 'requests' ? (
         <section role="tabpanel" id="admin-panel-requests" aria-labelledby="admin-tab-requests">
-<article className="feature-panel">
+          <article className="feature-panel">
         <span className="eyebrow">JOIN APPROVALS</span>
         <h3>Pending requests</h3>
         {data.policy?.membershipApproval !== 'coachApproval' ? <p><small>This team is invite-only, so requests to join are refused. Turn on join requests above to accept them.</small></p> : null}
@@ -526,7 +477,7 @@ export function AdministrationPage() {
 
       {tab === 'settings' ? (
         <section role="tabpanel" id="admin-panel-settings" aria-labelledby="admin-tab-settings">
-<article className="feature-panel">
+          <article className="feature-panel">
         <span className="eyebrow">TEAM SETTINGS</span>
         <h3>Files and joining</h3>
         <p>The team is always private: it can't be found by searching, and nobody joins without a coach.</p>
@@ -561,7 +512,7 @@ export function AdministrationPage() {
 
       {tab === 'safety' ? (
         <section role="tabpanel" id="admin-panel-safety" aria-labelledby="admin-tab-safety">
-<article className="feature-panel">
+          <article className="feature-panel">
         <span className="eyebrow">MODERATION QUEUE</span>
         <h3>Safety reports</h3>
         <p><small>Content team members reported with the Report button. Reporters stay anonymous.</small></p>
@@ -601,7 +552,7 @@ export function AdministrationPage() {
 
       {tab === 'audit' ? (
         <section role="tabpanel" id="admin-panel-audit" aria-labelledby="admin-tab-audit">
-<article className="feature-panel">
+          <article className="feature-panel">
         <span className="eyebrow">AUDIT HISTORY</span>
         <h3>Administrative record</h3>
         <p><small>Who changed what on this team: invitations, roles, members, settings and board setup. Nobody can edit or delete these entries. Everyday task edits are not listed.</small></p>

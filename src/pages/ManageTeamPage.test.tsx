@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   assignTeamRole: vi.fn(),
   updateMembershipStatus: vi.fn(),
   transferTeamLeadership: vi.fn(),
+  createInvitation: vi.fn(),
   provisionTeamMember: vi.fn(),
   resetTeamMemberPassword: vi.fn()
 }));
@@ -24,6 +25,7 @@ vi.mock('@/lib/team-service', () => ({ updateTeamDetails: mocks.updateTeamDetail
 vi.mock('@/lib/directory', () => ({ listTeamMembers: mocks.listTeamMembers }));
 vi.mock('@/lib/phase2-service', () => ({
   assignTeamRole: mocks.assignTeamRole,
+  createInvitation: mocks.createInvitation,
   leaveTeam: mocks.leaveTeam,
   transferTeamLeadership: mocks.transferTeamLeadership,
   updateMembershipStatus: mocks.updateMembershipStatus
@@ -261,16 +263,73 @@ describe('ManageTeamPage adding a member', () => {
     Reflect.deleteProperty(navigator, 'clipboard');
   });
 
-  it('points a coach at an invitation when the address already has an account', async () => {
+  function fillDialog(email: string) {
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Dana Ruiz' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: email } });
+    fireEvent.change(screen.getByLabelText('Type the email again'), { target: { value: email } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+  }
+
+  const existingAccount = Object.assign(new Error('That email address already has a First Pit account.'), { code: 'functions/already-exists' });
+
+  it('turns an existing account into an invitation in the same dialog', async () => {
     withTeam('coach');
-    mocks.provisionTeamMember.mockRejectedValue(new Error('That email address already has a First Pit account. Send them an invitation instead, so they can accept it themselves.'));
+    mocks.provisionTeamMember.mockRejectedValue(existingAccount);
+    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_ZGFuYQ' });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /add a member/i }));
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Dana Ruiz' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'dana@example.com' } });
-    fireEvent.change(screen.getByLabelText('Type the email again'), { target: { value: 'dana@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByText(/send them an invitation instead/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /mentor/i }));
+    fillDialog('dana@example.com');
+
+    // No error sending the coach elsewhere: the next step is offered right here.
+    expect(await screen.findByText(/dana@example.com already has a First Pit account/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite dana@example.com as a mentor' }));
+    await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledWith('team-1', 'dana@example.com', 'mentor'));
+
+    const link = `${window.location.origin}/join?invite=team-1_ZGFuYQ`;
+    expect(await screen.findByText(link)).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(link);
+    expect(screen.getByText(/already on your clipboard/i)).toBeInTheDocument();
+    const gmail = new URL(screen.getByRole('link', { name: /email invite with gmail/i }).getAttribute('href') ?? '');
+    expect(gmail.searchParams.get('to')).toBe('dana@example.com');
+    expect(gmail.searchParams.get('body')).toContain(link);
+    expect(gmail.searchParams.get('body')).toContain('as a mentor');
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('still shows the invite link when the clipboard is unavailable', async () => {
+    withTeam('coach');
+    mocks.provisionTeamMember.mockRejectedValue(existingAccount);
+    mocks.createInvitation.mockResolvedValue({ invitationId: 'team-1_abc' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /add a member/i }));
+    fillDialog('dana@example.com');
+    fireEvent.click(await screen.findByRole('button', { name: /invite dana@example.com/i }));
+    expect(await screen.findByText(`${window.location.origin}/join?invite=team-1_abc`)).toBeInTheDocument();
+    expect(screen.queryByText(/already on your clipboard/i)).not.toBeInTheDocument();
+  });
+
+  it('lets the coach fix the address instead of inviting', async () => {
+    withTeam('coach');
+    mocks.provisionTeamMember.mockRejectedValue(existingAccount);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /add a member/i }));
+    fillDialog('dana@example.com');
+    fireEvent.click(await screen.findByRole('button', { name: 'Use a different address' }));
+    expect(screen.queryByText(/already has a First Pit account/i)).not.toBeInTheDocument();
+    expect(mocks.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('reports any other refusal plainly', async () => {
+    withTeam('coach');
+    mocks.provisionTeamMember.mockRejectedValue(new Error('The member account could not be created. Try again.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /add a member/i }));
+    fillDialog('ada@example.com');
+    expect(await screen.findByText(/could not be created/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /invite ada@example.com/i })).not.toBeInTheDocument();
   });
 
   it('issues a fresh password from the roster and says nothing was kept on a replay', async () => {
