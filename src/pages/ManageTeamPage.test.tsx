@@ -50,7 +50,9 @@ function withTeam(role: string, extra: Record<string, unknown> = {}) {
 const roster: TeamRoster = {
   members: [
     { userId: 'coach-1', role: 'coach', status: 'active', displayName: 'Dana Ruiz', photoURL: null, initials: 'DR', provisionedByThisTeam: false, mustSetPassword: false },
-    { userId: 'student-1', role: 'student', status: 'active', displayName: 'Amir Khan', photoURL: null, initials: 'AK', provisionedByThisTeam: true, mustSetPassword: true }
+    { userId: 'student-1', role: 'student', status: 'active', displayName: 'Amir Khan', photoURL: null, initials: 'AK', provisionedByThisTeam: true, mustSetPassword: true },
+    { userId: 'student-9', role: 'student', status: 'suspended', displayName: 'Sam Suspended', photoURL: null, initials: 'SS', provisionedByThisTeam: true, mustSetPassword: false },
+    { userId: 'student-8', role: 'student', status: 'removed', displayName: 'Rae Removed', photoURL: null, initials: 'RR', provisionedByThisTeam: false, mustSetPassword: false }
   ],
   truncated: false
 };
@@ -158,6 +160,39 @@ describe('ManageTeamPage roster', () => {
     expect(within(rows[0]).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
     expect(within(rows[1]).getByRole('combobox', { name: 'Role for Amir Khan' })).toHaveValue('student');
     expect(screen.getByRole('link', { name: 'Administration' })).toHaveAttribute('href', '/admin');
+  });
+
+  it('lists active members only, so Manage team stays clean', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    renderPage();
+    const rows = within(await screen.findByRole('table')).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    expect(screen.queryByText('Sam Suspended')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rae Removed')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2 people on Robotics' })).toBeInTheDocument();
+    // Every row is active, so there is nothing to Restore here.
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('takes a suspended member off the list and offers Undo', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    mocks.updateMembershipStatus.mockResolvedValue({});
+    renderPage();
+    const amirRow = within(await screen.findByRole('table')).getAllByRole('row')[2];
+    mocks.listTeamMembers.mockResolvedValue({ ...roster, members: roster.members.map((member) => member.userId === 'student-1' ? { ...member, status: 'suspended' } : member) });
+    fireEvent.click(within(amirRow).getByRole('button', { name: 'Suspend' }));
+    await waitFor(() => expect(mocks.updateMembershipStatus).toHaveBeenCalledWith('team-1', 'student-1', 'suspended'));
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('Amir Khan is suspended');
+    expect(within(notice).getByRole('link', { name: /administration → suspended/i })).toHaveAttribute('href', '/admin?tab=suspended');
+    await waitFor(() => expect(within(screen.getByRole('table')).queryByText('Amir Khan')).not.toBeInTheDocument());
+
+    fireEvent.click(within(notice).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(mocks.updateMembershipStatus).toHaveBeenLastCalledWith('team-1', 'student-1', 'active'));
+    await waitFor(() => expect(screen.queryByText(/is suspended/)).not.toBeInTheDocument());
   });
 
   it('offers Reset password only for accounts this team created', async () => {

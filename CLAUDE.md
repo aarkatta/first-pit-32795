@@ -204,9 +204,11 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   (Team files has no entry; it is reached
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
-  ＋ Add a member, and leaving a team. **Administration** (`/admin`,
-  `AdministrationPage`) is coach-only and tabs over the invitations list, join requests,
-  team settings, safety and audit; `/team/admin` redirects there and `/hub`
+  ＋ Add a member, and leaving a team. Keep it clean: it lists **active members
+  only** — suspended, removed and pending people belong in Administration.
+  **Administration** (`/admin`, `AdministrationPage`) is coach-only and tabs over
+  the invitations list, join requests, suspended members, team settings, safety
+  and audit (`?tab=<id>` opens one); `/team/admin` redirects there and `/hub`
   redirects to `/team`. Search, State lab and Emulators pages were
   removed (`/search` → Home). Tracker routes render full-width
   (`wideRoutes` → `.app-main--wide`); other pages use a centred 1440px column.

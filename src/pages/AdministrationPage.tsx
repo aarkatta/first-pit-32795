@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, startAfter, where, type Firestore, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { StatePanel } from '@/components/StatePanel';
 import { formatDateTimeLabel, toDate } from '@/lib/dates';
@@ -23,6 +23,7 @@ import {
   approveJoinRequest,
   rejectJoinRequest,
   revokeInvitation,
+  updateMembershipStatus,
   updateModerationCase,
   updateTeamPolicy
 } from '@/lib/phase2-service';
@@ -240,11 +241,16 @@ const PLANNED_SETTINGS = [
 const ADMIN_TABS = [
   { id: 'invitations', label: 'Invitations' },
   { id: 'requests', label: 'Join requests' },
+  { id: 'suspended', label: 'Suspended' },
   { id: 'settings', label: 'Team settings' },
   { id: 'safety', label: 'Safety' },
   { id: 'audit', label: 'Audit' }
 ] as const;
 type AdminTab = (typeof ADMIN_TABS)[number]['id'];
+
+function isAdminTab(value: string | null): value is AdminTab {
+  return ADMIN_TABS.some((entry) => entry.id === value);
+}
 
 export function AdministrationPage() {
   const { user } = useAuth();
@@ -262,7 +268,11 @@ export function AdministrationPage() {
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<AdminTab>('invitations');
+  // `?tab=` lets another page land on a section — Manage team's "suspended"
+  // notice links straight to the Suspended tab.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState<AdminTab>(isAdminTab(requestedTab) ? requestedTab : 'invitations');
   const requestGeneration = useRef(0);
   const currentTeamId = useRef(teamId);
   currentTeamId.current = teamId;
@@ -330,6 +340,7 @@ export function AdministrationPage() {
   }
   const pendingInvitations = data.invitations.filter((invitation) => invitation.status === 'pending');
   const pendingRequests = data.requests.filter((request) => request.status === 'pending');
+  const suspendedMembers = data.members.filter((member) => member.status === 'suspended');
 
   async function run(action: () => Promise<unknown>) {
     if (!online) {
@@ -472,6 +483,32 @@ export function AdministrationPage() {
         {data.truncated.requests ? <p><small>Showing the {LIST_LIMIT} most recent requests.</small></p> : null}
         <p><small>Your team ID for join requests: <code>{teamId}</code></small></p>
         </article>
+        </section>
+      ) : null}
+
+      {tab === 'suspended' ? (
+        <section role="tabpanel" id="admin-panel-suspended" aria-labelledby="admin-tab-suspended">
+          <article className="feature-panel">
+            <span className="eyebrow">SUSPENDED MEMBERS</span>
+            <h3>{suspendedMembers.length} suspended</h3>
+            <p>
+              A suspended member keeps their account but loses access to this team, and is not listed on
+              Manage team. Restoring them puts them straight back on the roster with the role they had.
+            </p>
+            {suspendedMembers.length === 0 ? <p>Nobody is suspended.</p> : suspendedMembers.map((member) => (
+              <div className="list-row" key={member.userId}>
+                <span>
+                  <strong>{member.displayName}</strong>
+                  <small>{member.role === 'teamLeader' ? 'Team leader' : member.role}</small>
+                </span>
+                <span>
+                  <button className="text-button" type="button" disabled={locked} onClick={() => void run(() => updateMembershipStatus(teamId, member.userId, 'active'))}>
+                    Restore
+                  </button>
+                </span>
+              </div>
+            ))}
+          </article>
         </section>
       ) : null}
 

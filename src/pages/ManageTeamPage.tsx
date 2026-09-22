@@ -47,6 +47,8 @@ export function ManageTeamPage() {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The member just suspended, so the notice can offer Undo before the row is forgotten. */
+  const [justSuspended, setJustSuspended] = useState<TeamMember | null>(null);
   const locked = busy || !online;
 
   const loadRoster = useCallback(async () => {
@@ -70,6 +72,7 @@ export function ManageTeamPage() {
     setConfirmingLeave(false);
     setAdding(false);
     setCredentials(null);
+    setJustSuspended(null);
   }, [teamId]);
 
   /** Runs a membership mutation, then re-reads the roster it changed. */
@@ -133,6 +136,8 @@ export function ManageTeamPage() {
   const saved = activeTeam ? savedDetails[activeTeam.teamId] : undefined;
   const teamName = saved?.name ?? activeTeam?.team?.name ?? 'Your team';
   const teamNumber = saved ? saved.teamNumber : activeTeam?.team?.teamNumber ?? null;
+  // Manage team lists active members only — suspended, removed and pending
+  // people are Administration's business. See RosterTable.
   const activeMembers = members.filter((member) => member.status === 'active');
   const coachCount = activeMembers.filter((member) => ['coach', 'teamLeader'].includes(member.role)).length;
   const createdLabel = formatDateLabel(activeTeam?.team?.createdAt, '');
@@ -214,13 +219,28 @@ export function ManageTeamPage() {
         <div className="section-heading">
           <div>
             <span className="eyebrow">TEAM MEMBERS</span>
-            <h3 id="roster-heading">{members.length} {members.length === 1 ? 'person' : 'people'} on {teamName}</h3>
+            <h3 id="roster-heading">{activeMembers.length} {activeMembers.length === 1 ? 'person' : 'people'} on {teamName}</h3>
           </div>
           {canAdminister && !adding ? (
             <button className="button" type="button" disabled={!online} onClick={() => { setCredentials(null); setAdding(true); }}>＋ Add a member</button>
           ) : null}
         </div>
 
+        {justSuspended && teamId ? (
+          <div className="roster-notice" role="status">
+            <span>
+              <strong>{justSuspended.displayName} is suspended</strong> and no longer listed here. Restore
+              them any time from <Link to="/admin?tab=suspended">Administration → Suspended</Link>.
+            </span>
+            <span className="form-actions">
+              <button className="button button--ghost button--small" type="button" disabled={locked} onClick={() => void run(async () => {
+                await updateMembershipStatus(teamId, justSuspended.userId, 'active');
+                setJustSuspended(null);
+              })}>Undo</button>
+              <button className="text-button" type="button" onClick={() => setJustSuspended(null)}>Dismiss</button>
+            </span>
+          </div>
+        ) : null}
         {rosterStatus === 'loading' ? <p><small>Loading the roster…</small></p> : null}
         {rosterStatus === 'error' ? (
           <StatePanel
@@ -231,22 +251,25 @@ export function ManageTeamPage() {
             onAction={() => void loadRoster()}
           />
         ) : null}
-        {rosterStatus === 'ready' && members.length === 0 ? (
+        {rosterStatus === 'ready' && activeMembers.length === 0 ? (
           <StatePanel
             variant="empty"
             title="Just you so far"
             message={canAdminister ? 'Add a student to start the roster. First Pit creates their account and gives you a password to pass on.' : 'Your coach has not added anyone else yet.'}
           />
         ) : null}
-        {rosterStatus === 'ready' && members.length > 0 && teamId ? (
+        {rosterStatus === 'ready' && activeMembers.length > 0 && teamId ? (
           <RosterTable
-            members={members}
+            members={activeMembers}
             truncated={membersTruncated}
             currentUserId={user?.uid ?? ''}
             canAdminister={canAdminister}
             locked={locked}
             onRoleChange={(member, role) => void run(() => assignTeamRole(teamId, member.userId, role))}
-            onSuspendToggle={(member) => void run(() => updateMembershipStatus(teamId, member.userId, member.status === 'suspended' ? 'active' : 'suspended'))}
+            onSuspend={(member) => void run(async () => {
+              await updateMembershipStatus(teamId, member.userId, 'suspended');
+              setJustSuspended(member);
+            })}
             onMakeLeader={(member) => void run(() => transferTeamLeadership(teamId, member.userId))}
             onResetPassword={(member) => void run(async () => {
               const reset = await resetTeamMemberPassword(teamId, member.userId);

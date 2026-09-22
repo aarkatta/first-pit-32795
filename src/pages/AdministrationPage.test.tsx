@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   revokeInvitation: vi.fn(),
   approveJoinRequest: vi.fn(),
   updateModerationCase: vi.fn(),
+  updateMembershipStatus: vi.fn(),
   updateTeamPolicy: vi.fn()
 }));
 
@@ -40,7 +41,7 @@ vi.mock('@/lib/phase2-service', () => ({
   rejectJoinRequest: vi.fn(),
   revokeInvitation: mocks.revokeInvitation,
   transferTeamLeadership: vi.fn(),
-  updateMembershipStatus: vi.fn(),
+  updateMembershipStatus: mocks.updateMembershipStatus,
   updateModerationCase: mocks.updateModerationCase,
   updateTeamPolicy: mocks.updateTeamPolicy
 }));
@@ -50,7 +51,8 @@ import { AdministrationPage } from './AdministrationPage';
 const roster: TeamRoster = {
   members: [
     { userId: 'coach-1', role: 'coach', status: 'active', displayName: 'Dana Ruiz', photoURL: null, initials: 'DR' },
-    { userId: 'student-1', role: 'student', status: 'active', displayName: 'Amir Khan', photoURL: null, initials: 'AK' }
+    { userId: 'student-1', role: 'student', status: 'active', displayName: 'Amir Khan', photoURL: null, initials: 'AK' },
+    { userId: 'student-9', role: 'student', status: 'suspended', displayName: 'Sam Suspended', photoURL: null, initials: 'SS' }
   ],
   truncated: false
 };
@@ -99,8 +101,8 @@ beforeEach(() => {
  * Administration is tabbed, so most assertions open their tab first. The
  * roster moved to Manage team and is covered by ManageTeamPage.test.tsx.
  */
-function renderPage() {
-  return render(<MemoryRouter><AdministrationPage /></MemoryRouter>);
+function renderPage(path = '/admin') {
+  return render(<MemoryRouter initialEntries={[path]}><AdministrationPage /></MemoryRouter>);
 }
 
 async function openTab(name: string) {
@@ -140,6 +142,27 @@ describe('AdministrationPage', () => {
     expect(screen.getByText('Priya Nair')).toBeInTheDocument();
     expect(screen.queryByText('applicant-9876543210')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
+  it('lists suspended members, and only them, with Restore', async () => {
+    mocks.updateMembershipStatus.mockResolvedValue({});
+    renderPage();
+    await openTab('Suspended');
+    expect(screen.getByText('Sam Suspended')).toBeInTheDocument();
+    expect(screen.queryByText('Amir Khan')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(mocks.updateMembershipStatus).toHaveBeenCalledWith('team-1', 'student-9', 'active'));
+  });
+
+  it('opens straight on the tab a link asks for', async () => {
+    renderPage('/admin?tab=suspended');
+    expect(await screen.findByRole('tab', { name: 'Suspended', selected: true })).toBeInTheDocument();
+    expect(await screen.findByText('Sam Suspended')).toBeInTheDocument();
+  });
+
+  it('ignores an unknown tab rather than showing nothing', async () => {
+    renderPage('/admin?tab=nonsense');
+    expect(await screen.findByRole('tab', { name: 'Invitations', selected: true })).toBeInTheDocument();
   });
 
   it('shows each team setting with its state and flips only that setting', async () => {

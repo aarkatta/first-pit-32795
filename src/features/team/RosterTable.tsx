@@ -8,7 +8,7 @@ type RosterTableProps = {
   canAdminister: boolean;
   locked: boolean;
   onRoleChange: (member: TeamMember, role: 'student' | 'parent' | 'mentor' | 'coach') => void;
-  onSuspendToggle: (member: TeamMember) => void;
+  onSuspend: (member: TeamMember) => void;
   onMakeLeader: (member: TeamMember) => void;
   onResetPassword: (member: TeamMember) => void;
 };
@@ -18,7 +18,12 @@ function statusLabel(status: string) {
 }
 
 /**
- * The team roster, and for a coach the only place membership is changed.
+ * The team roster: active members only.
+ *
+ * Manage team stays clean by rule — a suspended, removed or pending member is
+ * never listed here. Suspending someone takes them off this table; restoring
+ * them is Administration → Suspended. So every row is active, and the only
+ * status action is Suspend.
  *
  * `Reset password` appears only for accounts this team provisioned — the server
  * refuses the rest, and offering a button that always fails would read as a bug.
@@ -31,7 +36,7 @@ export function RosterTable({
   canAdminister,
   locked,
   onRoleChange,
-  onSuspendToggle,
+  onSuspend,
   onMakeLeader,
   onResetPassword
 }: RosterTableProps) {
@@ -53,7 +58,7 @@ export function RosterTable({
               const isSelf = member.userId === currentUserId;
               const provisioned = member.provisionedByThisTeam === true;
               return (
-                <tr key={member.userId} className={member.status === 'active' ? undefined : 'roster-table__inactive'}>
+                <tr key={member.userId}>
                   <td>
                     <span className="roster-table__member">
                       <span className={`roster-avatar color-${index % 6}`} aria-hidden="true">{member.initials}</span>
@@ -71,7 +76,7 @@ export function RosterTable({
                         id={`role-${member.userId}`}
                         aria-label={`Role for ${member.displayName}`}
                         value={member.role === 'teamLeader' ? 'coach' : member.role}
-                        disabled={locked || member.status !== 'active'}
+                        disabled={locked}
                         onChange={(event) => onRoleChange(member, event.target.value as 'student' | 'parent' | 'mentor' | 'coach')}
                       >
                         <option value="student">Student</option>
@@ -84,16 +89,14 @@ export function RosterTable({
                   <td><span className={`roster-status roster-status--${member.status}`}>{statusLabel(member.status)}</span></td>
                   {canAdminister ? (
                     <td className="roster-table__actions">
-                      {provisioned && member.status === 'active' ? (
+                      {provisioned ? (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onResetPassword(member)}>Reset password</button>
                       ) : null}
-                      {member.role !== 'teamLeader' && member.status === 'active' ? (
+                      {member.role !== 'teamLeader' ? (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onMakeLeader(member)}>Make leader</button>
                       ) : null}
                       {isSelf ? null : (
-                        <button className="text-button" type="button" disabled={locked} onClick={() => onSuspendToggle(member)}>
-                          {member.status === 'suspended' ? 'Restore' : 'Suspend'}
-                        </button>
+                        <button className="text-button" type="button" disabled={locked} onClick={() => onSuspend(member)}>Suspend</button>
                       )}
                     </td>
                   ) : null}

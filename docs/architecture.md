@@ -1104,11 +1104,14 @@ The administration that used to sit below it moved to `/admin`.
   the name and number only. The banner's ghost buttons keep a dark hover state;
   the global `.button--ghost:hover` would otherwise whiten them and hide their
   white label.
-- **Team members** — one table for everyone (`RosterTable`). A coach or team
-  leader also gets the role select, **Suspend**/**Restore**, **Make leader**,
-  and **Reset password** on rows the team provisioned; a member sees names,
-  roles and statuses only. A **Has not signed in yet** badge marks anyone still
-  owing a password change.
+- **Team members** — one table for everyone (`RosterTable`), **active members
+  only**: Manage team stays clean by rule (2026-09-21), so suspended, removed and
+  pending people are never listed here. A coach or team leader also gets the
+  role select, **Suspend**, **Make leader**, and **Reset password** on rows the
+  team provisioned; a member sees names, roles and statuses only. A **Has not
+  signed in yet** badge marks anyone still owing a password change. Suspending
+  someone takes their row away and shows a notice with **Undo** and a link to
+  Administration → Suspended, where they are restored.
 - **＋ Add a member** (coaches and team leaders) — **the only way to add
   anyone**, decided 2026-09-21. `AddMemberDialog` calls `provisionTeamMember`:
   a new address gets an account and `CredentialsCard` shows the starter
@@ -1127,12 +1130,17 @@ The administration that used to sit below it moved to `/admin`.
 ## Administration
 
 `/admin` (`AdministrationPage`), coach and team leader only, re-checked by every
-callable behind it. One `loadAdminData` read feeds five tabs:
+callable behind it. One `loadAdminData` read feeds six tabs, and `?tab=<id>`
+opens a given one (Manage team's suspend notice links to `?tab=suspended`):
 
 - **Invitations** — a status list only, with no create form: invitations are
   created from **＋ Add a member**. Pending invitations offer **Email invite**,
   **Copy link** and **Revoke** (see *Invitations are links, not emails*).
 - **Join requests** — approve or reject, with the team ID to share.
+- **Suspended** — members who keep their account but have lost access to the
+  team, each with **Restore** (back to active with the role they had). Removed
+  members are not listed; they come back through **＋ Add a member**, which
+  invites an existing account.
 - **Team settings** — Team files and Join requests, plus the greyed-out planned
   settings.
 - **Safety** — the moderation queue, with optimistic-concurrency conflicts
