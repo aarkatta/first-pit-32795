@@ -204,8 +204,10 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   (Team files has no entry; it is reached
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
-  ＋ Add a member, and leaving a team. Keep it clean: it lists **active members
-  only** — suspended, removed and pending people belong in Administration.
+  and ＋ Add a member. Keep it clean: it lists **active members only** —
+  suspended, removed and pending people belong in Administration — and nothing
+  about the viewer personally: leaving a team and joining or creating another
+  are on the profile (`MembershipsPanel`, Profile → Your teams).
   **Administration** (`/admin`, `AdministrationPage`) is coach-only and tabs over
   the invitations list, join requests, suspended members, team settings, safety
   and audit (`?tab=<id>` opens one); `/team/admin` redirects there and `/hub`

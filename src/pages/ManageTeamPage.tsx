@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { AddMemberDialog } from '@/features/team/AddMemberDialog';
 import { CredentialsCard } from '@/features/team/CredentialsCard';
@@ -9,7 +9,7 @@ import { formatDateLabel } from '@/lib/dates';
 import { listTeamMembers, type TeamMember } from '@/lib/directory';
 import { isCoachOrLeader, mayOfferTeamCreation, teamNumberSuffix } from '@/lib/domain';
 import { useAccountType } from '@/lib/account-type';
-import { assignTeamRole, leaveTeam, transferTeamLeadership, updateMembershipStatus } from '@/lib/phase2-service';
+import { assignTeamRole, transferTeamLeadership, updateMembershipStatus } from '@/lib/phase2-service';
 import { resetTeamMemberPassword, type ProvisionedMember } from '@/lib/team-members';
 import { updateTeamDetails, type TeamDetails } from '@/lib/team-service';
 import { useTeamContext } from '@/lib/team-context';
@@ -18,6 +18,10 @@ import { useOnlineStatus } from '@/lib/use-online-status';
 
 /**
  * Manage team: who is on the team, and how someone joins it.
+ *
+ * It is about one team and stays clean: active members only, and nothing that
+ * is really about the viewer. Leaving a team and joining or starting another
+ * live on the profile (`MembershipsPanel`).
  *
  * Everything a coach reaches for occasionally — invitations, joining policy,
  * safety reports, the audit record — moved to `/admin`. What is left is the one
@@ -29,7 +33,6 @@ import { useOnlineStatus } from '@/lib/use-online-status';
 export function ManageTeamPage() {
   const { user } = useAuth();
   const { status, activeTeam, teams, error, retry, patchTeam } = useTeamContext();
-  const navigate = useNavigate();
   const online = useOnlineStatus();
   const teamId = activeTeam?.teamId ?? null;
   const account = useAccountType(user?.uid);
@@ -44,7 +47,6 @@ export function ManageTeamPage() {
   const [savedDetails, setSavedDetails] = useState<Record<string, TeamDetails>>({});
   const [detailsDraft, setDetailsDraft] = useState<{ name: string; teamNumber: string } | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [busy, setBusy] = useState(false);
   /** The member just suspended, so the notice can offer Undo before the row is forgotten. */
@@ -69,7 +71,6 @@ export function ManageTeamPage() {
 
   useEffect(() => { void loadRoster(); }, [loadRoster]);
   useEffect(() => {
-    setConfirmingLeave(false);
     setAdding(false);
     setCredentials(null);
     setJustSuspended(null);
@@ -91,17 +92,6 @@ export function ManageTeamPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  function confirmLeave() {
-    if (!teamId) return;
-    void run(async () => {
-      await leaveTeam(teamId);
-      setConfirmingLeave(false);
-      // The membership subscription drops the team on its own; land the user
-      // somewhere that reflects the change immediately.
-      navigate('/team', { replace: true });
-    });
   }
 
   async function saveDetails(event: FormEvent<HTMLFormElement>, id: string) {
@@ -139,7 +129,6 @@ export function ManageTeamPage() {
   // Manage team lists active members only — suspended, removed and pending
   // people are Administration's business. See RosterTable.
   const activeMembers = members.filter((member) => member.status === 'active');
-  const coachCount = activeMembers.filter((member) => ['coach', 'teamLeader'].includes(member.role)).length;
   const createdLabel = formatDateLabel(activeTeam?.team?.createdAt, '');
 
   return (
@@ -287,37 +276,6 @@ export function ManageTeamPage() {
 
       </section>
 
-      <section className="split-panels">
-        <article className="feature-panel">
-          <span className="eyebrow">LEAVE THIS TEAM</span>
-          <h3>Leave {teamName}</h3>
-          <p>
-            Leaving removes your access to this team's tasks and files. A coach has to invite you back.
-            {coachCount === 1 && canAdminister ? ' You are currently the only coach, so transfer leadership before leaving.' : ''}
-          </p>
-          {confirmingLeave ? (
-            <div className="form-actions">
-              <button className="button" type="button" disabled={locked} onClick={confirmLeave}>
-                {busy ? 'Leaving…' : `Yes, leave ${teamName}`}
-              </button>
-              <button className="button button--ghost" type="button" disabled={busy} onClick={() => setConfirmingLeave(false)}>Cancel</button>
-            </div>
-          ) : (
-            <div className="form-actions">
-              <button className="button button--ghost" type="button" disabled={locked} onClick={() => setConfirmingLeave(true)}>Leave team…</button>
-            </div>
-          )}
-        </article>
-        <article className="feature-panel">
-          <span className="eyebrow">ANOTHER TEAM</span>
-          <h3>Joining or starting another team</h3>
-          <p>You can belong to more than one team. An invitation from another coach is accepted on its own screen.</p>
-          <div className="form-actions">
-            <Link className="button button--ghost" to="/join">Accept an invitation</Link>
-            {mayCreateTeam ? <Link className="button button--ghost" to="/teams/new">Create another team</Link> : null}
-          </div>
-        </article>
-      </section>
     </div>
   );
 }

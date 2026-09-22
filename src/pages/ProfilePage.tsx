@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
+import { MembershipsPanel } from '@/features/team/MembershipsPanel';
 import { useAuth } from '@/lib/auth-context';
 import { sendPasswordRecovery } from '@/lib/auth';
 import { getRequestState, type RequestState } from '@/lib/request-state';
@@ -8,12 +9,10 @@ import { useOnlineStatus } from '@/lib/use-online-status';
 import { getProfileFirestore, loadProfileSettings, type LoadedProfileSettings, type NotificationPreferences, type UserSettings } from '@/lib/profile-settings';
 import { requestAccountDeletion, updateProfileSettings } from '@/lib/phase7-service';
 import { updatePrivacySettings } from '@/lib/phase2-service';
-import { useTeamContext } from '@/lib/team-context';
 import { usePreferences } from '@/lib/preferences-context';
 
 export function ProfilePage() {
   const { user, auth } = useAuth();
-  const { teams } = useTeamContext();
   const { applyPreferences } = usePreferences();
   const online = useOnlineStatus();
   const navigate = useNavigate();
@@ -106,7 +105,7 @@ export function ProfilePage() {
       <form id="profile-settings" className="page-stack" onSubmit={submit}>
         <section className="split-panels">
           <article className="feature-panel"><span className="eyebrow">DISPLAY PROFILE</span><h3>How teammates see you</h3><p>Only your active team memberships can access this profile.</p><div className="form-stack"><label>Display name<input value={settings.profile.displayName} maxLength={80} onChange={(event) => setSettings({ ...settings, profile: { ...settings.profile, displayName: event.target.value } })} required /></label><label>Profile picture URL <span className="muted">(optional)</span><input type="url" value={settings.profile.photoURL ?? ''} onChange={(event) => setSettings({ ...settings, profile: { ...settings.profile, photoURL: event.target.value || null } })} placeholder="https://…" /></label></div><p>Email: {user.email ?? 'Not available'}. Precise location and unnecessary child information are not collected.</p></article>
-          <article className="feature-panel"><span className="eyebrow">MEMBERSHIPS</span><h3>Your private teams</h3><p>Only verified active memberships appear here.</p><div>{teams.length ? teams.map((team) => <span key={team.teamId}>{team.team?.name ?? 'Unnamed team'} · {team.role}</span>) : <span>No active teams</span>}</div></article>
+          <MembershipsPanel />
         </section>
         <section className="split-panels">
           <article className="feature-panel"><span className="eyebrow">APPEARANCE & ACCESSIBILITY</span><h3>Make First Pit comfortable</h3><div className="form-stack"><label>Theme<select value={settings.preferences.theme} onChange={(event) => updatePreferences({ theme: event.target.value as UserSettings['theme'] })}><option value="system">Use device setting</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label className="checkbox-row"><input type="checkbox" checked={settings.preferences.highContrast} onChange={(event) => updatePreferences({ highContrast: event.target.checked })} /> High contrast</label><label className="checkbox-row"><input type="checkbox" checked={settings.preferences.reducedMotion} onChange={(event) => updatePreferences({ reducedMotion: event.target.checked })} /> Reduce motion</label><label>Text size<select value={settings.preferences.fontScale} onChange={(event) => updatePreferences({ fontScale: event.target.value as UserSettings['fontScale'] })}><option value="default">Default</option><option value="large">Large</option></select></label></div></article>

@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   useAccountType: vi.fn(),
   updateTeamDetails: vi.fn(),
   listTeamMembers: vi.fn(),
-  leaveTeam: vi.fn(),
   assignTeamRole: vi.fn(),
   updateMembershipStatus: vi.fn(),
   transferTeamLeadership: vi.fn(),
@@ -26,7 +25,6 @@ vi.mock('@/lib/directory', () => ({ listTeamMembers: mocks.listTeamMembers }));
 vi.mock('@/lib/phase2-service', () => ({
   assignTeamRole: mocks.assignTeamRole,
   createInvitation: mocks.createInvitation,
-  leaveTeam: mocks.leaveTeam,
   transferTeamLeadership: mocks.transferTeamLeadership,
   updateMembershipStatus: mocks.updateMembershipStatus
 }));
@@ -135,14 +133,13 @@ describe('ManageTeamPage team overview', () => {
     expect(screen.queryByRole('button', { name: /add a member/i })).not.toBeInTheDocument();
   });
 
-  it('requires a confirmation step before leaving a team', () => {
-    withTeam('student');
+  it('keeps leaving and joining other teams off the page — they live on the profile', () => {
+    withTeam('coach');
     renderPage();
-    expect(screen.queryByRole('button', { name: /yes, leave robotics/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /leave team/i }));
-    expect(screen.getByRole('button', { name: /yes, leave robotics/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(screen.queryByRole('button', { name: /yes, leave robotics/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /leave team/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/LEAVE THIS TEAM/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /accept an invitation/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /create another team/i })).not.toBeInTheDocument();
   });
 });
 

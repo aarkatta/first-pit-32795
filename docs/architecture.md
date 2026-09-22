@@ -1121,11 +1121,16 @@ The administration that used to sit below it moved to `/admin`.
   link and offers **Email invite with Gmail**. The coach never has to know in
   advance which mechanism an address needs. See *Coach-provisioned member
   accounts*.
-- **Leave team** (with confirmation; the sole coach must transfer leadership
-  first) and **Joining or starting another team**.
 
-`TeamHubPage` no longer exists — its hero, leave and join blocks are part of
-`ManageTeamPage`.
+Leaving a team and joining or starting another are about the person, not the
+team, so since 2026-09-21 they live on the profile rather than here: Profile →
+**Your teams** (`MembershipsPanel`) lists every membership with its role and its
+own **Leave…** (with confirmation, and a leadership reminder for coaches — the
+server's last-coach refusal is shown verbatim), plus **Accept an invitation** and
+**Create another team** (offered per `mayOfferTeamCreation`). Manage team keeps
+only its empty state for someone with no team at all.
+
+`TeamHubPage` no longer exists — its banner is part of `ManageTeamPage`.
 
 ## Administration
 
