@@ -8,7 +8,8 @@ import { canMoveKanbanTask, TaskDetails } from './KanbanBoard';
 
 const directory = new Map<string, TeamMember>([
   ['uid-ada', { userId: 'uid-ada', role: 'student', status: 'active', displayName: 'Ada Lovelace', photoURL: null, initials: 'AL' }],
-  ['uid-grace', { userId: 'uid-grace', role: 'coach', status: 'active', displayName: 'Grace Hopper', photoURL: null, initials: 'GH' }]
+  ['uid-grace', { userId: 'uid-grace', role: 'coach', status: 'active', displayName: 'Grace Hopper', photoURL: null, initials: 'GH' }],
+  ['uid-pat', { userId: 'uid-pat', role: 'parent', status: 'active', displayName: 'Pat Parent', photoURL: null, initials: 'PP' }]
 ]);
 
 function teamFile(overrides: Partial<TeamFile> = {}): TeamFile {
@@ -132,6 +133,26 @@ describe('TaskDetails people and attachments', () => {
     fireEvent.change(assignee, { target: { value: 'uid-grace' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ assignedTo: 'uid-grace' }), 1);
+  });
+
+  it('offers only the people it is given — the board leaves parents out', () => {
+    render(<TaskDetails task={task} canManage busy={false} directory={directory} people={['uid-ada', 'uid-grace']} onClose={vi.fn()} onSave={vi.fn()} />);
+    const assignee = screen.getByRole('combobox', { name: 'Assignee' });
+    const names = Array.from(assignee.querySelectorAll('option')).map((option) => option.textContent);
+    expect(names).toContain('Ada Lovelace');
+    expect(names).not.toContain('Pat Parent');
+  });
+
+  it('keeps a card already assigned to a parent showing who has it', () => {
+    render(<TaskDetails task={{ ...task, assignedTo: 'uid-pat' }} canManage busy={false} directory={directory} people={['uid-ada', 'uid-grace']} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: 'Assignee' })).toHaveValue('uid-pat');
+  });
+
+  it('gives no subtask tick when the board withholds it from a parent', () => {
+    const withSubtask = { ...task, assignedTo: 'uid-pat', subtasks: [{ id: 'sub-1', title: 'Pack the robot', status: 'todo' as const, assignedTo: 'uid-pat', dueAt: null }] };
+    render(<TaskDetails task={withSubtask} canManage={false} busy={false} directory={directory} actorUserId="uid-pat" onClose={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.getByText('Pack the robot')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /pack the robot/i })).not.toBeInTheDocument();
   });
 
   it('names the assignee for a member who cannot edit the card', () => {

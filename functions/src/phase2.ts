@@ -278,6 +278,30 @@ export async function assertTaskEditorInTransaction(transaction: Transaction, te
 }
 
 /**
+ * Roles that may be given tracker work — as a task's assignee or a subtask's.
+ * Parents follow the board read-only: they are never assigned, and they cannot
+ * use the assignee path in `updateTask` to tick off work either. Mirrored for
+ * the UI by `canBeAssignedTasks` in `src/lib/domain.ts`.
+ */
+export const TASK_ASSIGNABLE_ROLES: readonly string[] = ['coach', 'teamLeader', 'mentor', 'student'];
+
+export function isTaskAssignableRole(role: unknown) {
+  return TASK_ASSIGNABLE_ROLES.includes(String(role));
+}
+
+export const PARENT_NOT_ASSIGNABLE_MESSAGE = 'Parents can follow the tracker but cannot be assigned tasks.';
+
+/**
+ * The one check every path that assigns work goes through: the person must be
+ * an active member of this team, in a role that can be given tracker work.
+ */
+export async function assertAssignableMemberInTransaction(transaction: Transaction, teamId: string, uid: string) {
+  const data = await assertTeamMemberInTransaction(transaction, teamId, uid);
+  if (!isTaskAssignableRole(data?.role)) throw new HttpsError('failed-precondition', PARENT_NOT_ASSIGNABLE_MESSAGE);
+  return data;
+}
+
+/**
  * Roles that may use everything on the Knowledge page: publish and unpublish
  * team videos (and see drafts), close team polls, and accept an answer on any
  * team question. Parents keep asking, answering, voting and watching.

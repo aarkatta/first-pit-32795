@@ -612,9 +612,21 @@ workflow.
   movement controls.
 - **Task editors** — coaches, team leaders and active students — add cards
   and edit any card's title, description, priority, assignment, category,
-  milestone, labels, dates and subtasks, and move any card. Mentors and parents
-  are read-only, except that a member assigned to a card may still progress its
-  status, checklist and their own subtasks. Import, board setup, templates and
+  milestone, labels, dates and subtasks, and move any card. Mentors are
+  read-only, except that a mentor assigned to a card may still progress its
+  status, checklist and their own subtasks. **Parents are strictly read-only
+  and can never be assigned work** (2026-09-21): every path that assigns — a
+  task's or a subtask's assignee on `createTask`, `createKanbanTask`,
+  `updateTask` and `importProjectTasks` — goes through
+  `assertAssignableMemberInTransaction` (`TASK_ASSIGNABLE_ROLES` in
+  `phase2.ts`), and `updateTask` refuses a parent outright, so a card assigned
+  to one before the rule existed does not let them tick it off. The check runs
+  only when an assignee *changes*, so such a card can still be edited, and the
+  pickers keep showing who has it. `resolveImportAssignees` reports a named
+  parent as `reason: 'parent'` rather than "not on this team". The same check
+  also validates subtask assignees as team members, which was previously not
+  checked at all. The board's pickers use `canBeAssignedTasks`
+  (`src/lib/domain.ts`); the assignee filter still lists everyone. Import, board setup, templates and
   attaching team files stay with coaches and team leaders. The role set is
   `TASK_EDITOR_ROLES` in `functions/src/phase2.ts` (`requireTaskEditor`,
   `assertTaskEditorInTransaction`, used by `createKanbanTask`, `moveTaskCard`

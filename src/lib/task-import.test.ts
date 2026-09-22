@@ -238,6 +238,14 @@ describe('assignee matching', () => {
     const applied = applyAssigneeMatches(preview(), [{ value: 'Ada Lovelace', userId: null, displayName: null, reason: 'ambiguous' }]);
     expect(applied.rows[0].warnings.at(-1)).toMatch(/matches more than one teammate/);
   });
+
+  it('explains a parent rather than calling them unknown', () => {
+    const applied = applyAssigneeMatches(preview(), [{ value: 'Ada Lovelace', userId: null, displayName: 'Ada Lovelace', reason: 'parent' }]);
+    const row = applied.rows.find((entry) => entry.assignee === 'Ada Lovelace');
+    expect(row?.assignedTo).toBeNull();
+    expect(row?.warnings.join(' ')).toMatch(/is a parent on this team.*cannot be assigned tasks/);
+    expect(row?.warnings.join(' ')).not.toMatch(/not on this team/);
+  });
 });
 
 describe('planned dates', () => {

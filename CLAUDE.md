@@ -114,7 +114,13 @@ template (`npm run template:build`), so edit it there, once.
   (`updateTeamDetails`) — is coach/team-leader (`requireTeamAdmin`).
 - **Tracker task editors** are coaches, team leaders **and students**
   (`TASK_EDITOR_ROLES` / `requireTaskEditor`): they add, edit and move any task.
-  Mentors and parents view the board.
+  Mentors view the board and may progress work assigned to them. **Parents are
+  strictly read-only and can never be assigned a task or subtask**
+  (`TASK_ASSIGNABLE_ROLES` / `assertAssignableMemberInTransaction` — use it on
+  any new path that sets an assignee).
+- **Team leader** is the lead coach, not a student captain: full
+  administration. `transferTeamLeadership` accepts only a coach, so offer it
+  only on coach rows.
 - **Knowledge editors** are coaches, team leaders, **mentors and students**
   (`KNOWLEDGE_EDITOR_ROLES` / `requireKnowledgeEditor`, `phase2.ts`): they
   publish and unpublish team videos (and see drafts), close team polls, and

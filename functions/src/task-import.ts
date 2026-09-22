@@ -1,7 +1,7 @@
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertTeamAdminInTransaction, assertTeamMemberInTransaction, auditRecord, requireString, requireTeamAdmin, requireTeamId, requireText } from './phase2.js';
+import { assertAssignableMemberInTransaction, assertTeamAdminInTransaction, auditRecord, isTaskAssignableRole, requireString, requireTeamAdmin, requireTeamId, requireText } from './phase2.js';
 import {
   categoryGoalId,
   MAX_CARDS_PER_COLUMN_PAGE,
@@ -205,7 +205,7 @@ export const importProjectTasks = async (request: ImportRequest): Promise<Import
     // Every assignee the sheet named must still be an active member of this
     // team. The browser resolved the names; this is the check that counts.
     const assignees = [...new Set(rows.flatMap((row) => [row.assignedTo, ...row.subtasks.map((subtask) => subtask.assignedTo)]).filter((uid): uid is string => Boolean(uid)))];
-    for (const assignee of assignees) await assertTeamMemberInTransaction(transaction, teamId, assignee);
+    for (const assignee of assignees) await assertAssignableMemberInTransaction(transaction, teamId, assignee);
 
     const existingCategories = projectCategories(project);
     const { created, assigned } = resolveImportCategories(existingCategories, rows.map((row) => row.categoryName));
@@ -329,8 +329,11 @@ export type AssigneeMatch = {
   value: string;
   userId: string | null;
   displayName: string | null;
-  /** Why a value did not resolve: 'unknown' or 'ambiguous'. */
-  reason: 'matched' | 'unknown' | 'ambiguous';
+  /**
+   * Why a value did not resolve: 'unknown', 'ambiguous', or 'parent' — a
+   * teammate who is a parent, and so follows the tracker read-only.
+   */
+  reason: 'matched' | 'unknown' | 'ambiguous' | 'parent';
 };
 
 function normalizeLookup(value: string) {
@@ -339,7 +342,7 @@ function normalizeLookup(value: string) {
 
 export function matchAssignees(
   values: string[],
-  members: Array<{ userId: string; displayName: string; email: string | null }>
+  members: Array<{ userId: string; displayName: string; email: string | null; role?: string }>
 ): AssigneeMatch[] {
   const byName = new Map<string, string[]>();
   const byEmail = new Map<string, string[]>();
@@ -350,11 +353,19 @@ export function matchAssignees(
     if (email) byEmail.set(email, [...(byEmail.get(email) ?? []), member.userId]);
   }
   const displayNames = new Map(members.map((member) => [member.userId, member.displayName]));
+  // A member without a role recorded is matched as before; only a known
+  // parent is held back.
+  const parents = new Set(members.filter((member) => member.role !== undefined && !isTaskAssignableRole(member.role)).map((member) => member.userId));
   return values.map((value) => {
     const key = normalizeLookup(value);
     // An email is unique per account, so it wins over a display name that two
     // students could share.
     const candidates = byEmail.get(key) ?? byName.get(key) ?? [];
+    if (candidates.length === 1 && parents.has(candidates[0])) {
+      // Named plainly so the coach knows why, rather than being told this
+      // person "is not on this team".
+      return { value, userId: null, displayName: displayNames.get(candidates[0]) ?? null, reason: 'parent' as const };
+    }
     if (candidates.length === 1) return { value, userId: candidates[0], displayName: displayNames.get(candidates[0]) ?? null, reason: 'matched' as const };
     return { value, userId: null, displayName: null, reason: candidates.length > 1 ? 'ambiguous' as const : 'unknown' as const };
   });
@@ -375,6 +386,7 @@ export const resolveImportAssignees = async (request: ImportRequest) => {
   const db = getFirestore();
   const memberships = await db.collection('memberships').where('teamId', '==', teamId).where('status', '==', 'active').limit(200).get();
   const userIds = memberships.docs.map((document) => String(document.data().userId));
+  const roles = new Map(memberships.docs.map((document) => [String(document.data().userId), String(document.data().role ?? '')]));
   if (!userIds.length) return { matches: matchAssignees(values, []) };
   const profiles = await db.getAll(...userIds.map((userId) => db.doc(`users/${userId}`)));
   // The address to match on is the one the member signs in with, which lives in
@@ -393,7 +405,8 @@ export const resolveImportAssignees = async (request: ImportRequest) => {
     return {
       userId: snapshot.id,
       displayName: typeof data.displayName === 'string' && data.displayName ? data.displayName : identity?.displayName ?? '',
-      email: identity?.email ?? (typeof data.email === 'string' ? data.email : null)
+      email: identity?.email ?? (typeof data.email === 'string' ? data.email : null),
+      role: roles.get(snapshot.id)
     };
   });
   return { matches: matchAssignees(values, members) };

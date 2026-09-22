@@ -3,7 +3,9 @@ import { getStorage } from 'firebase-admin/storage';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   assertTeamAdminInTransaction,
+  assertAssignableMemberInTransaction,
   assertTeamMemberInTransaction,
+  isTaskAssignableRole,
   getInput,
   isReplayOfOwnCreate,
   isTaskEditor,
@@ -374,7 +376,7 @@ export const createTask = async (request: Phase3Request) => {
     ]);
     if (isReplayOfOwnCreate(existing, operation, { teamId, actorUserId: admin.uid }, 'Task')) return;
     if (!columnHasCapacity(lastCards.size)) throw new HttpsError('resource-exhausted', 'This column is full. Archive completed work before adding more cards.');
-    if (task.assignedTo) await assertTeamMemberInTransaction(transaction, teamId, task.assignedTo);
+    if (task.assignedTo) await assertAssignableMemberInTransaction(transaction, teamId, task.assignedTo);
     for (const watcherUserId of task.watcherUserIds) await assertTeamMemberInTransaction(transaction, teamId, watcherUserId);
     let goalRef: FirebaseFirestore.DocumentReference | null = null;
     if (task.goalId) {
@@ -479,6 +481,11 @@ export const updateTask = async (request: Phase3Request) => {
     if (!currentEditor && Object.keys(adminFields).length > 0) {
       throw new HttpsError('permission-denied', 'Your role can update status, checklist, subtask status, and comments only.');
     }
+    // Parents follow the board read-only. A task assigned to one before that
+    // rule existed must not let them tick it off through the assignee path.
+    if (!currentEditor && !isTaskAssignableRole(actorMembership.role)) {
+      throw new HttpsError('permission-denied', 'Parents can view the tracker but cannot change it.');
+    }
     const storedSubtasks = readSubtasks(current.subtasks);
     const targetSubtask = subtaskStatus ? storedSubtasks.find((entry) => entry.id === subtaskStatus.id) : undefined;
     if (subtaskStatus && !targetSubtask) throw new HttpsError('not-found', 'Subtask not found on this task.');
@@ -493,7 +500,19 @@ export const updateTask = async (request: Phase3Request) => {
       || (subtaskStatusOnly && targetSubtask !== undefined && canUpdateSubtaskStatus(current, targetSubtask, actor.uid));
     if (!currentEditor && !mayEditAsAssignee) throw new HttpsError('permission-denied', 'Only the assignee can update this task.');
     const nextSubtasks = subtaskStatus ? applySubtaskStatus(storedSubtasks, subtaskStatus) : undefined;
-    if (adminFields.assignedTo) await assertTeamMemberInTransaction(transaction, teamId, String(adminFields.assignedTo));
+    // Checked only when the assignee actually changes, so editing the title of
+    // a card assigned to a parent before the rule existed still saves.
+    if (adminFields.assignedTo && adminFields.assignedTo !== current.assignedTo) {
+      await assertAssignableMemberInTransaction(transaction, teamId, String(adminFields.assignedTo));
+    }
+    if (Array.isArray(adminFields.subtasks)) {
+      const previousAssignees = new Map(storedSubtasks.map((entry) => [entry.id, entry.assignedTo]));
+      for (const subtask of adminFields.subtasks as Subtask[]) {
+        if (subtask.assignedTo && subtask.assignedTo !== previousAssignees.get(subtask.id)) {
+          await assertAssignableMemberInTransaction(transaction, teamId, subtask.assignedTo);
+        }
+      }
+    }
     const nextWatcherUserIds = Array.isArray(adminFields.watcherUserIds) ? adminFields.watcherUserIds : Array.isArray(current.watcherUserIds) ? current.watcherUserIds : [];
     for (const watcherUserId of nextWatcherUserIds) await assertTeamMemberInTransaction(transaction, teamId, String(watcherUserId));
     if (adminFields.goalId) {

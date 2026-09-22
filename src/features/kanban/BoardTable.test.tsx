@@ -129,6 +129,19 @@ describe('BoardTable subtasks', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show 2 subtasks/ }));
     expect(screen.queryByLabelText('Status for subtask Build UI')).not.toBeInTheDocument();
   });
+
+  it('gives a parent no status control, even on a card assigned to them before the rule', () => {
+    renderBoard({
+      groups: groupBoardTasks([withSubtasks], 'column', project, now),
+      canManage: false,
+      actorUserId: 'ada',
+      mayWorkAsAssignee: false
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Show 2 subtasks/ }));
+    expect(screen.getByText('Build UI')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Status for subtask Build UI')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Status for subtask Create login screen')).not.toBeInTheDocument();
+  });
 });
 
 describe('BoardTable groups', () => {

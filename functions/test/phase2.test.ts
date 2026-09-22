@@ -8,6 +8,8 @@ import {
   assertNotLastCoach,
   auditRecord,
   encodedInvitationId,
+  isTaskAssignableRole,
+  TASK_ASSIGNABLE_ROLES,
   isReplayOfOwnCreate,
   requireAssignableRole,
   requireEmail,
@@ -203,5 +205,12 @@ describe('team creation by account type', () => {
     expect(requireAccountType('mentor')).toBe('mentor');
     expect(() => requireAccountType('teamLeader')).toThrow('Account type must be');
     expect(() => requireAccountType(undefined)).toThrow('Account type must be');
+  });
+
+  it('lets every role but parents be given tracker work', () => {
+    expect([...TASK_ASSIGNABLE_ROLES].sort()).toEqual(['coach', 'mentor', 'student', 'teamLeader']);
+    expect(isTaskAssignableRole('parent')).toBe(false);
+    expect(isTaskAssignableRole('mentor')).toBe(true);
+    expect(isTaskAssignableRole(undefined)).toBe(false);
   });
 });
