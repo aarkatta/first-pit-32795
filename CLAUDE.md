@@ -45,7 +45,8 @@ Two aggregate gates — `npm run verify` is what CI runs:
 
 Emulator/rules suites run individually, each against its own throwaway project id,
 e.g. `npm run test:rules:phase3`, `npm run test:phase3-emulator`,
-`npm run test:storage:rules`, `npm run test:foundation-emulator`.
+`npm run test:storage:rules`, `npm run test:foundation-emulator`,
+`npm run test:provisioning-emulator` (coach-created accounts, forced password change).
 
 Node 24 and npm 11.4.2 are pinned (`engines`, `.nvmrc`, `packageManager`); the
 Functions runtime is `nodejs24`. `functions/` is an npm workspace, so a root
@@ -258,7 +259,13 @@ inventing per-page error UI.
   `firebase emulators:exec`. They talk to the emulator REST APIs / rules-unit-testing
   directly and throw on failure; there is no test framework in them. They use the
   default emulator ports, so stop a running `npm run emulators` first (or run them
-  against a copy of `firebase.json` with other ports). Any suite that creates a
+  against a copy of `firebase.json` with other ports). Only
+  `tests/provisioning-emulator-integration.mjs` reads its ports from the
+  environment (`FIRST_PIT_AUTH_PORT`, `FIRST_PIT_FUNCTIONS_PORT`,
+  `FIRST_PIT_FIRESTORE_PORT`); the other suites hard-code the defaults. Remember
+  `npm run functions:build` first when calling `firebase emulators:exec`
+  directly — the npm scripts do it for you, and a stale `functions/lib` runs
+  the old code. Any suite that creates a
   team must first call `setAccountType` with `coach` or `mentor`.
 - `scripts/release-check.mjs` is a static release gate (Capacitor metadata,
   Vercel SPA rewrite, safe-area viewport, production emulator guard, secret scan).

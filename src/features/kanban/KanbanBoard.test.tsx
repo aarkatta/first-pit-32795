@@ -203,6 +203,8 @@ describe('TaskDetails file upload', () => {
   it('tells a coach how to turn team files on', () => {
     render(<TaskDetails task={task} canManage busy={false} fileSharing="disabled" onUploadFile={vi.fn()} onClose={vi.fn()} onSave={vi.fn()} />);
     expect(screen.getByText(/Team files are turned off/)).toBeInTheDocument();
+    // Team settings moved from Manage team to Administration.
+    expect(screen.getByText('Administration → Team settings')).toBeInTheDocument();
     expect(screen.queryByLabelText('Upload a file')).not.toBeInTheDocument();
   });
 
