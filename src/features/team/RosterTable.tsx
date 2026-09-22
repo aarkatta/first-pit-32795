@@ -12,6 +12,8 @@ type RosterTableProps = {
   onResetPassword: (member: TeamMember) => void;
 };
 
+const isCoachRole = (role: string) => role === 'coach' || role === 'teamLeader';
+
 function statusLabel(status: string) {
   return `${status[0]?.toUpperCase() ?? ''}${status.slice(1)}`;
 }
@@ -38,6 +40,10 @@ export function RosterTable({
   onSuspend,
   onResetPassword
 }: RosterTableProps) {
+  // A team must always keep an active coach. The server refuses a change that
+  // would leave none (assertNotLastCoach, inside the same transaction), but the
+  // sole coach should be told before they try, not after.
+  const coachCount = members.filter((member) => isCoachRole(member.role)).length;
   return (
     <>
       {truncated ? <p><small>Showing the first 200 members. Older memberships are not listed.</small></p> : null}
@@ -55,6 +61,7 @@ export function RosterTable({
             {members.map((member, index) => {
               const isSelf = member.userId === currentUserId;
               const provisioned = member.provisionedByThisTeam === true;
+              const soleCoach = isCoachRole(member.role) && coachCount === 1;
               return (
                 <tr key={member.userId}>
                   <td>
@@ -70,18 +77,26 @@ export function RosterTable({
                   </td>
                   <td>
                     {canAdminister ? (
-                      <select
-                        id={`role-${member.userId}`}
-                        aria-label={`Role for ${member.displayName}`}
-                        value={member.role === 'teamLeader' ? 'coach' : member.role}
-                        disabled={locked}
-                        onChange={(event) => onRoleChange(member, event.target.value as 'student' | 'parent' | 'mentor' | 'coach')}
-                      >
-                        <option value="student">Student</option>
-                        <option value="parent">Parent</option>
-                        <option value="mentor">Mentor</option>
-                        <option value="coach">Coach</option>
-                      </select>
+                      <>
+                        <select
+                          id={`role-${member.userId}`}
+                          aria-label={`Role for ${member.displayName}`}
+                          aria-describedby={soleCoach ? `role-hint-${member.userId}` : undefined}
+                          value={member.role === 'teamLeader' ? 'coach' : member.role}
+                          disabled={locked}
+                          onChange={(event) => onRoleChange(member, event.target.value as 'student' | 'parent' | 'mentor' | 'coach')}
+                        >
+                          <option value="student" disabled={soleCoach}>Student</option>
+                          <option value="parent" disabled={soleCoach}>Parent</option>
+                          <option value="mentor" disabled={soleCoach}>Mentor</option>
+                          <option value="coach">Coach</option>
+                        </select>
+                        {soleCoach ? (
+                          <small id={`role-hint-${member.userId}`} className="roster-table__hint">
+                            {isSelf ? "You're" : `${member.displayName} is`} the only coach — make another member a coach first.
+                          </small>
+                        ) : null}
+                      </>
                     ) : <span>{member.role === 'teamLeader' ? 'Team leader' : statusLabel(member.role)}</span>}
                   </td>
                   <td><span className={`roster-status roster-status--${member.status}`}>{statusLabel(member.status)}</span></td>

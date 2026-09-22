@@ -51,6 +51,8 @@ export function ManageTeamPage() {
   const [busy, setBusy] = useState(false);
   /** The member just suspended, so the notice can offer Undo before the row is forgotten. */
   const [justSuspended, setJustSuspended] = useState<TeamMember | null>(null);
+  /** A coach about to change their own role away from coach, awaiting confirmation. */
+  const [selfDemotion, setSelfDemotion] = useState<'student' | 'parent' | 'mentor' | null>(null);
   const locked = busy || !online;
 
   const loadRoster = useCallback(async () => {
@@ -74,6 +76,7 @@ export function ManageTeamPage() {
     setAdding(false);
     setCredentials(null);
     setJustSuspended(null);
+    setSelfDemotion(null);
   }, [teamId]);
 
   /** Runs a membership mutation, then re-reads the roster it changed. */
@@ -215,6 +218,22 @@ export function ManageTeamPage() {
           ) : null}
         </div>
 
+        {selfDemotion && teamId && user ? (
+          <div className="roster-notice" role="alert">
+            <span>
+              <strong>Change your own role to {selfDemotion}?</strong> You will stop being a coach of
+              {' '}{teamName} straight away, and lose access to adding members and Administration.
+              Another coach would have to change it back.
+            </span>
+            <span className="form-actions">
+              <button className="button button--small" type="button" disabled={locked} onClick={() => void run(async () => {
+                await assignTeamRole(teamId, user.uid, selfDemotion);
+                setSelfDemotion(null);
+              })}>Yes, make me a {selfDemotion}</button>
+              <button className="button button--ghost button--small" type="button" disabled={busy} onClick={() => setSelfDemotion(null)}>Cancel</button>
+            </span>
+          </div>
+        ) : null}
         {justSuspended && teamId ? (
           <div className="roster-notice" role="status">
             <span>
@@ -254,7 +273,16 @@ export function ManageTeamPage() {
             currentUserId={user?.uid ?? ''}
             canAdminister={canAdminister}
             locked={locked}
-            onRoleChange={(member, role) => void run(() => assignTeamRole(teamId, member.userId, role))}
+            onRoleChange={(member, role) => {
+              // Demoting yourself ends your coach access the moment it saves,
+              // so it is confirmed first. Anyone else's change applies at once.
+              const demotingSelf = member.userId === user?.uid && ['coach', 'teamLeader'].includes(member.role) && role !== 'coach';
+              if (demotingSelf) {
+                setSelfDemotion(role as 'student' | 'parent' | 'mentor');
+                return;
+              }
+              void run(() => assignTeamRole(teamId, member.userId, role));
+            }}
             onSuspend={(member) => void run(async () => {
               await updateMembershipStatus(teamId, member.userId, 'suspended');
               setJustSuspended(member);

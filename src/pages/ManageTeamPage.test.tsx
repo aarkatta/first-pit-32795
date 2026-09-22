@@ -202,6 +202,58 @@ describe('ManageTeamPage roster', () => {
     expect(screen.queryByRole('button', { name: /make leader/i })).not.toBeInTheDocument();
   });
 
+  it("stops the only coach from giving up the coach role, and says what to do", async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    renderPage();
+    const own = await screen.findByRole('combobox', { name: 'Role for Dana Ruiz' });
+    const options = Object.fromEntries(Array.from(own.querySelectorAll('option')).map((option) => [option.value, option.disabled]));
+    expect(options).toEqual({ student: true, parent: true, mentor: true, coach: false });
+    expect(screen.getByText(/you're the only coach — make another member a coach first/i)).toBeInTheDocument();
+    // Other members' roles are unaffected.
+    expect(Array.from(screen.getByRole('combobox', { name: 'Role for Amir Khan' }).querySelectorAll('option')).every((option) => !option.disabled)).toBe(true);
+    // And making a student a coach is exactly what unlocks it.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Role for Amir Khan' }), { target: { value: 'coach' } });
+    await waitFor(() => expect(mocks.assignTeamRole).toHaveBeenCalledWith('team-1', 'student-1', 'coach'));
+  });
+
+  describe('with a second coach on the team', () => {
+    const twoCoaches: TeamRoster = {
+      ...roster,
+      members: [...roster.members, { userId: 'coach-2', role: 'coach', status: 'active', displayName: 'Lee Coach', photoURL: null, initials: 'LC', provisionedByThisTeam: false, mustSetPassword: false }]
+    };
+
+    it('lets a coach step down, but asks first', async () => {
+      withTeam('coach');
+      mocks.listTeamMembers.mockResolvedValue(twoCoaches);
+      mocks.assignTeamRole.mockResolvedValue({});
+      renderPage();
+      const own = await screen.findByRole('combobox', { name: 'Role for Dana Ruiz' });
+      expect(screen.queryByText(/the only coach/i)).not.toBeInTheDocument();
+
+      fireEvent.change(own, { target: { value: 'parent' } });
+      expect(mocks.assignTeamRole).not.toHaveBeenCalled();
+      expect(screen.getByText(/change your own role to parent\?/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByText(/change your own role/i)).not.toBeInTheDocument();
+      expect(mocks.assignTeamRole).not.toHaveBeenCalled();
+
+      fireEvent.change(own, { target: { value: 'parent' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, make me a parent' }));
+      await waitFor(() => expect(mocks.assignTeamRole).toHaveBeenCalledWith('team-1', 'coach-1', 'parent'));
+    });
+
+    it("changes another coach's role without a confirmation", async () => {
+      withTeam('coach');
+      mocks.listTeamMembers.mockResolvedValue(twoCoaches);
+      mocks.assignTeamRole.mockResolvedValue({});
+      renderPage();
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Role for Lee Coach' }), { target: { value: 'mentor' } });
+      await waitFor(() => expect(mocks.assignTeamRole).toHaveBeenCalledWith('team-1', 'coach-2', 'mentor'));
+      expect(screen.queryByText(/change your own role/i)).not.toBeInTheDocument();
+    });
+  });
+
   it('offers Reset password only for accounts this team created', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);

@@ -1156,6 +1156,14 @@ server's last-coach refusal is shown verbatim), plus **Accept an invitation** an
 **Create another team** (offered per `mayOfferTeamCreation`). Manage team keeps
 only its empty state for someone with no team at all.
 
+**A team always keeps a coach (2026-09-21).** The server has always refused a
+role change, suspension or departure that would leave no active coach
+(`assertNotLastCoach`, inside the transaction). Manage team now says so before
+the coach tries: on the sole coach's row the non-coach roles are disabled, with
+"the only coach — make another member a coach first". When other coaches exist,
+a coach changing their *own* role is asked to confirm, since it ends their coach
+access the moment it saves; changing another member's role applies at once.
+
 **Make team leader was removed (2026-09-21).** "Team leader" grants nothing a
 coach does not have — every permission check treats the two alike, and a new
 team's creator starts as a plain coach — so the button only moved a label, and
