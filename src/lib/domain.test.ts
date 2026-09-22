@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canBeAssignedTasks,
   teamNumberSuffix,
   canEditKnowledge,
   canEditTasks,
@@ -86,5 +87,13 @@ describe('domain authorization helpers', () => {
   it('treats Platform Admin as a separate full-access claim', () => {
     expect(canRole('platformAdmin', 'moderation.manage')).toBe(true);
     expect(canRole('student', 'moderation.manage')).toBe(false);
+  });
+});
+
+describe('canBeAssignedTasks', () => {
+  it('lets every role but parents be given tracker work', () => {
+    for (const role of ['coach', 'teamLeader', 'mentor', 'student']) expect(canBeAssignedTasks(role)).toBe(true);
+    expect(canBeAssignedTasks('parent')).toBe(false);
+    expect(canBeAssignedTasks(null)).toBe(false);
   });
 });

@@ -49,6 +49,15 @@ async function callFails(name, token, data, expectedStatus) {
   return body;
 }
 
+/** Writes fields as the emulator owner, bypassing rules — for data an earlier version could create. */
+async function patchAsOwner(path, fields) {
+  const updateMask = Object.keys(fields).map((field) => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join('&');
+  const { response, body } = await json(`${firestoreBase}/${path}?${updateMask}`, {
+    method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, body: JSON.stringify({ fields })
+  });
+  if (response.status !== 200) throw new Error(`Could not patch ${path}: ${JSON.stringify(body)}`);
+}
+
 async function readDocument(path, token) {
   const { response, body } = await json(`${firestoreBase}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status !== 200) throw new Error(`Could not read ${path}: ${JSON.stringify(body)}`);
@@ -239,6 +248,24 @@ await callFails('updateTask', parent.idToken, { teamId, taskId: subtaskCard.task
 await callFails('updateTask', student.idToken, { teamId, taskId: subtaskCard.taskId, subtaskStatus: { id: 'no-such-subtask', status: 'done' } }, 'NOT_FOUND');
 await callFails('updateTask', coach.idToken, { teamId, taskId: subtaskCard.taskId, expectedVersion: 99, subtasks: [] }, 'ABORTED');
 
+// Parents follow the tracker read-only: no path that assigns work accepts one.
+await callFails('createTask', coach.idToken, { ...taskInput, taskId: `parent-task-${suffix}`, operationId: `parent-create-${suffix}`, assignedTo: parent.localId }, 'FAILED_PRECONDITION');
+await callFails('createKanbanTask', coach.idToken, { teamId, projectId: project.projectId, columnId: 'todo', operationId: `parent-quick-${suffix}`, title: 'For a parent', assignedTo: parent.localId }, 'FAILED_PRECONDITION');
+const beforeParentAssign = await readDocument(`tasks/${subtaskCard.taskId}`, coach.idToken);
+const parentAssignVersion = Number(beforeParentAssign.fields.version?.integerValue);
+await callFails('updateTask', coach.idToken, { teamId, taskId: subtaskCard.taskId, expectedVersion: parentAssignVersion, assignedTo: parent.localId }, 'FAILED_PRECONDITION');
+await callFails('updateTask', coach.idToken, { teamId, taskId: subtaskCard.taskId, expectedVersion: parentAssignVersion, subtasks: [{ ...subtasks[0], assignedTo: parent.localId }] }, 'FAILED_PRECONDITION');
+// A card assigned to a parent before the rule existed: they still cannot touch
+// it through the assignee path, and editors can still edit it.
+await patchAsOwner(`tasks/${subtaskCard.taskId}`, { assignedTo: { stringValue: parent.localId } });
+await callFails('updateTask', parent.idToken, { teamId, taskId: subtaskCard.taskId, status: 'review' }, 'PERMISSION_DENIED');
+await callFails('updateTask', parent.idToken, { teamId, taskId: subtaskCard.taskId, comment: 'Looks good' }, 'PERMISSION_DENIED');
+// The card dialog saves the whole form, so the unchanged assignee comes back too.
+await call('updateTask', coach.idToken, { teamId, taskId: subtaskCard.taskId, expectedVersion: parentAssignVersion, title: 'Renamed while a parent holds it', assignedTo: parent.localId });
+const renamedLegacy = await readDocument(`tasks/${subtaskCard.taskId}`, coach.idToken);
+if (renamedLegacy.fields.title?.stringValue !== 'Renamed while a parent holds it') throw new Error('An editor could not edit a card already assigned to a parent.');
+await call('updateTask', coach.idToken, { teamId, taskId: subtaskCard.taskId, expectedVersion: parentAssignVersion + 1, assignedTo: student.localId });
+
 // A status change resolves against the board's real workflow. This board's
 // columns are the preset's, so there is no column called "inProgress": the card
 // must keep its column instead of disappearing into one that does not exist.
@@ -400,6 +427,9 @@ if (resolved.matches?.[0]?.userId !== student.localId || resolved.matches[0].rea
 if (resolved.matches[1].userId !== null || resolved.matches[1].reason !== 'unknown') throw new Error('An unknown assignee was not reported as unknown.');
 if (Object.values(resolved.matches[0]).includes(student.email) === false) throw new Error('The resolver did not echo the value it was asked about.');
 await callFails('resolveImportAssignees', student.idToken, { teamId, values: [student.email] }, 'PERMISSION_DENIED');
+const parentLookup = await call('resolveImportAssignees', coach.idToken, { teamId, values: [parent.email] });
+if (parentLookup.matches?.[0]?.userId !== null || parentLookup.matches[0].reason !== 'parent') throw new Error('An import naming a parent did not report them as a parent.');
+await callFails('importProjectTasks', coach.idToken, { ...richImport, operationId: `parent-assignee-${suffix}`, rows: [{ title: 'For a parent', assignedTo: parent.localId }] }, 'FAILED_PRECONDITION');
 await callFails('importProjectTasks', coach.idToken, { ...importInput, operationId: `bad-area-${suffix}`, rows: [{ title: 'Bad area', area: 'marketing' }] }, 'INVALID_ARGUMENT');
 await callFails('importProjectTasks', coach.idToken, { ...importInput, operationId: `bad-column-${suffix}`, columnId: 'no-such-column' }, 'NOT_FOUND');
 await callFails('createProjectFromTemplate', coach.idToken, { teamId, templateId: saved.templateId }, 'NOT_FOUND');

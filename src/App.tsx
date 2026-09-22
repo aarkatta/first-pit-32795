@@ -26,6 +26,7 @@ const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((module) => 
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const ScorerPage = lazy(() => import('@/pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
 const ManageTeamPage = lazy(() => import('@/pages/ManageTeamPage').then((module) => ({ default: module.ManageTeamPage })));
+const AdministrationPage = lazy(() => import('@/pages/AdministrationPage').then((module) => ({ default: module.AdministrationPage })));
 
 type AppRoutesProps = {
   clientEnv?: ClientEnv;
@@ -64,11 +65,12 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
                 recipient reads mail in, usually with no session. */}
             <Route path="/auth/action" element={<AuthActionPage />} />
             <Route path="/team" element={<ProtectedRoute><ManageTeamPage /></ProtectedRoute>} />
-            {/* The team hub and team admin merged into Manage team; bookmarks,
-                emails and stored notifications still carry the old paths. */}
-            <Route path="/team/admin" element={<Navigate to="/team" replace />} />
+            {/* Manage team is the roster; the administration a coach reaches for
+                occasionally lives at /admin. `/hub` and `/team/admin` are older
+                paths still carried by bookmarks and stored notifications. */}
+            <Route path="/admin" element={<ProtectedRoute><AdministrationPage /></ProtectedRoute>} />
+            <Route path="/team/admin" element={<Navigate to="/admin" replace />} />
             <Route path="/hub" element={<Navigate to="/team" replace />} />
-            <Route path="/admin" element={<Navigate to="/team" replace />} />
             <Route path="/coordination" element={<ProtectedRoute><CoordinationPage /></ProtectedRoute>} />
             <Route path="/board-setup" element={<ProtectedRoute><BoardSetupPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><ImportTasksPage /></ProtectedRoute>} />

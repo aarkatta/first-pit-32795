@@ -3,6 +3,7 @@ import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   assertTaskEditorInTransaction,
   assertTeamAdminInTransaction,
+  assertAssignableMemberInTransaction,
   assertTeamMemberInTransaction,
   auditRecord,
   getInput,
@@ -798,7 +799,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
     // unless the caller pointed it somewhere else on purpose.
     const goalId = requestedGoalId === undefined ? categoryGoalId(projectCategoryList, categoryId) : requestedGoalId;
     if (!columnHasCapacity(lastCards.size)) throw new HttpsError('resource-exhausted', 'This column is full. Archive completed work before adding more cards.');
-    if (assignedTo) await assertTeamMemberInTransaction(transaction, teamId, assignedTo);
+    if (assignedTo) await assertAssignableMemberInTransaction(transaction, teamId, assignedTo);
     for (const watcher of watcherUserIds) await assertTeamMemberInTransaction(transaction, teamId, watcher);
     if (goalId) {
       const goal = await transaction.get(db.doc(`goals/${goalId}`));

@@ -361,7 +361,7 @@ export type ImportTaskRowInput = {
   subtasks?: Array<{ id: string; title: string; status: SubtaskStatus; assignedTo: string | null; dueAt: string | null }>;
 };
 
-export type ImportAssigneeMatch = { value: string; userId: string | null; displayName: string | null; reason: 'matched' | 'unknown' | 'ambiguous' };
+export type ImportAssigneeMatch = { value: string; userId: string | null; displayName: string | null; reason: 'matched' | 'unknown' | 'parent' | 'ambiguous' };
 
 /**
  * Names and email addresses from the sheet are matched on the server: profile

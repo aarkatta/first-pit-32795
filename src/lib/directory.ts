@@ -18,6 +18,14 @@ export type TeamMember = {
   displayName: string;
   photoURL: string | null;
   initials: string;
+  /**
+   * Whether this team created the account, so a coach may reset its password.
+   * Sent only to coaches and team leaders — undefined for everyone else, which
+   * is why the roster reads it with `=== true` rather than trusting a default.
+   */
+  provisionedByThisTeam?: boolean;
+  /** Admin-only: still signing in with the password their coach passed on. */
+  mustSetPassword?: boolean;
 };
 
 export type TeamRoster = {

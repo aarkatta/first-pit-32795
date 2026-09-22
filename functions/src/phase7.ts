@@ -1,6 +1,6 @@
-import { getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { auditRecord, getInput, requireAuth, requireString, requireTeamMember } from './phase2.js';
+import { getInput, requireAuth, requireString, requireTeamMember } from './phase2.js';
 
 export type Phase7Request = CallableRequest<Record<string, unknown>>;
 
@@ -195,7 +195,6 @@ export const updateProfileSettings = async (request: Phase7Request) => {
   for (const [name, value] of [['highContrast', data.highContrast], ['reducedMotion', data.reducedMotion], ['emailNotifications', data.emailNotifications], ['pushNotifications', data.pushNotifications]] as const) {
     if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', `${name} must be boolean.`);
   }
-  if (data.isMinor !== undefined && typeof data.isMinor !== 'boolean') throw new HttpsError('invalid-argument', 'Minor status must be boolean.');
   const db = getFirestore();
   const userRef = db.doc(`users/${auth.uid}`);
   const notificationRef = db.doc(`notificationPreferences/${auth.uid}`);
@@ -206,18 +205,12 @@ export const updateProfileSettings = async (request: Phase7Request) => {
     const now = Timestamp.now();
     transaction.set(userRef, { uid: auth.uid, email: request.auth?.token.email ?? null, displayName, photoURL: photoURL || null, updatedAt: now, ...(existing.exists ? {} : { createdAt: now }) }, { merge: true });
     transaction.set(notificationRef, { userId: auth.uid, emailNotifications: data.emailNotifications, pushNotifications: data.pushNotifications, safetyNotifications: true, updatedAt: now }, { merge: true });
-    transaction.set(privacyRef, { userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(data.isMinor === undefined ? {} : { isMinor: data.isMinor }), updatedAt: now }, { merge: true });
+    // `isMinor` was a self-declared "I am under 18" checkbox that nothing read.
+    // It is no longer collected, and every save scrubs any value an earlier
+    // version stored — unused information about children is not kept. An older
+    // client that still sends the field is ignored rather than refused.
+    transaction.set(privacyRef, { userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, isMinor: FieldValue.delete(), updatedAt: now }, { merge: true });
     transaction.set(settingsRef, { userId: auth.uid, theme, highContrast: data.highContrast, reducedMotion: data.reducedMotion, fontScale, updatedAt: now }, { merge: true });
-    // `isMinor` gates youth-safety behavior across the product, so changing it
-    // here has to leave the same audit trail as updatePrivacySettings.
-    if (data.isMinor !== undefined) {
-      transaction.set(db.collection('auditEvents').doc(), auditRecord({
-        type: 'sensitive.updated',
-        actorUserId: auth.uid,
-        targetResource: `privacySettings/${auth.uid}`,
-        metadata: { action: 'privacy.updated' }
-      }));
-    }
   });
   return { userId: auth.uid, saved: true as const, safetyNotifications: true as const };
 };

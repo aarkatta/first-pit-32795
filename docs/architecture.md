@@ -21,6 +21,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 - [Dashboard, global search, and profile integration](#dashboard-global-search-and-profile-integration)
 - [App shell and navigation](#app-shell-and-navigation)
 - [Manage team](#manage-team)
+- [Administration](#administration)
 - [Landing page](#landing-page)
 - [Authentication hardening](#authentication-hardening)
 - [Calendar and Google Calendar integration (removed)](#calendar-and-google-calendar-integration-removed)
@@ -309,9 +310,10 @@ upload control. No callable, rule or index changed.
 First Pit sends no email for invitations — there is no mail provider.
 `createInvitation` stores a pending invitation (normalized email, role, team
 name, 7-day expiry, audit record) and returns its id; the coach sends the
-invite link (`/join?invite=<id>`) themselves. The Administration section says
-so, copies the link to the clipboard on creation, and keeps **Copy link** on
-every pending invitation. The invitee must sign in as, and verify, the invited
+invite link (`/join?invite=<id>`) themselves. Since 2026-09-21 invitations are
+created only from **Manage team → ＋ Add a member**, when the address already
+has an account; the dialog copies the link on creation, and Administration's
+Invitations tab keeps **Copy link** on every pending invitation. The invitee must sign in as, and verify, the invited
 address before `acceptInvitation` succeeds.
 
 **Email invite (2026-09-18).** To save the coach retyping the message, the
@@ -343,6 +345,71 @@ admits the invited, verified address only. Two failure modes are handled:
   before reporting a permission error.
 - *Wrong account.* If the read is still refused, the message names the address
   the invitee is signed in as, so a mismatch is obvious.
+
+### Coach-provisioned member accounts (2026-09-21)
+
+The second way onto a team, beside invitations. A coach opens **Manage team →
+＋ Add a member**, gives a name, an email address (typed twice) and a role;
+`provisionTeamMember` creates the Firebase Auth account with a generated
+single-use password and returns it once. The coach passes the credentials on
+from their own mailbox, and `PasswordSetupGate` makes the member replace the
+password before they reach any team data.
+
+Why it exists: the invitation flow asks the invitee to create an account,
+verify their address and accept — three handoffs, and the middle one routinely
+fails because Firebase's `noreply@<authDomain>` sender lands in spam (see
+`authEmailSender`). A student stuck at the verification gate could not be
+helped by anyone, because by design no coach held any lever over their account.
+
+**What the design holds onto.**
+
+- *The password is returned once and stored nowhere* — not in the
+  `phase2Operations` receipt, not in the profile, not in a log line. A replay of
+  the same `operationId` returns `temporaryPassword: null` and says to use
+  **Reset password**. `CredentialsCard` copies to the clipboard and deliberately
+  builds no URL: `invite-email.ts` can hand Gmail a pre-written compose screen
+  because an invitation link is safe in a query string, and a live password is
+  not — it would land in the coach's browser history.
+- *An address that already has an account is refused* (`already-exists`, with a
+  message pointing at invitations). Attaching someone's existing personal
+  account to a team without them acting is what the invitation flow prevents,
+  and that stays true.
+- *A coach's reset reaches only accounts their own team created.*
+  `resetTeamMemberPassword` requires `users/{uid}.provisionedByTeamId === teamId`
+  and an active membership, so a coach can never take over the personal account
+  of a mentor or parent who signed up themselves. Every reset writes an
+  `administrative.action` audit event; the Firestore transaction commits before
+  the Auth password changes, so a failure leaves an audited attempt rather than
+  an untraceable password change.
+- *`emailVerified` stays false.* Nobody proved the mailbox, and saying otherwise
+  would be a claim First Pit cannot support. Only invitation reads require the
+  claim (`firestore.rules`), so a provisioned member works everywhere else and
+  still has to verify before accepting an invitation to a *second* team.
+  `ProtectedRoute` exempts them from `EmailVerificationGate` on
+  `provisionedByTeamId`, and puts `PasswordSetupGate` ahead of it.
+- *The forced change is enforced server-side.* `setInitialPassword` refuses
+  unless `mustSetPassword` is still set, and sets the password itself, so the
+  flag cannot clear without the password really changing. The browser cannot
+  write the flag (the `users` rules pin which keys an owner may touch).
+- *`accountType` follows the coach's chosen role*, keeping a provisioned student
+  a student for `teamCreationRefusal`.
+
+**Known risks, accepted.** A mistyped address now produces a working account
+whose credentials the coach is about to email, where under the invitation flow
+the same typo was inert — the invitation simply became unreadable and expired.
+The compensating controls are the confirm-address field and the **Has not
+signed in yet** badge on the roster. And the password travels through two
+mailboxes in plain text; the forced change limits, but does not remove, how
+long it is useful.
+
+**Open product decision.** Provisioning moves consent from the family to the
+coach: no invitee acts, and the audit trail names the coach as the only actor.
+COPPA's verifiable parental consent is not satisfied by either path today (the
+invitation flow proves control of a mailbox, which may be the child's own), but
+provisioning makes First Pit the party creating identities for minors on a third
+party's say-so. Recording the coach's confirmation that the family agreed — a
+checkbox written into the audit event, or making the parent's address the
+provisioning field for students — is the cheap mitigation and is not built.
 
 ### Safe policy defaults
 
@@ -545,9 +612,21 @@ workflow.
   movement controls.
 - **Task editors** — coaches, team leaders and active students — add cards
   and edit any card's title, description, priority, assignment, category,
-  milestone, labels, dates and subtasks, and move any card. Mentors and parents
-  are read-only, except that a member assigned to a card may still progress its
-  status, checklist and their own subtasks. Import, board setup, templates and
+  milestone, labels, dates and subtasks, and move any card. Mentors are
+  read-only, except that a mentor assigned to a card may still progress its
+  status, checklist and their own subtasks. **Parents are strictly read-only
+  and can never be assigned work** (2026-09-21): every path that assigns — a
+  task's or a subtask's assignee on `createTask`, `createKanbanTask`,
+  `updateTask` and `importProjectTasks` — goes through
+  `assertAssignableMemberInTransaction` (`TASK_ASSIGNABLE_ROLES` in
+  `phase2.ts`), and `updateTask` refuses a parent outright, so a card assigned
+  to one before the rule existed does not let them tick it off. The check runs
+  only when an assignee *changes*, so such a card can still be edited, and the
+  pickers keep showing who has it. `resolveImportAssignees` reports a named
+  parent as `reason: 'parent'` rather than "not on this team". The same check
+  also validates subtask assignees as team members, which was previously not
+  checked at all. The board's pickers use `canBeAssignedTasks`
+  (`src/lib/domain.ts`); the assignee filter still lists everyone. Import, board setup, templates and
   attaching team files stay with coaches and team leaders. The role set is
   `TASK_EDITOR_ROLES` in `functions/src/phase2.ts` (`requireTaskEditor`,
   `assertTaskEditorInTransaction`, used by `createKanbanTask`, `moveTaskCard`
@@ -983,8 +1062,22 @@ The `test:phase7-emulator` workflow covers these representative paths:
 Dashboard notification links are normalized to known internal routes and map
 legacy `/tracker` and `/calendar` links to the current coordination route.
 Profile settings persist display name, picture URL, theme, accessibility
-preferences, notification preferences, and the privacy-safe minor flag. Safety
-notifications are always written as enabled.
+preferences and notification preferences. Safety notifications are always
+written as enabled.
+
+**The "I am under 18" checkbox was removed (2026-09-21).** It stored a
+self-declared `privacySettings/{uid}.isMinor` that nothing read — no rule,
+callable or screen behaved differently — while the code comments claimed it
+gated youth-safety behaviour. It was also untrustworthy (a student could
+untick it) and collected information about children that was not used. Now:
+the rules refuse the key on a client write, `updateProfileSettings` and
+`updatePrivacySettings` ignore it from older clients and delete any stored
+value on the next save, and the profile no longer reads `privacySettings` at
+all, since every field in it is a fixed default. If youth-safety behaviour is
+ever needed, key it off the coach-assigned team role (`student`), not a
+self-declaration. Saving the profile also no longer calls
+`updatePrivacySettings` as a second write; that callable is now unused by the
+web client and stays deployed only so tabs on an older bundle can still save.
 
 ---
 
@@ -1026,25 +1119,89 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
 
 ## Manage team
 
-`/team` (`ManageTeamPage` = `TeamHubPage` overview + `TeamAdminPage`), as of
-2026-09-18:
+`/team` (`ManageTeamPage`), as of 2026-09-21, is the roster and nothing else.
+The administration that used to sit below it moved to `/admin`.
 
 - **Banner** — "Team name · Team #number" (the number in accent colour, omitted
-  until set), the viewer's role, active member and coach counts, and created
-  date. Coaches and team leaders get **Edit team name & number**, which opens an
+  until set), the viewer's role, the active member count, and the created date.
+  Coaches and team leaders get **Edit team name & number**, which opens an
   inline form (name 2–80 characters, number up to 8 digits, empty clears it)
-  saved through `updateTeamDetails`. Others see the name and number only. The
-  banner's ghost buttons keep a dark hover state; the global
-  `.button--ghost:hover` would otherwise whiten them and hide their white
-  label.
-- **Your memberships**, and for non-coaches a short roster preview and **Leave
-  team** (with confirmation; the sole coach must transfer leadership first).
-- **Administration** (coaches and team leaders only, re-checked by every
-  callable): invite a member by email and role → the link is copied, and **✉
-  Email invite with Gmail** opens a pre-written Gmail message (see *Invitations
-  are links, not emails*); safety defaults; roster with role changes, suspension
-  and removal; invitations (pending ones offer **Email invite**, **Copy link**
-  and **Revoke**); join approvals; moderation queue; audit history.
+  saved through `updateTeamDetails`, and a link to **Administration**. Others see
+  the name and number only. The banner's ghost buttons keep a dark hover state;
+  the global `.button--ghost:hover` would otherwise whiten them and hide their
+  white label.
+- **Team members** — one table for everyone (`RosterTable`), **active members
+  only**: Manage team stays clean by rule (2026-09-21), so suspended, removed and
+  pending people are never listed here. A coach or team leader also gets the
+  role select, **Suspend**, and **Reset password** on rows the
+  team provisioned; a member sees names, roles and statuses only. A **Has not
+  signed in yet** badge marks anyone still owing a password change. Suspending
+  someone takes their row away and shows a notice with **Undo** and a link to
+  Administration → Suspended, where they are restored.
+- **＋ Add a member** (coaches and team leaders) — **the only way to add
+  anyone**, decided 2026-09-21. `AddMemberDialog` calls `provisionTeamMember`:
+  a new address gets an account and `CredentialsCard` shows the starter
+  password; an address that already has an account is refused
+  (`already-exists`, `isExistingAccountError`), and the same dialog offers
+  **Invite <email> as a <role>**, which calls `createInvitation`, copies the
+  link and offers **Email invite with Gmail**. The coach never has to know in
+  advance which mechanism an address needs. See *Coach-provisioned member
+  accounts*.
+
+Leaving a team and joining or starting another are about the person, not the
+team, so since 2026-09-21 they live on the profile rather than here: Profile →
+**Your teams** (`MembershipsPanel`) lists every membership with its role and its
+own **Leave…** (with confirmation, and a leadership reminder for coaches — the
+server's last-coach refusal is shown verbatim), plus **Accept an invitation** and
+**Create another team** (offered per `mayOfferTeamCreation`). Manage team keeps
+only its empty state for someone with no team at all.
+
+**A team always keeps a coach (2026-09-21).** The server has always refused a
+role change, suspension or departure that would leave no active coach
+(`assertNotLastCoach`, inside the transaction). Manage team now says so before
+the coach tries: on the sole coach's row the non-coach roles are disabled, with
+"the only coach — make another member a coach first". When other coaches exist,
+a coach changing their *own* role is asked to confirm, since it ends their coach
+access the moment it saves; changing another member's role applies at once.
+
+**Make team leader was removed (2026-09-21).** "Team leader" grants nothing a
+coach does not have — every permission check treats the two alike, and a new
+team's creator starts as a plain coach — so the button only moved a label, and
+let any coach take it from another coach without asking. Existing leaders keep
+the title. The last-coach refusal now says to make another member a coach,
+rather than to "transfer leadership". `transferTeamLeadership` stays deployed
+but unused, for tabs on an older bundle.
+
+`TeamHubPage` no longer exists — its banner is part of `ManageTeamPage`.
+
+## Administration
+
+`/admin` (`AdministrationPage`), coach and team leader only, re-checked by every
+callable behind it. One `loadAdminData` read feeds six tabs, and `?tab=<id>`
+opens a given one (Manage team's suspend notice links to `?tab=suspended`):
+
+- **Invitations** — a status list only, with no create form: invitations are
+  created from **＋ Add a member**. Pending invitations offer **Email invite**,
+  **Copy link** and **Revoke** (see *Invitations are links, not emails*).
+- **Join requests** — approve or reject, with the team ID to share.
+- **Suspended** — members who keep their account but have lost access to the
+  team, each with **Restore** (back to active with the role they had). Removed
+  members are not listed; they come back through **＋ Add a member**, which
+  invites an existing account.
+- **Team settings** — Team files and Join requests, plus the greyed-out planned
+  settings.
+- **Safety** — the moderation queue, with optimistic-concurrency conflicts
+  explained rather than reported generically.
+- **Audit** — the administrative record, paginated.
+
+The sidebar shows the **Administration** entry only to coaches and team leaders;
+hiding it is presentation only. `/team/admin` redirects here, `/hub` redirects to
+`/team`, and `/admin` is no longer a redirect.
+
+`listTeamMembers` adds two admin-only fields, `provisionedByThisTeam` and
+`mustSetPassword`, omitted entirely for other members — a teammate has no
+business knowing who has not finished signing in. **Reset password** appears only
+where the first is true, because the server refuses the rest.
 
 ## Landing page
 

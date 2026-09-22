@@ -363,7 +363,7 @@ export function assigneeLookups(preview: ImportPreview): string[] {
   return values;
 }
 
-export type AssigneeMatch = { value: string; userId: string | null; displayName: string | null; reason: 'matched' | 'unknown' | 'ambiguous' };
+export type AssigneeMatch = { value: string; userId: string | null; displayName: string | null; reason: 'matched' | 'unknown' | 'ambiguous' | 'parent' };
 
 /**
  * Folds the server's roster matches back into the preview. An unmatched name
@@ -381,7 +381,9 @@ export function applyAssigneeMatches(preview: ImportPreview, matches: AssigneeMa
       if (match?.userId) return { ...row, assignedTo: match.userId };
       const reason = match?.reason === 'ambiguous'
         ? `“${value}” matches more than one teammate, so this row imports unassigned.`
-        : `“${value}” is not on this team, so this row imports unassigned.`;
+        : match?.reason === 'parent'
+          ? `“${value}” is a parent on this team. Parents can follow the tracker but cannot be assigned tasks, so this row imports unassigned.`
+          : `“${value}” is not on this team, so this row imports unassigned.`;
       return { ...row, assignedTo: null, warnings: [...row.warnings, reason] };
     })
   };

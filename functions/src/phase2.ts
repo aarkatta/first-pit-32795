@@ -278,6 +278,30 @@ export async function assertTaskEditorInTransaction(transaction: Transaction, te
 }
 
 /**
+ * Roles that may be given tracker work — as a task's assignee or a subtask's.
+ * Parents follow the board read-only: they are never assigned, and they cannot
+ * use the assignee path in `updateTask` to tick off work either. Mirrored for
+ * the UI by `canBeAssignedTasks` in `src/lib/domain.ts`.
+ */
+export const TASK_ASSIGNABLE_ROLES: readonly string[] = ['coach', 'teamLeader', 'mentor', 'student'];
+
+export function isTaskAssignableRole(role: unknown) {
+  return TASK_ASSIGNABLE_ROLES.includes(String(role));
+}
+
+export const PARENT_NOT_ASSIGNABLE_MESSAGE = 'Parents can follow the tracker but cannot be assigned tasks.';
+
+/**
+ * The one check every path that assigns work goes through: the person must be
+ * an active member of this team, in a role that can be given tracker work.
+ */
+export async function assertAssignableMemberInTransaction(transaction: Transaction, teamId: string, uid: string) {
+  const data = await assertTeamMemberInTransaction(transaction, teamId, uid);
+  if (!isTaskAssignableRole(data?.role)) throw new HttpsError('failed-precondition', PARENT_NOT_ASSIGNABLE_MESSAGE);
+  return data;
+}
+
+/**
  * Roles that may use everything on the Knowledge page: publish and unpublish
  * team videos (and see drafts), close team polls, and accept an answer on any
  * team question. Parents keep asking, answering, voting and watching.
@@ -378,7 +402,7 @@ export function assertNotLastCoach(count: number, currentRole: string, currentSt
   // suspended coach must not be blocked by the last-coach rule.
   const losesCoachAccess = currentStatus === 'active' && ['coach', 'teamLeader'].includes(currentRole) && (!['coach', 'teamLeader'].includes(nextRole) || nextStatus !== 'active');
   if (losesCoachAccess && count <= 1) {
-    throw new HttpsError('failed-precondition', 'A team must keep at least one active coach. Transfer leadership before leaving or changing this role.');
+    throw new HttpsError('failed-precondition', 'A team must keep at least one active coach. Make another member a coach on Manage team first.');
   }
 }
 
@@ -410,6 +434,34 @@ export function isReplayOfOwnCreate(
     return true;
   }
   return false;
+}
+
+/**
+ * Idempotency receipt for a team mutation, at `phase2Operations/{teamId}_{kind}_{operationId}`.
+ *
+ * Shared because the receipt path IS the replay contract: a second
+ * implementation that spelled the path differently would silently stop
+ * deduplicating, and the duplicate audit events would only surface in a
+ * moderation review months later.
+ */
+export function teamOperationRef(teamId: string, kind: string, operationId: unknown) {
+  const id = requireString(operationId, 'Operation ID', 120);
+  return getFirestore().doc(`phase2Operations/${teamId}_${kind}_${id}`);
+}
+
+/**
+ * Confirms a stored receipt belongs to this team, actor and operation kind
+ * before its result is replayed. Reusing another operation's ID is a caller
+ * error, not a replay.
+ */
+export function requireOperationReceipt(
+  receipt: Record<string, unknown>,
+  expected: { teamId: string; actorUserId: string; kind: string }
+): Record<string, unknown> {
+  if (receipt.teamId !== expected.teamId || receipt.createdBy !== expected.actorUserId || receipt.kind !== expected.kind) {
+    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
+  }
+  return receipt;
 }
 
 export function expiryTimestamp(days = 7) {

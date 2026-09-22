@@ -213,7 +213,18 @@ export function isDismissedPopup(error: unknown): boolean {
  */
 export function requiresEmailVerification(user: User | null): boolean {
   if (!user || user.emailVerified) return false;
-  return user.providerData.some((provider) => provider.providerId === 'password');
+  return hasPasswordProvider(user);
+}
+
+/**
+ * Whether this account signs in with a password at all.
+ *
+ * `PasswordSetupGate` asks: a member who linked Google has nothing to replace,
+ * so the Google exception to the forced password change is structural rather
+ * than a special case anyone has to remember to write.
+ */
+export function hasPasswordProvider(user: User | null): boolean {
+  return user?.providerData.some((provider) => provider.providerId === 'password') ?? false;
 }
 
 /**

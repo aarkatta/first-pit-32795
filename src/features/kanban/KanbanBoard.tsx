@@ -34,7 +34,7 @@ import {
   type BoardSort
 } from '@/lib/board-view';
 import type { KanbanProject, ProjectCategory, SubtaskStatus, TeamGoal, TeamRole, TrackerTask } from '@/lib/domain';
-import { MAX_SUBTASKS_PER_TASK } from '@/lib/domain';
+import { canBeAssignedTasks, MAX_SUBTASKS_PER_TASK } from '@/lib/domain';
 import { getFirebaseServices } from '@/lib/firebase';
 import {
   createKanbanTask,
@@ -726,6 +726,17 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
   const directory = useMemo(() => memberMap(members), [members]);
   const roster = useMemo(() => members.map((member) => member.userId), [members]);
   const people = useMemo(() => [...new Set([...roster, ...assignees])].sort(), [assignees, roster]);
+  // Who work can be given to: everyone above except parents, who follow the
+  // board read-only. `people` stays the wider set for the assignee filter, so a
+  // card assigned before the rule existed can still be found. Each picker adds
+  // its card's current assignee back, so such a card still shows who has it.
+  const assignablePeople = useMemo(
+    () => members.filter((member) => canBeAssignedTasks(member.role)).map((member) => member.userId).sort(),
+    [members]
+  );
+  // A parent never gets the assignee-only controls (ticking off a subtask); the
+  // server refuses them too.
+  const mayWorkAsAssignee = canBeAssignedTasks(actorRole);
   const attachableFiles = useMemo(
     () => teamFiles.filter((file) => !(selectedTask?.attachmentFileIds ?? []).includes(file.id)),
     [selectedTask, teamFiles]
@@ -915,7 +926,7 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
             fields={visibleFields}
             groupBy={groupBy}
             project={selectedProject}
-            people={people}
+            people={assignablePeople}
             directory={directory}
             now={now}
             canManage={canEditTasks}
@@ -924,6 +935,7 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
             selectedIds={selectedIds}
             focusGroupId={focusGroupId}
             actorUserId={actorUserId}
+            mayWorkAsAssignee={mayWorkAsAssignee}
             onSelect={selectTask}
             onSelectGroup={selectGroup}
             onOpen={(task) => { setTaskConflict(false); setSelectedTask(task); }}
@@ -967,8 +979,8 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
         categories={selectedProject.categories}
         goals={goals}
         actorUserId={actorUserId}
-        onSubtaskStatus={(subtaskId, status) => void run(() => updateTask({ teamId, taskId: selectedTask.id, operationId: operationId(), subtaskStatus: { id: subtaskId, status } }))}
-        people={people}
+        onSubtaskStatus={mayWorkAsAssignee ? (subtaskId, status) => void run(() => updateTask({ teamId, taskId: selectedTask.id, operationId: operationId(), subtaskStatus: { id: subtaskId, status } })) : undefined}
+        people={assignablePeople}
         directory={directory}
         attachments={attachments}
         attachmentsStatus={attachmentsStatus}

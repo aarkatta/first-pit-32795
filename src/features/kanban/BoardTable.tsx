@@ -53,6 +53,8 @@ type CellContext = {
   onOpen: (task: TrackerTask) => void;
   /** Who is looking: decides which sub-items they may tick off. */
   actorUserId: string;
+  /** False for a parent: they follow the board and never use the assignee-only controls. */
+  mayWorkAsAssignee: boolean;
   onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
 };
 
@@ -236,7 +238,7 @@ function FilesCell({ task, context }: { task: TrackerTask; context: CellContext 
  */
 function SubtaskRow({ task, subtask, fields, context, outline }: { task: TrackerTask; subtask: Subtask; fields: BoardFieldId[]; context: CellContext; outline: string }) {
   const meta = SUBTASK_STATUS_META[subtask.status];
-  const mayTick = context.canManage || task.assignedTo === context.actorUserId || subtask.assignedTo === context.actorUserId;
+  const mayTick = context.canManage || (context.mayWorkAsAssignee && (task.assignedTo === context.actorUserId || subtask.assignedTo === context.actorUserId));
   return (
     <tr className="mb-row mb-row--subtask">
       <td className="mb-td mb-td--select"><span className="mb-subtask-rail" aria-hidden="true" /></td>
@@ -560,7 +562,7 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
   );
 }
 
-export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, actorUserId, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch, onSubtaskStatus }: {
+export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, actorUserId, mayWorkAsAssignee = true, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch, onSubtaskStatus }: {
   groups: BoardGroup[];
   fields: BoardFieldId[];
   groupBy: BoardGroupBy;
@@ -574,6 +576,7 @@ export function BoardTable({ groups, fields, groupBy, project, people, directory
   selectedIds: Set<string>;
   focusGroupId: string | null;
   actorUserId: string;
+  mayWorkAsAssignee?: boolean;
   onSelect: (taskId: string, next: boolean) => void;
   onSelectGroup: (taskIds: string[], next: boolean) => void;
   onCreate: (columnId: string, title: string) => void;
@@ -582,7 +585,7 @@ export function BoardTable({ groups, fields, groupBy, project, people, directory
   onPatch: (task: TrackerTask, patch: BoardTaskPatch) => void;
   onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
 }) {
-  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen, actorUserId, onSubtaskStatus };
+  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen, actorUserId, mayWorkAsAssignee, onSubtaskStatus };
   if (!groups.length) {
     return <p className="mb-board-empty">No items match the current filters. Clear a filter to see the rest of the board.</p>;
   }

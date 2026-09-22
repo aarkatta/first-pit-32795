@@ -15,7 +15,6 @@ export type PrivacySettings = {
   searchable: false;
   allowParentVisibility: false;
   privateConversations: false;
-  isMinor?: boolean;
   updatedAt?: unknown;
 };
 
@@ -429,6 +428,15 @@ export function isCoachOrLeader(
  * Adding tracker tasks and editing any task's details. Mirrors
  * `TASK_EDITOR_ROLES` in `functions/src/phase2.ts`, which enforces it.
  */
+/**
+ * Whether someone in this role may be given tracker work — as a task's or a
+ * subtask's assignee. Parents follow the board read-only. UI only: mirrors
+ * `TASK_ASSIGNABLE_ROLES` in `functions/src/phase2.ts`, which is the check.
+ */
+export function canBeAssignedTasks(role: string | null | undefined): boolean {
+  return role === 'coach' || role === 'teamLeader' || role === 'mentor' || role === 'student';
+}
+
 export function canEditTasks(
   membership: Pick<Membership, 'role' | 'status'> | null | undefined
 ): boolean {

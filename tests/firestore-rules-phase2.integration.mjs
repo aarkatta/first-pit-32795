@@ -56,6 +56,15 @@ try {
   await assertSucceeds(getDoc(doc(platformAdmin, 'moderationCases/case-1')));
   await assertSucceeds(getDoc(doc(platformAdmin, 'auditEvents/audit-1')));
   await assertFails(setDoc(doc(platformAdmin, 'auditEvents/forged'), { teamId, actorUserId: 'platform-admin-1' }));
+
+  // Privacy settings: the owner may write the fixed team-only defaults, and
+  // nothing else — including the retired self-declared `isMinor` flag.
+  const privacyDefaults = { userId: 'student-1', profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false };
+  const ownPrivacy = env.authenticatedContext('student-1', { email: 'student@example.com', email_verified: true }).firestore();
+  await assertSucceeds(setDoc(doc(ownPrivacy, 'privacySettings/student-1'), privacyDefaults));
+  await assertFails(setDoc(doc(ownPrivacy, 'privacySettings/student-1'), { ...privacyDefaults, isMinor: true }));
+  await assertFails(setDoc(doc(ownPrivacy, 'privacySettings/student-1'), { ...privacyDefaults, searchable: true }));
+  await assertFails(setDoc(doc(env.authenticatedContext('coach-1').firestore(), 'privacySettings/student-1'), { ...privacyDefaults }));
 } finally {
   await env.cleanup();
 }

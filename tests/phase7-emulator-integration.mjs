@@ -42,6 +42,17 @@ async function call(name, token, data) {
   return body.data ?? body.result ?? body;
 }
 
+/** Writes fields as the emulator owner, bypassing rules — to plant data an earlier version stored. */
+async function patchPrivacyAsOwner(path, fields) {
+  const updateMask = Object.keys(fields).map((field) => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join('&');
+  const { response, body } = await json(`${firestoreBase}/${path}?${updateMask}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (response.status !== 200) throw new Error(`Could not patch ${path}: ${JSON.stringify(body)}`);
+}
+
 async function readDocument(path, token, expectedStatus = 200) {
   const { response, body } = await json(`${firestoreBase}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status !== expectedStatus) throw new Error(`Expected ${expectedStatus} for ${path}, received ${response.status}: ${JSON.stringify(body)}`);
@@ -86,7 +97,12 @@ await call('createQuestion', outsider.idToken, { teamId: otherTeam.teamId, quest
 const scopedSearch = await call('globalSearch', student.idToken, { query: 'private other team' });
 if (scopedSearch.results.some((entry) => entry.recordId === `phase7-private-${suffix}`)) throw new Error('Global search leaked a record from a team without an active membership.');
 
+// A value an earlier version stored is scrubbed on the next save, and an older
+// client that still sends the retired `isMinor` field is ignored, not refused.
+await patchPrivacyAsOwner(`privacySettings/${student.localId}`, { isMinor: { booleanValue: true } });
 await call('updateProfileSettings', student.idToken, { displayName: 'Phase 7 Student', photoURL: null, theme: 'dark', highContrast: true, reducedMotion: true, fontScale: 'large', emailNotifications: false, pushNotifications: true, isMinor: true });
+const privacyAfterSave = await readDocument(`privacySettings/${student.localId}`, student.idToken);
+if ('isMinor' in (privacyAfterSave.fields ?? {})) throw new Error('updateProfileSettings kept the retired isMinor field.');
 await readDocument(`users/${student.localId}`, student.idToken);
 const profileSettings = await readDocument(`userSettings/${student.localId}`, student.idToken);
 if (profileSettings.fields.theme?.stringValue !== 'dark' || profileSettings.fields.highContrast?.booleanValue !== true) throw new Error('Profile customization settings did not persist.');

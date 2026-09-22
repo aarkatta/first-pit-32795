@@ -73,25 +73,10 @@ export function leaveTeam(teamId: string) {
   return call<{ teamId: string }, { teamId: string; status: 'removed' }>('leaveTeam', { teamId });
 }
 
-export function transferTeamLeadership(
-  teamId: string,
-  targetUserId: string,
-  operationId: string = createOperationId('leadership')
-) {
-  return call<
-    { teamId: string; targetUserId: string; operationId: string },
-    { teamId: string; targetUserId: string; role: 'teamLeader' }
-  >('transferTeamLeadership', { teamId, targetUserId, operationId });
-}
-
 export type TeamPolicyUpdate = Partial<Omit<TeamPolicy, 'teamId' | 'updatedAt'>>;
 
 export function updateTeamPolicy(teamId: string, policy: TeamPolicyUpdate) {
   return call<{ teamId: string } & TeamPolicyUpdate, { teamId: string } & TeamPolicyUpdate>('updateTeamPolicy', { teamId, ...policy });
-}
-
-export function updatePrivacySettings(input: { isMinor?: boolean } = {}) {
-  return call<{ profileVisibility: 'teamOnly'; searchable: false; isMinor?: boolean }, { userId: string; profileVisibility: 'teamOnly'; searchable: false }>('updatePrivacySettings', { profileVisibility: 'teamOnly', searchable: false, ...input });
 }
 
 export function createReport(input: {

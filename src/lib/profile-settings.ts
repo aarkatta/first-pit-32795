@@ -24,7 +24,6 @@ export type PrivacySettings = {
   searchable: false;
   allowParentVisibility: false;
   privateConversations: false;
-  isMinor?: boolean;
 };
 
 export type LoadedProfileSettings = {
@@ -42,16 +41,16 @@ const defaultSettings: UserSettings = {
 };
 
 export async function loadProfileSettings(firestore: Firestore, uid: string): Promise<LoadedProfileSettings> {
-  const [profileSnapshot, notificationSnapshot, settingsSnapshot, privacySnapshot] = await Promise.all([
+  // `privacySettings` is not read: every field in it is a fixed team-only
+  // default, so there is nothing per person to load.
+  const [profileSnapshot, notificationSnapshot, settingsSnapshot] = await Promise.all([
     getDoc(doc(firestore, 'users', uid)),
     getDoc(doc(firestore, 'notificationPreferences', uid)),
-    getDoc(doc(firestore, 'userSettings', uid)),
-    getDoc(doc(firestore, 'privacySettings', uid))
+    getDoc(doc(firestore, 'userSettings', uid))
   ]);
   const profile = profileSnapshot.data() ?? {};
   const notifications = notificationSnapshot.data() ?? {};
   const settings = settingsSnapshot.data() ?? {};
-  const privacy = privacySnapshot.data() ?? {};
   return {
     profile: { displayName: String(profile.displayName ?? 'First Pit member'), photoURL: typeof profile.photoURL === 'string' ? profile.photoURL : null },
     notifications: { emailNotifications: notifications.emailNotifications !== false, pushNotifications: notifications.pushNotifications === true, safetyNotifications: true },
@@ -61,7 +60,7 @@ export async function loadProfileSettings(firestore: Firestore, uid: string): Pr
       reducedMotion: settings.reducedMotion === true,
       fontScale: settings.fontScale === 'large' ? 'large' : defaultSettings.fontScale
     },
-    privacy: { profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(typeof privacy.isMinor === 'boolean' ? { isMinor: privacy.isMinor } : {}) }
+    privacy: { profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false }
   };
 }
 

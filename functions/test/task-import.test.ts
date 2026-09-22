@@ -89,6 +89,19 @@ describe('assignee matching', () => {
     expect(matchAssignees([' GRACE@example.com '], members)[0]).toMatchObject({ userId: 'grace', reason: 'matched' });
   });
 
+  it('holds back a parent, and says why, instead of assigning them', () => {
+    const team = [
+      { userId: 'ada', displayName: 'Ada', email: 'ada@example.com', role: 'student' },
+      { userId: 'pat', displayName: 'Pat Parent', email: 'pat@example.com', role: 'parent' },
+      { userId: 'old', displayName: 'No Role Recorded', email: 'old@example.com' }
+    ];
+    expect(matchAssignees(['pat@example.com'], team)[0]).toEqual({ value: 'pat@example.com', userId: null, displayName: 'Pat Parent', reason: 'parent' });
+    expect(matchAssignees(['Pat Parent'], team)[0]).toMatchObject({ userId: null, reason: 'parent' });
+    expect(matchAssignees(['ada@example.com'], team)[0]).toMatchObject({ userId: 'ada', reason: 'matched' });
+    // A member whose role was not supplied is matched as before.
+    expect(matchAssignees(['old@example.com'], team)[0]).toMatchObject({ userId: 'old', reason: 'matched' });
+  });
+
   it('matches a unique display name, and reports a shared one as ambiguous rather than guessing', () => {
     expect(matchAssignees(['Grace Hopper'], members)[0]).toMatchObject({ userId: 'grace', reason: 'matched' });
     expect(matchAssignees(['ada lovelace'], members)[0]).toMatchObject({ userId: null, reason: 'ambiguous' });

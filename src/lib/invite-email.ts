@@ -1,4 +1,10 @@
 import { teamNumberSuffix } from './domain';
+import { publicWebOrigin } from './public-origin';
+
+/** The link a coach shares so an invitation can be accepted. */
+export function inviteLink(invitationId: string): string {
+  return `${publicWebOrigin()}/join?invite=${encodeURIComponent(invitationId)}`;
+}
 
 /**
  * First Pit does not send email (see CLAUDE.md: invitations are not emailed).

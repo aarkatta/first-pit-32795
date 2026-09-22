@@ -24,7 +24,9 @@ import {
   assertNotLastCoach,
   auditRecord,
   requireAccountType,
-  teamCreationRefusal
+  requireOperationReceipt,
+  teamCreationRefusal,
+  teamOperationRef
 } from './phase2.js';
 import {
   completeFileUpload as completeFileUploadCommand,
@@ -77,6 +79,11 @@ import {
   voteQuestion as voteQuestionCommand
 } from './phase5.js';
 import { getDashboard as getDashboardCommand, globalSearch as globalSearchCommand, updateProfileSettings as updateProfileSettingsCommand } from './phase7.js';
+import {
+  provisionTeamMember as provisionTeamMemberCommand,
+  resetTeamMemberPassword as resetTeamMemberPasswordCommand,
+  setInitialPassword as setInitialPasswordCommand
+} from './team-members.js';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -287,19 +294,11 @@ function phase2Data(request: Phase2Request) {
  * never disagree.
  */
 function phase2OperationRef(request: Phase2Request, teamId: string, kind: string) {
-  const operationId = requireString(getInput(request, 'operationId'), 'Operation ID', 120);
-  return getFirestore().doc(`phase2Operations/${teamId}_${kind}_${operationId}`);
+  return teamOperationRef(teamId, kind, getInput(request, 'operationId'));
 }
 
-export function phase2OperationReceipt(
-  receipt: Record<string, unknown>,
-  expected: { teamId: string; actorUserId: string; kind: string }
-): Record<string, unknown> {
-  if (receipt.teamId !== expected.teamId || receipt.createdBy !== expected.actorUserId || receipt.kind !== expected.kind) {
-    throw new HttpsError('failed-precondition', 'This operation ID belongs to a different team operation.');
-  }
-  return receipt;
-}
+/** Kept as a named export because `index.test.ts` pins the helper surface. */
+export const phase2OperationReceipt = requireOperationReceipt;
 
 async function requireTeamDocument(teamId: string) {
   const snapshot = await getFirestore().doc(`teams/${teamId}`).get();
@@ -608,6 +607,14 @@ export const leaveTeam = onCall(async (request: Phase2Request) => {
   return { teamId, status: 'removed' as const };
 });
 
+/**
+ * No longer offered anywhere in the UI (removed 2026-09-21). "Team leader"
+ * grants nothing a coach does not have — every permission check treats the two
+ * alike — so the button only moved a label, and let any coach take it from
+ * another without asking. Kept deployed so a tab on an older bundle does not
+ * fail; safe to delete once no client calls it. Existing team leaders keep the
+ * title.
+ */
 export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);
@@ -675,28 +682,29 @@ export const updateTeamPolicy = onCall(async (request: Phase2Request) => {
   return { teamId, ...policy };
 });
 
+/**
+ * Re-asserts the fixed privacy defaults on the caller's own record.
+ *
+ * The web client no longer calls this: `updateProfileSettings` writes the same
+ * document, and saving the profile used to call both. It stays deployed so a
+ * tab still running an older bundle can save, and it scrubs the retired
+ * `isMinor` field the same way. Nothing a caller can change here is sensitive
+ * any more, so it writes no audit event. Safe to delete once no client calls it.
+ */
 export const updatePrivacySettings = onCall(async (request: Phase2Request) => {
   const auth = requireCallableAuth(request);
   const profileVisibility = getInput(request, 'profileVisibility') ?? 'teamOnly';
   const searchable = getInput(request, 'searchable') ?? false;
   if (profileVisibility !== 'teamOnly' || searchable !== false) throw new HttpsError('failed-precondition', 'Phase 2 privacy defaults keep profiles team-only and not searchable.');
-  const isMinor = getInput(request, 'isMinor');
-  if (isMinor !== undefined && typeof isMinor !== 'boolean') throw new HttpsError('invalid-argument', 'Minor status must be boolean.');
-  const db = getFirestore();
-  const privacyRef = db.doc(`privacySettings/${auth.uid}`);
-  // `isMinor` drives youth-safety defaults across the product, so the write and
-  // its audit trail have to land together or not at all.
-  await db.runTransaction(async (transaction) => {
-    await transaction.get(privacyRef);
-    const now = FieldValue.serverTimestamp();
-    transaction.set(privacyRef, { userId: auth.uid, profileVisibility: 'teamOnly', searchable: false, allowParentVisibility: false, privateConversations: false, ...(isMinor === undefined ? {} : { isMinor }), updatedAt: now }, { merge: true });
-    transaction.set(db.collection('auditEvents').doc(), auditRecord({
-      type: 'sensitive.updated',
-      actorUserId: auth.uid,
-      targetResource: `privacySettings/${auth.uid}`,
-      metadata: { action: 'privacy.updated' }
-    }));
-  });
+  await getFirestore().doc(`privacySettings/${auth.uid}`).set({
+    userId: auth.uid,
+    profileVisibility: 'teamOnly',
+    searchable: false,
+    allowParentVisibility: false,
+    privateConversations: false,
+    isMinor: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
   return { userId: auth.uid, profileVisibility: 'teamOnly' as const, searchable: false as const };
 });
 
@@ -876,12 +884,26 @@ export const listTeamMembers = onCall(async (request) => {
       status: String(membership.status ?? 'active'),
       displayName,
       photoURL: typeof profile.photoURL === 'string' && profile.photoURL.startsWith('https://') ? profile.photoURL : null,
-      initials: displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()
+      initials: displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase(),
+      // Admins only: which accounts this team created, and which are still on
+      // the password their coach handed over. Teammates have no business
+      // knowing who has not finished signing in, so the fields are omitted
+      // rather than sent as false.
+      ...(isAdmin ? {
+        provisionedByThisTeam: profile.provisionedByTeamId === teamId,
+        mustSetPassword: profile.mustSetPassword === true
+      } : {})
     };
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));
 
   return { members, truncated: memberships.size === ROSTER_LIMIT };
 });
+
+// Coach-provisioned member accounts — the second onboarding path beside
+// createInvitation / acceptInvitation. See functions/src/team-members.ts.
+export const provisionTeamMember = onCall(async (request) => provisionTeamMemberCommand(request as CallableRequest<Record<string, unknown>>));
+export const resetTeamMemberPassword = onCall(async (request) => resetTeamMemberPasswordCommand(request as CallableRequest<Record<string, unknown>>));
+export const setInitialPassword = onCall(async (request) => setInitialPasswordCommand(request as CallableRequest<Record<string, unknown>>));
 
 export const createTask = onCall(async (request) => createTaskCommand(request as CallableRequest<Record<string, unknown>>));
 export const updateTask = onCall(async (request) => updateTaskCommand(request as CallableRequest<Record<string, unknown>>));
