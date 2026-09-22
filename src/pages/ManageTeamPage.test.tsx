@@ -192,6 +192,21 @@ describe('ManageTeamPage roster', () => {
     await waitFor(() => expect(screen.queryByText(/is suspended/)).not.toBeInTheDocument());
   });
 
+  it('offers Make team leader only on coach rows, since leadership is a coach role', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue({
+      ...roster,
+      members: [...roster.members, { userId: 'coach-2', role: 'coach', status: 'active', displayName: 'Lee Coach', photoURL: null, initials: 'LC', provisionedByThisTeam: false, mustSetPassword: false }]
+    });
+    mocks.transferTeamLeadership.mockResolvedValue({});
+    renderPage();
+    await screen.findByRole('table');
+    // A student can never be team leader, so the button that always failed is gone.
+    expect(screen.queryByRole('button', { name: 'Make Amir Khan the team leader' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Make Lee Coach the team leader' }));
+    await waitFor(() => expect(mocks.transferTeamLeadership).toHaveBeenCalledWith('team-1', 'coach-2'));
+  });
+
   it('offers Reset password only for accounts this team created', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);

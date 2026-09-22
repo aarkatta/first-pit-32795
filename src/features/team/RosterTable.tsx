@@ -92,8 +92,12 @@ export function RosterTable({
                       {provisioned ? (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onResetPassword(member)}>Reset password</button>
                       ) : null}
-                      {member.role !== 'teamLeader' ? (
-                        <button className="text-button" type="button" disabled={locked} onClick={() => onMakeLeader(member)}>Make leader</button>
+                      {/* Team leader is the lead coach — full administration — so
+                          only a coach can become one; transferTeamLeadership
+                          refuses anyone else. Offering it on a student's row made
+                          the button always fail. */}
+                      {member.role === 'coach' ? (
+                        <button className="text-button" type="button" disabled={locked} onClick={() => onMakeLeader(member)} aria-label={`Make ${member.displayName} the team leader`}>Make team leader</button>
                       ) : null}
                       {isSelf ? null : (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onSuspend(member)}>Suspend</button>
