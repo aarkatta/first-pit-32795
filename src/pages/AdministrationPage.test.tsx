@@ -40,7 +40,6 @@ vi.mock('@/lib/phase2-service', () => ({
   assignTeamRole: vi.fn(),
   rejectJoinRequest: vi.fn(),
   revokeInvitation: mocks.revokeInvitation,
-  transferTeamLeadership: vi.fn(),
   updateMembershipStatus: mocks.updateMembershipStatus,
   updateModerationCase: mocks.updateModerationCase,
   updateTeamPolicy: mocks.updateTeamPolicy

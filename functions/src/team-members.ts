@@ -175,7 +175,7 @@ export function accountTypeForRole(role: AssignableRole): AccountType {
   return role;
 }
 
-/** The role a coach may provision. Team leadership stays with `transferTeamLeadership`. */
+/** The role a coach may provision. Team leader is a legacy title and is never provisioned. */
 export function requireProvisionableRole(value: unknown): AssignableRole {
   return requireAssignableRole(value ?? 'student');
 }

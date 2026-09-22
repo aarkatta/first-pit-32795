@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   listTeamMembers: vi.fn(),
   assignTeamRole: vi.fn(),
   updateMembershipStatus: vi.fn(),
-  transferTeamLeadership: vi.fn(),
   createInvitation: vi.fn(),
   provisionTeamMember: vi.fn(),
   resetTeamMemberPassword: vi.fn()
@@ -25,7 +24,6 @@ vi.mock('@/lib/directory', () => ({ listTeamMembers: mocks.listTeamMembers }));
 vi.mock('@/lib/phase2-service', () => ({
   assignTeamRole: mocks.assignTeamRole,
   createInvitation: mocks.createInvitation,
-  transferTeamLeadership: mocks.transferTeamLeadership,
   updateMembershipStatus: mocks.updateMembershipStatus
 }));
 vi.mock('@/lib/team-members', async (importOriginal) => {
@@ -192,19 +190,16 @@ describe('ManageTeamPage roster', () => {
     await waitFor(() => expect(screen.queryByText(/is suspended/)).not.toBeInTheDocument());
   });
 
-  it('offers Make team leader only on coach rows, since leadership is a coach role', async () => {
+  it('offers no way to make someone team leader — the title grants nothing', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue({
       ...roster,
       members: [...roster.members, { userId: 'coach-2', role: 'coach', status: 'active', displayName: 'Lee Coach', photoURL: null, initials: 'LC', provisionedByThisTeam: false, mustSetPassword: false }]
     });
-    mocks.transferTeamLeadership.mockResolvedValue({});
     renderPage();
     await screen.findByRole('table');
-    // A student can never be team leader, so the button that always failed is gone.
-    expect(screen.queryByRole('button', { name: 'Make Amir Khan the team leader' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Make Lee Coach the team leader' }));
-    await waitFor(() => expect(mocks.transferTeamLeadership).toHaveBeenCalledWith('team-1', 'coach-2'));
+    expect(screen.queryByRole('button', { name: /team leader/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /make leader/i })).not.toBeInTheDocument();
   });
 
   it('offers Reset password only for accounts this team created', async () => {

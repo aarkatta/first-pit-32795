@@ -607,6 +607,14 @@ export const leaveTeam = onCall(async (request: Phase2Request) => {
   return { teamId, status: 'removed' as const };
 });
 
+/**
+ * No longer offered anywhere in the UI (removed 2026-09-21). "Team leader"
+ * grants nothing a coach does not have — every permission check treats the two
+ * alike — so the button only moved a label, and let any coach take it from
+ * another without asking. Kept deployed so a tab on an older bundle does not
+ * fail; safe to delete once no client calls it. Existing team leaders keep the
+ * title.
+ */
 export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);

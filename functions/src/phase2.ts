@@ -402,7 +402,7 @@ export function assertNotLastCoach(count: number, currentRole: string, currentSt
   // suspended coach must not be blocked by the last-coach rule.
   const losesCoachAccess = currentStatus === 'active' && ['coach', 'teamLeader'].includes(currentRole) && (!['coach', 'teamLeader'].includes(nextRole) || nextStatus !== 'active');
   if (losesCoachAccess && count <= 1) {
-    throw new HttpsError('failed-precondition', 'A team must keep at least one active coach. Transfer leadership before leaving or changing this role.');
+    throw new HttpsError('failed-precondition', 'A team must keep at least one active coach. Make another member a coach on Manage team first.');
   }
 }
 

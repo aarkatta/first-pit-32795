@@ -9,7 +9,6 @@ type RosterTableProps = {
   locked: boolean;
   onRoleChange: (member: TeamMember, role: 'student' | 'parent' | 'mentor' | 'coach') => void;
   onSuspend: (member: TeamMember) => void;
-  onMakeLeader: (member: TeamMember) => void;
   onResetPassword: (member: TeamMember) => void;
 };
 
@@ -37,7 +36,6 @@ export function RosterTable({
   locked,
   onRoleChange,
   onSuspend,
-  onMakeLeader,
   onResetPassword
 }: RosterTableProps) {
   return (
@@ -91,13 +89,6 @@ export function RosterTable({
                     <td className="roster-table__actions">
                       {provisioned ? (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onResetPassword(member)}>Reset password</button>
-                      ) : null}
-                      {/* Team leader is the lead coach — full administration — so
-                          only a coach can become one; transferTeamLeadership
-                          refuses anyone else. Offering it on a student's row made
-                          the button always fail. */}
-                      {member.role === 'coach' ? (
-                        <button className="text-button" type="button" disabled={locked} onClick={() => onMakeLeader(member)} aria-label={`Make ${member.displayName} the team leader`}>Make team leader</button>
                       ) : null}
                       {isSelf ? null : (
                         <button className="text-button" type="button" disabled={locked} onClick={() => onSuspend(member)}>Suspend</button>

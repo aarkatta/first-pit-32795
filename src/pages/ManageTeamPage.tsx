@@ -9,7 +9,7 @@ import { formatDateLabel } from '@/lib/dates';
 import { listTeamMembers, type TeamMember } from '@/lib/directory';
 import { isCoachOrLeader, mayOfferTeamCreation, teamNumberSuffix } from '@/lib/domain';
 import { useAccountType } from '@/lib/account-type';
-import { assignTeamRole, transferTeamLeadership, updateMembershipStatus } from '@/lib/phase2-service';
+import { assignTeamRole, updateMembershipStatus } from '@/lib/phase2-service';
 import { resetTeamMemberPassword, type ProvisionedMember } from '@/lib/team-members';
 import { updateTeamDetails, type TeamDetails } from '@/lib/team-service';
 import { useTeamContext } from '@/lib/team-context';
@@ -259,7 +259,6 @@ export function ManageTeamPage() {
               await updateMembershipStatus(teamId, member.userId, 'suspended');
               setJustSuspended(member);
             })}
-            onMakeLeader={(member) => void run(() => transferTeamLeadership(teamId, member.userId))}
             onResetPassword={(member) => void run(async () => {
               const reset = await resetTeamMemberPassword(teamId, member.userId);
               setCredentials({

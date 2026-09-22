@@ -1133,7 +1133,7 @@ The administration that used to sit below it moved to `/admin`.
 - **Team members** — one table for everyone (`RosterTable`), **active members
   only**: Manage team stays clean by rule (2026-09-21), so suspended, removed and
   pending people are never listed here. A coach or team leader also gets the
-  role select, **Suspend**, **Make leader**, and **Reset password** on rows the
+  role select, **Suspend**, and **Reset password** on rows the
   team provisioned; a member sees names, roles and statuses only. A **Has not
   signed in yet** badge marks anyone still owing a password change. Suspending
   someone takes their row away and shows a notice with **Undo** and a link to
@@ -1155,6 +1155,14 @@ own **Leave…** (with confirmation, and a leadership reminder for coaches — t
 server's last-coach refusal is shown verbatim), plus **Accept an invitation** and
 **Create another team** (offered per `mayOfferTeamCreation`). Manage team keeps
 only its empty state for someone with no team at all.
+
+**Make team leader was removed (2026-09-21).** "Team leader" grants nothing a
+coach does not have — every permission check treats the two alike, and a new
+team's creator starts as a plain coach — so the button only moved a label, and
+let any coach take it from another coach without asking. Existing leaders keep
+the title. The last-coach refusal now says to make another member a coach,
+rather than to "transfer leadership". `transferTeamLeadership` stays deployed
+but unused, for tabs on an older bundle.
 
 `TeamHubPage` no longer exists — its banner is part of `ManageTeamPage`.
 

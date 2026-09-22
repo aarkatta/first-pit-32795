@@ -51,19 +51,19 @@ describe('MembershipsPanel', () => {
     expect(await screen.findByText('You left Builders.')).toBeInTheDocument();
   });
 
-  it('warns a coach about leadership before they leave', () => {
+  it('reminds a coach that the team needs another coach before they leave', () => {
     renderPanel();
     fireEvent.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Leave…' }));
-    expect(screen.getByText(/transfer leadership on Manage team first/i)).toBeInTheDocument();
+    expect(screen.getByText(/make another member a coach on Manage team first/i)).toBeInTheDocument();
   });
 
   it('shows the server refusal verbatim, since it says what to do', async () => {
-    mocks.leaveTeam.mockRejectedValue(new Error('A team must keep at least one active coach. Transfer leadership before leaving or changing this role.'));
+    mocks.leaveTeam.mockRejectedValue(new Error('A team must keep at least one active coach. Make another member a coach on Manage team first.'));
     renderPanel();
     const row = screen.getAllByRole('listitem')[0];
     fireEvent.click(within(row).getByRole('button', { name: 'Leave…' }));
     fireEvent.click(within(row).getByRole('button', { name: 'Yes, leave Robotics' }));
-    expect(await screen.findByText(/transfer leadership before leaving/i)).toBeInTheDocument();
+    expect(await screen.findByText(/make another member a coach on manage team first/i)).toBeInTheDocument();
   });
 
   it('offers joining another team always, and creating one only to coach accounts', () => {

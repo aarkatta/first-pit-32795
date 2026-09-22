@@ -118,9 +118,12 @@ template (`npm run template:build`), so edit it there, once.
   strictly read-only and can never be assigned a task or subtask**
   (`TASK_ASSIGNABLE_ROLES` / `assertAssignableMemberInTransaction` — use it on
   any new path that sets an assignee).
-- **Team leader** is the lead coach, not a student captain: full
-  administration. `transferTeamLeadership` accepts only a coach, so offer it
-  only on coach rows.
+- **Team leader** is a legacy title with no powers of its own: every
+  permission check treats `coach` and `teamLeader` alike. The UI no longer
+  offers a way to assign it (`transferTeamLeadership` stays deployed, unused,
+  for older bundles). Existing leaders keep the label. Don't add features that
+  hinge on it without first deciding what a lead coach may do that a coach
+  can't.
 - **Knowledge editors** are coaches, team leaders, **mentors and students**
   (`KNOWLEDGE_EDITOR_ROLES` / `requireKnowledgeEditor`, `phase2.ts`): they
   publish and unpublish team videos (and see drafts), close team polls, and

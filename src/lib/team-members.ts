@@ -2,7 +2,7 @@ import { call } from './callable';
 import type { TeamRole } from './domain';
 import { createOperationId } from './ids';
 
-/** Roles a coach may provision. Team leadership stays with `transferTeamLeadership`. */
+/** Roles a coach may provision. Team leader is a legacy title and is never provisioned. */
 export type ProvisionableRole = Exclude<TeamRole, 'teamLeader'>;
 
 /**

@@ -47,7 +47,8 @@ export function MembershipsPanel() {
         setLeft(teamName);
       })
       // The server refuses to let the last active coach leave, and that message
-      // is the actionable one ("transfer leadership first"), so it is shown as is.
+      // is the actionable one ("make another member a coach first"), so it is
+      // shown as is.
       .catch((error: unknown) => setRequestState(getRequestState(error, online)))
       .finally(() => setLeaving(false));
   }
@@ -76,7 +77,7 @@ export function MembershipsPanel() {
                   <span className="form-actions">
                     <span>
                       Leave {name}?
-                      {isCoachOrLeader(membership) ? <small> If you are its only coach, transfer leadership on Manage team first.</small> : null}
+                      {isCoachOrLeader(membership) ? <small> If you are its only coach, make another member a coach on Manage team first.</small> : null}
                     </span>
                     <button className="button button--small" type="button" disabled={leaving || !online} onClick={() => leave(membership.teamId, name)}>
                       {leaving ? 'Leaving…' : `Yes, leave ${name}`}
