@@ -131,7 +131,16 @@ the TestFlight build:
 - A team file, the scoresheet and a Knowledge resource open in the in-app
   browser; the Excel template and the CSV starter reach the share sheet.
 - **Send invite** opens the share sheet with a `https://www.first-pit.com/join`
-  link.
+  link. Since 2026-09-21 it is reached from **Manage team → ＋ Add a member**
+  (for an address that already has an account) and from Administration →
+  Invitations.
+- **＋ Add a member** for a new address: **Copy the whole message** and **Copy
+  just the password** reach the clipboard inside the shell. `navigator.clipboard`
+  can be refused in a WKWebView; if it is, the card's fallback ("select the text
+  above and copy it by hand") must show, and the password must be selectable.
+- A provisioned member's **first sign-in** on the device: the "Choose your own
+  password" screen appears before any team data, the password keyboard and
+  AutoFill behave, and after saving the member lands on the app still signed in.
 - Keyboard on the board, the card dialog and forms; offline banner in
   airplane mode.
 

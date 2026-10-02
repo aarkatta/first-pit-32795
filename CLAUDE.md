@@ -45,7 +45,8 @@ Two aggregate gates — `npm run verify` is what CI runs:
 
 Emulator/rules suites run individually, each against its own throwaway project id,
 e.g. `npm run test:rules:phase3`, `npm run test:phase3-emulator`,
-`npm run test:storage:rules`, `npm run test:foundation-emulator`.
+`npm run test:storage:rules`, `npm run test:foundation-emulator`,
+`npm run test:provisioning-emulator` (coach-created accounts, forced password change).
 
 Node 24 and npm 11.4.2 are pinned (`engines`, `.nvmrc`, `packageManager`); the
 Functions runtime is `nodejs24`. `functions/` is an npm workspace, so a root
@@ -166,7 +167,7 @@ A callable must return stored dates as **ISO strings** — a raw Firestore
 cannot read (see `pickPublicFields` in `phase7.ts`).
 
 There are **two ways onto a team, and one entry point**: a coach always adds
-someone with **Manage team → ＋ Add a member**, and First Pit picks the
+someone with **Manage team → Add a member**, and First Pit picks the
 mechanism. Do not add a second place to create members or invitations.
 
 *Invitations* are for an address that already has an account —
@@ -212,11 +213,20 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   Manage team, Administration (coaches/team leaders only), View profile, Sign out
   (Team files has no entry; it is reached
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
-  (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
-  and ＋ Add a member. Keep it clean: it lists **active members only** —
-  suspended, removed and pending people belong in Administration — and nothing
-  about the viewer personally: leaving a team and joining or creating another
-  are on the profile (`MembershipsPanel`, Profile → Your teams).
+  (`/team`, `ManageTeamPage`) is a two-part screen: a **team picker** of cards —
+  every team the viewer belongs to, each with its live member/not-signed-in
+  counts, plus a dashed "Create a new team" card (`mayOfferTeamCreation`,
+  coach/mentor accounts, → `/teams/new`) — above a **selected-team panel**.
+  Choosing a card calls `setActiveTeamId`, so the top-bar switcher and the rest
+  of the app follow. The panel is the dark team header (Edit team details, Add a
+  member), four stat tiles (members, coaches & leaders, students, not signed in),
+  a search box + role-filter chips, and the member table (`RosterTable`): role
+  select, Status (Active / Not signed in), Last active, and a per-row kebab menu
+  for Reset password / Suspend. Each team's roster is fetched once and cached so
+  the card counts and the panel share one read. Keep it clean: **active members
+  only** — suspended, removed and pending people belong in Administration — and
+  leaving a team or accepting an invitation stay on the profile
+  (`MembershipsPanel`, Profile → Your teams).
   **Administration** (`/admin`, `AdministrationPage`) is coach-only and tabs over
   the invitations list, join requests, suspended members, team settings, safety
   and audit (`?tab=<id>` opens one); `/team/admin` redirects there and `/hub`
@@ -258,7 +268,13 @@ inventing per-page error UI.
   `firebase emulators:exec`. They talk to the emulator REST APIs / rules-unit-testing
   directly and throw on failure; there is no test framework in them. They use the
   default emulator ports, so stop a running `npm run emulators` first (or run them
-  against a copy of `firebase.json` with other ports). Any suite that creates a
+  against a copy of `firebase.json` with other ports). Only
+  `tests/provisioning-emulator-integration.mjs` reads its ports from the
+  environment (`FIRST_PIT_AUTH_PORT`, `FIRST_PIT_FUNCTIONS_PORT`,
+  `FIRST_PIT_FIRESTORE_PORT`); the other suites hard-code the defaults. Remember
+  `npm run functions:build` first when calling `firebase emulators:exec`
+  directly — the npm scripts do it for you, and a stale `functions/lib` runs
+  the old code. Any suite that creates a
   team must first call `setAccountType` with `coach` or `mentor`.
 - `scripts/release-check.mjs` is a static release gate (Capacitor metadata,
   Vercel SPA rewrite, safe-area viewport, production emulator guard, secret scan).

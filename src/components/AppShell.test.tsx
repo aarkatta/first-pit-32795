@@ -79,7 +79,7 @@ describe('AppShell route and canonical profile metadata', () => {
     render(<MemoryRouter initialEntries={['/scorer']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Scorer content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(within(primary).getAllByRole('link')).toHaveLength(4);
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '?Knowledge base', '▤Manage team']);
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Tracker', 'Knowledge base', 'Manage team']);
 
     fireEvent.click(screen.getByLabelText('Open workspace menu'));
     const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
@@ -144,9 +144,15 @@ describe('AppShell route and canonical profile metadata', () => {
   it('lists only product destinations: no State lab, Emulators or Search', () => {
     render(<MemoryRouter initialEntries={['/team']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Team content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    // Order is a product decision: Home, Tracker, Scorer, Knowledge base, Manage team, View profile, Sign out.
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '◫Scorer', '?Knowledge base', '▤Manage team', '◉View profile']);
-    expect(within(primary).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    // Order is a product decision: Home, Tracker, Scorer, Knowledge base, Manage team.
+    // View profile and Sign out moved into the account menu in the sidebar footer.
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Tracker', 'Scorer', 'Knowledge base', 'Manage team']);
+    expect(within(primary).queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(within(primary).queryByRole('link', { name: 'View profile' })).not.toBeInTheDocument();
+    // They live behind the account menu in the sidebar footer instead.
+    const accountMenu = screen.getByText('auth@example.com').closest('details') as HTMLElement;
+    expect(within(accountMenu).getByRole('link', { name: 'View profile' })).toHaveAttribute('href', '/profile');
+    expect(within(accountMenu).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Search team workspace' })).not.toBeInTheDocument();
   });
 

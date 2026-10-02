@@ -13,11 +13,8 @@ import { listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/direc
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { toDate } from '@/lib/dates';
 import { KNOWLEDGE_RESOURCES } from '@/lib/knowledge-resources';
+import { initialKnowledgeTab, knowledgeTabs as tabs, isKnowledgeTab as isTab, type KnowledgeTab as Tab } from '@/lib/knowledge-tabs';
 import { createOperationId as createResourceId } from '@/lib/ids';
-
-type Tab = 'questions' | 'polls' | 'resources';
-const tabs: Tab[] = ['questions', 'polls', 'resources'];
-const isTab = (value: string | null): value is Tab => tabs.includes(value as Tab);
 
 type QuestionThread = {
   questionId: string;
@@ -38,10 +35,7 @@ export function KnowledgePage() {
   const online = useOnlineStatus();
   const firestore = getFirebaseServices().firestore;
   const teamId = activeTeam?.teamId ?? null;
-  const [tab, setTab] = useState<Tab>(() => {
-    const requested = searchParams.get('tab');
-    return isTab(requested) ? requested : 'questions';
-  });
+  const [tab, setTab] = useState<Tab>(() => initialKnowledgeTab(searchParams));
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionCursor, setQuestionCursor] = useState<KnowledgeCursor | null>(null);
   const [hasMoreQuestions, setHasMoreQuestions] = useState(false);

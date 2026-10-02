@@ -1,6 +1,6 @@
 import { FieldValue, getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getInput, requireAuth, requireString, requireTeamMember } from './phase2.js';
+import { getInput, requireAuth, requireString, requireTeamMember, timestampToIso } from './phase2.js';
 
 export type Phase7Request = CallableRequest<Record<string, unknown>>;
 
@@ -29,7 +29,7 @@ function textMatches(tokens: string[], ...values: unknown[]) {
 export function pickPublicFields(id: string, data: DocumentData, fields: string[]) {
   return fields.reduce<Record<string, unknown>>((result, field) => {
     const value = data[field];
-    if (value !== undefined) result[field] = value instanceof Timestamp ? value.toDate().toISOString() : value;
+    if (value !== undefined) result[field] = timestampToIso(value) ?? value;
     return result;
   }, { id });
 }

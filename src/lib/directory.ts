@@ -26,6 +26,8 @@ export type TeamMember = {
   provisionedByThisTeam?: boolean;
   /** Admin-only: still signing in with the password their coach passed on. */
   mustSetPassword?: boolean;
+  /** Admin-only: ISO date the membership was created, for the roster subtitle. */
+  joinedAt?: string | null;
 };
 
 export type TeamRoster = {

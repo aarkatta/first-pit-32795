@@ -378,7 +378,7 @@ export function TaskDetails({
           <h3 id="task-attachments-heading">Attachments</h3>
           <AttachmentList files={attachments} status={attachmentsStatus} onRetry={() => onReloadAttachments?.()} />
           {canManage && onUploadFile && fileSharing === 'disabled' ? (
-            <p className="mb-attachment-note">Team files are turned off for this team. Turn them on in <strong>Manage team → Team settings</strong> to attach files.</p>
+            <p className="mb-attachment-note">Team files are turned off for this team. Turn them on in <strong>Administration → Team settings</strong> to attach files.</p>
           ) : null}
           {canManage && onUploadFile && fileSharing === 'teamOnly' ? (
             attachments.length >= MAX_TASK_ATTACHMENTS ? <p className="mb-attachment-note">This card has the most files it can hold ({MAX_TASK_ATTACHMENTS}).</p> : (
