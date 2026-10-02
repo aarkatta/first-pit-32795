@@ -11,6 +11,7 @@ import {
   isTaskEditor,
   requireString,
   requireText,
+  optionalText,
   requireTeamAdmin,
   requireTeamId,
   requireTeamMember,
@@ -341,7 +342,7 @@ async function validateTaskReferences(transaction: Transaction, teamId: string, 
 
 export function validateTaskInput(input: Record<string, unknown>) {
   const title = requireText(input.title, 'Task title', 160);
-  const description = input.description === undefined ? '' : requireText(input.description, 'Task description', 4000);
+  const description = input.description === undefined ? '' : optionalText(input.description, 'Task description', 4000);
   const status = enumValue(input.status, ['todo', 'inProgress', 'review', 'completed'] as const, 'Task status', 'todo');
   const priority = enumValue(input.priority, ['low', 'medium', 'high', 'urgent'] as const, 'Task priority', 'medium');
   const labels = stringArray(input.labels, 'Task labels', 20, 40);
@@ -446,7 +447,7 @@ export const updateTask = async (request: Phase3Request) => {
   const adminFields: Record<string, unknown> = {};
   if (editor) {
     if (has(input, 'title')) adminFields.title = requireText(input.title, 'Task title', 160);
-    if (has(input, 'description')) adminFields.description = requireText(input.description, 'Task description', 4000);
+    if (has(input, 'description')) adminFields.description = optionalText(input.description, 'Task description', 4000);
     if (has(input, 'priority')) adminFields.priority = enumValue(input.priority, ['low', 'medium', 'high', 'urgent'] as const, 'Task priority');
     if (has(input, 'assignedTo')) adminFields.assignedTo = optionalId(input.assignedTo, 'Assigned user ID');
     if (has(input, 'goalId')) adminFields.goalId = optionalId(input.goalId, 'Goal ID');

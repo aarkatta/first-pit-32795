@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEAM_POLICY,
   optionalTeamNumber,
+  optionalText,
   requireTeamName,
   requireAccountType,
   teamCreationRefusal,
@@ -212,5 +213,22 @@ describe('team creation by account type', () => {
     expect(isTaskAssignableRole('parent')).toBe(false);
     expect(isTaskAssignableRole('mentor')).toBe(true);
     expect(isTaskAssignableRole(undefined)).toBe(false);
+  });
+});
+
+describe('optionalText', () => {
+  it('stores a blank field as empty, so a task with no description can be saved', () => {
+    expect(optionalText('', 'Task description')).toBe('');
+    expect(optionalText('   \n ', 'Task description')).toBe('');
+  });
+
+  it('trims and keeps real text, including line breaks', () => {
+    expect(optionalText('  Build the arm\nthen test it  ', 'Task description')).toBe('Build the arm\nthen test it');
+  });
+
+  it('still refuses non-strings, over-long text and control characters', () => {
+    expect(() => optionalText(42, 'Task description')).toThrow(/Task description is required/);
+    expect(() => optionalText('x'.repeat(11), 'Task description', 10)).toThrow(/invalid/);
+    expect(() => optionalText('bad\u0007bell', 'Task description')).toThrow(/invalid/);
   });
 });
