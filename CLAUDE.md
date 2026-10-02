@@ -164,7 +164,17 @@ else in `action`.
 
 A callable must return stored dates as **ISO strings** — a raw Firestore
 `Timestamp` reaches the browser as `{_seconds, _nanoseconds}`, which `toDate()`
-cannot read (see `pickPublicFields` in `phase7.ts`).
+cannot read. Use `timestampToIso` (`phase2.ts`), as `pickPublicFields` in
+`phase7.ts` does.
+
+Free text is validated with `requireText`, which refuses an empty string. A
+field an edit form may send back blank (a task description) must use
+`optionalText` instead, which stores `''` — otherwise a record created without it
+can never be saved again (the 2026-10-01 task-save bug).
+
+Client display helpers are shared in `src/lib/domain.ts`: `roleLabel` ("Team
+leader", "Coach") and `nameInitials`; per-person/team badge colours use
+`avatarTone` from `src/lib/board-view.ts`. Don't add page-local copies.
 
 There are **two ways onto a team, and one entry point**: a coach always adds
 someone with **Manage team → Add a member**, and First Pit picks the
@@ -210,9 +220,12 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   client includes `teamLeader`; `functions/src/phase2.ts` `TEAM_ROLES` is the
   *assignable* set and excludes it.
 - Navigation (`AppShell.tsx`): sidebar Home, Tracker, Scorer, Knowledge base,
-  Manage team, Administration (coaches/team leaders only), View profile, Sign out
-  (Team files has no entry; it is reached
-  from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
+  Manage team, Administration (coaches/team leaders only) (Team files has no
+  entry; it is reached from task cards). **View profile** and **Sign out** live
+  in the account menu — the sidebar's footer profile card is a `<details>`
+  disclosure — and in the phone's top-bar Menu. The logo is the "FP" mark with
+  FIRST PIT and a "by Tech Titans NC" line; `appName` stays "First Pit". Top bar:
+  active-team switcher + online status + notification bell. **Manage team**
   (`/team`, `ManageTeamPage`) is a two-part screen: a **team picker** of cards —
   every team the viewer belongs to, each with its live member/not-signed-in
   counts, plus a dashed "Create a new team" card (`mayOfferTeamCreation`,
@@ -244,7 +257,11 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   movement, card dialog), `BoardTable.tsx` (the one board view), `BoardToolbar.tsx`,
   `BoardSetup.tsx` (columns + categories), `TaskImportPanel.tsx` and
   `spreadsheet-reader.ts`. Grouping, numbering, filtering and timeline maths are
-  pure functions in `src/lib/board-view.ts`.
+  pure functions in `src/lib/board-view.ts`. In the iOS shell (`isNativeShell()`)
+  the board is **compact**: task name and assignee per row, no column picker.
+- iOS-only styling: `markNativeShell()` (`src/lib/native-shell.ts`, called in
+  `main.tsx`) adds `native-shell` to `<html>` in the Capacitor app; scope phone
+  app CSS under `.native-shell` so the web is untouched.
 - Path alias `@/` → `src/` (configured in both `vite.config.ts` and `tsconfig.app.json`).
 
 ### Required UI states
