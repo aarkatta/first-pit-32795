@@ -167,7 +167,7 @@ A callable must return stored dates as **ISO strings** — a raw Firestore
 cannot read (see `pickPublicFields` in `phase7.ts`).
 
 There are **two ways onto a team, and one entry point**: a coach always adds
-someone with **Manage team → ＋ Add a member**, and First Pit picks the
+someone with **Manage team → Add a member**, and First Pit picks the
 mechanism. Do not add a second place to create members or invitations.
 
 *Invitations* are for an address that already has an account —
@@ -213,11 +213,20 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   Manage team, Administration (coaches/team leaders only), View profile, Sign out
   (Team files has no entry; it is reached
   from task cards); top bar active-team switcher + online status + notification bell. **Manage team**
-  (`/team`, `ManageTeamPage`) is the roster: the team banner, the member table,
-  and ＋ Add a member. Keep it clean: it lists **active members only** —
-  suspended, removed and pending people belong in Administration — and nothing
-  about the viewer personally: leaving a team and joining or creating another
-  are on the profile (`MembershipsPanel`, Profile → Your teams).
+  (`/team`, `ManageTeamPage`) is a two-part screen: a **team picker** of cards —
+  every team the viewer belongs to, each with its live member/not-signed-in
+  counts, plus a dashed "Create a new team" card (`mayOfferTeamCreation`,
+  coach/mentor accounts, → `/teams/new`) — above a **selected-team panel**.
+  Choosing a card calls `setActiveTeamId`, so the top-bar switcher and the rest
+  of the app follow. The panel is the dark team header (Edit team details, Add a
+  member), four stat tiles (members, coaches & leaders, students, not signed in),
+  a search box + role-filter chips, and the member table (`RosterTable`): role
+  select, Status (Active / Not signed in), Last active, and a per-row kebab menu
+  for Reset password / Suspend. Each team's roster is fetched once and cached so
+  the card counts and the panel share one read. Keep it clean: **active members
+  only** — suspended, removed and pending people belong in Administration — and
+  leaving a team or accepting an invitation stay on the profile
+  (`MembershipsPanel`, Profile → Your teams).
   **Administration** (`/admin`, `AdministrationPage`) is coach-only and tabs over
   the invitations list, join requests, suspended members, team settings, safety
   and audit (`?tab=<id>` opens one); `/team/admin` redirects there and `/hub`

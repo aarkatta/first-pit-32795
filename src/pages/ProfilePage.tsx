@@ -7,6 +7,7 @@ import { sendPasswordRecovery } from '@/lib/auth';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { getProfileFirestore, loadProfileSettings, type LoadedProfileSettings, type NotificationPreferences, type UserSettings } from '@/lib/profile-settings';
+import { nameInitials } from '@/lib/domain';
 import { requestAccountDeletion, updateProfileSettings } from '@/lib/phase7-service';
 import { usePreferences } from '@/lib/preferences-context';
 
@@ -89,7 +90,7 @@ export function ProfilePage() {
     <div className="page-stack">
       <section className="team-hero">
         <div className="profile-preview">
-          <span className="big-avatar color-1">{settings.profile.displayName.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase() || 'FP'}</span>
+          <span className="big-avatar color-1">{nameInitials(settings.profile.displayName, 'FP')}</span>
           <div><span className="eyebrow light">PERSONAL PROFILE</span><h3>{settings.profile.displayName}</h3><p>{user.email ?? 'Private account'} · team-only profile</p></div>
         </div>
         <button type="submit" form="profile-settings" disabled={busy || !online}>{busy ? 'Saving…' : 'Save profile'}</button>

@@ -172,6 +172,15 @@ export function requireMembershipStatus(value: unknown): ManagedMembershipStatus
   return value;
 }
 
+/**
+ * A stored Firestore `Timestamp` as an ISO string, or null for anything else.
+ * A callable must not return a raw Timestamp: the browser receives it as
+ * `{_seconds, _nanoseconds}`, which `toDate()` cannot read.
+ */
+export function timestampToIso(value: unknown): string | null {
+  return value instanceof Timestamp ? value.toDate().toISOString() : null;
+}
+
 export function requireTeamId(request: CallableRequest<unknown>): string {
   return requireString(getInput(request, 'teamId'), 'Team ID');
 }
