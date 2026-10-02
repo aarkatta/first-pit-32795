@@ -1125,7 +1125,10 @@ As of 2026-10-01 (`src/components/AppShell.tsx`):
   sidebar entries until 2026-10-01.
 - **Phone:** the bottom bar carries Home, Tracker, Knowledge base and Manage
   team; Scorer, Administration, View profile and Sign out sit in the top-bar
-  Menu, since the sidebar (and its account menu) is hidden on a phone.
+  Menu, since the sidebar (and its account menu) is hidden on a phone. The
+  iOS app swaps two of them (`nativeMobile` in `AppShell.tsx`): its bar is
+  Home, Tracker, Scorer and Manage team, with Knowledge base in the Menu,
+  because its larger labels wrap "Knowledge base" onto two lines.
 - **Top bar:** the **active team** (badge and name), then online status and
   the notification **bell**. The team sits on every page so a coach with
   several teams always sees which one they are working in; with more than one
@@ -1633,7 +1636,9 @@ npm run ios:open                     # opens ios/App in Xcode
 - **iOS-only CSS.** `markNativeShell()` (called from `main.tsx`) adds
   `native-shell` to `<html>` inside the shell, so styles can target the phone
   app alone: `.native-shell .bottom-nav…` gives the bottom bar readable,
-  wrapping labels across its full width.
+  wrapping labels across its full width, and `.native-shell .topbar…` lays the
+  top bar out in two rows — logo, bell and a hamburger Menu, then the team
+  switcher full width — with the online dot shown only when offline.
 - **Compact Tracker board (iOS).** In the shell `KanbanBoard` shows each row as
   the task name and its assignee only (`compact`, `visibleFields = ['person']`);
   tapping the name opens the card with everything else. `BoardTable` drops the

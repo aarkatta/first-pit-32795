@@ -8,6 +8,7 @@ import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
 import { isCoachOrLeader, nameInitials } from '@/lib/domain';
 import { getFirebaseServices } from '@/lib/firebase';
+import { isNativeShell } from '@/lib/native-shell';
 
 type AppShellProps = {
   children: ReactNode;
@@ -18,13 +19,15 @@ type AppShellProps = {
 
 // Sidebar order. View profile and Sign out follow these in the sidebar; the
 // four `mobile` entries fill the phone's bottom bar and the rest go in its Menu
-// menu. Team files (`/files`) has no entry: it is reached from task cards.
+// menu. The iOS app uses `nativeMobile` instead: "Knowledge base" wraps to two
+// lines in its larger tab labels, so Scorer takes that slot. Team files
+// (`/files`) has no entry: it is reached from task cards.
 const navItems = [
-  { to: '/', label: 'Home', mobile: true },
-  { to: '/coordination', label: 'Tracker', mobile: true },
-  { to: '/scorer', label: 'Scorer' },
-  { to: '/knowledge', label: 'Knowledge base', mobile: true },
-  { to: '/team', label: 'Manage team', mobile: true }
+  { to: '/', label: 'Home', mobile: true, nativeMobile: true },
+  { to: '/coordination', label: 'Tracker', mobile: true, nativeMobile: true },
+  { to: '/scorer', label: 'Scorer', mobile: false, nativeMobile: true },
+  { to: '/knowledge', label: 'Knowledge base', mobile: true, nativeMobile: false },
+  { to: '/team', label: 'Manage team', mobile: true, nativeMobile: true }
 ];
 
 /**
@@ -32,7 +35,7 @@ const navItems = [
  * Hiding it is presentation only — `AdministrationPage` refuses anyone else on
  * its own and every callable behind it re-checks the role.
  */
-const adminNavItem = { to: '/admin', label: 'Administration', mobile: false };
+const adminNavItem = { to: '/admin', label: 'Administration', mobile: false, nativeMobile: false };
 
 /**
  * Routes that carry a page title but no navigation entry. Without them every
@@ -89,8 +92,9 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const visibleNavItems = isAdmin
     ? navItems.flatMap((item) => (item.to === '/team' ? [item, adminNavItem] : [item]))
     : navItems;
-  const mobileItems = visibleNavItems.filter((item) => item.mobile);
-  const secondaryItems = visibleNavItems.filter((item) => !item.mobile);
+  const inBottomBar = (item: (typeof navItems)[number]) => (isNativeShell() ? item.nativeMobile : item.mobile);
+  const mobileItems = visibleNavItems.filter(inBottomBar);
+  const secondaryItems = visibleNavItems.filter((item) => !inBottomBar(item));
   const currentPageLabel = pageLabel(location.pathname);
 
   useEffect(() => {
