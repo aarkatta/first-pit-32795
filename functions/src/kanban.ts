@@ -11,6 +11,7 @@ import {
   isTaskEditor,
   requireString,
   requireText,
+  optionalText,
   requireTeamAdmin,
   requireTeamId,
   requireTaskEditor,
@@ -771,7 +772,7 @@ export const createKanbanTask = async (request: KanbanRequest) => {
   const projectId = requireString(input.projectId, 'Project ID', 128);
   const columnId = requireString(input.columnId, 'Column ID', 128);
   const title = requireText(input.title, 'Task title', 160);
-  const description = input.description === undefined ? '' : requireText(input.description, 'Task description', 4000);
+  const description = input.description === undefined ? '' : optionalText(input.description, 'Task description', 4000);
   const priority = ['low', 'medium', 'high', 'urgent'].includes(String(input.priority ?? 'medium')) ? String(input.priority ?? 'medium') : 'medium';
   const assignedTo = optionalId(input.assignedTo, 'Assigned user ID');
   const watcherUserIds = stringList(input.watcherUserIds, 'Task watchers', 20);
