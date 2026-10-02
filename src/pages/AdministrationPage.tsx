@@ -436,7 +436,7 @@ export function AdministrationPage() {
         <span className="eyebrow">INVITATIONS</span>
         <h3>{pendingInvitations.length} pending invitation{pendingInvitations.length === 1 ? '' : 's'}</h3>
         <p>
-          To add someone, use <Link to="/team">Manage team → ＋ Add a member</Link>. It invites an
+          To add someone, use <Link to="/team">Manage team → Add a member</Link>. It invites an
           address that already has a First Pit account and creates the account for one that does
           not. This list is where you track, resend and revoke invitations.
         </p>

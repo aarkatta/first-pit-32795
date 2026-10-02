@@ -56,6 +56,8 @@ type CellContext = {
   /** False for a parent: they follow the board and never use the assignee-only controls. */
   mayWorkAsAssignee: boolean;
   onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
+  /** Phone layout (the iOS app): a row is only the task name and its assignee. */
+  compact: boolean;
 };
 
 /**
@@ -225,7 +227,7 @@ function FilesCell({ task, context }: { task: TrackerTask; context: CellContext 
   return (
     <div className="mb-cell mb-cell--files">
       <button type="button" className="mb-file-chip" onClick={() => context.onOpen(task)} aria-label={`${count} file${count === 1 ? '' : 's'} on ${task.title}`}>
-        <span aria-hidden="true">🗎</span>{count || ''}
+        {count}
       </button>
     </div>
   );
@@ -311,23 +313,25 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
       className={`mb-row${isDragging ? ' is-dragging' : ''}${selected ? ' is-selected' : ''}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      <td className="mb-td mb-td--select">
-        <span className={`mb-row-stripe mb-color-${column?.color ?? 'gray'}`} aria-hidden="true" />
-        <input
-          type="checkbox"
-          checked={selected}
-          aria-label={`Select ${task.title}`}
-          onChange={(event) => onSelect(task.id, event.target.checked)}
-        />
-      </td>
+      {context.compact ? null : (
+        <td className="mb-td mb-td--select">
+          <span className={`mb-row-stripe mb-color-${column?.color ?? 'gray'}`} aria-hidden="true" />
+          <input
+            type="checkbox"
+            checked={selected}
+            aria-label={`Select ${task.title}`}
+            onChange={(event) => onSelect(task.id, event.target.checked)}
+          />
+        </td>
+      )}
       <td className="mb-td mb-td--item">
         <div className="mb-item">
-          {draggable ? (
+          {context.compact ? null : draggable ? (
             <button className="mb-drag" type="button" aria-label={`Reorder ${task.title}`} disabled={!canMove || context.disabled} {...attributes} {...listeners}>⠿</button>
           ) : <span className="mb-drag mb-drag--static" aria-hidden="true" />}
           {outline ? <span className="mb-outline">{outline}</span> : null}
           <button className="mb-item-title" type="button" onClick={() => context.onOpen(task)}>{task.title}</button>
-          {task.subtasks.length ? (
+          {task.subtasks.length && !context.compact ? (
             <button
               className="mb-subtask-toggle"
               type="button"
@@ -338,8 +342,8 @@ function BoardRow({ task, fields, context, canMove, draggable, selected, onSelec
               <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {subtasksDone}/{task.subtasks.length}
             </button>
           ) : null}
-          {task.checklist.length ? <span className="mb-item-meta" title="Checklist progress">{checklistDone}/{task.checklist.length}</span> : null}
-          {task.description ? <span className="mb-item-meta" title="Has a description" aria-hidden="true">≡</span> : null}
+          {task.checklist.length && !context.compact ? <span className="mb-item-meta" title="Checklist progress">{checklistDone}/{task.checklist.length}</span> : null}
+          {task.description && !context.compact ? <span className="mb-item-meta" title="Has a description" aria-hidden="true">≡</span> : null}
         </div>
       </td>
       {fields.map((field) => (
@@ -483,19 +487,21 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
 
       {collapsed ? null : (
         <div className="mb-table-wrap" id={`group-body-${group.id}`} ref={setNodeRef}>
-          <table className="mb-table">
+          <table className={`mb-table${context.compact ? ' mb-table--compact' : ''}`}>
             <caption className="visually-hidden">{groupTitle} — {group.tasks.length} items</caption>
             <thead>
               <tr>
-                <th className="mb-th mb-th--select" scope="col">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    disabled={!groupIds.length}
-                    aria-label={`Select all items in ${groupTitle}`}
-                    onChange={(event) => onSelectGroup(groupIds, event.target.checked)}
-                  />
-                </th>
+                {context.compact ? null : (
+                  <th className="mb-th mb-th--select" scope="col">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={!groupIds.length}
+                      aria-label={`Select all items in ${groupTitle}`}
+                      onChange={(event) => onSelectGroup(groupIds, event.target.checked)}
+                    />
+                  </th>
+                )}
                 <th className="mb-th mb-th--item" scope="col">Item</th>
                 {fields.map((field) => <th className="mb-th" scope="col" key={field}>{BOARD_FIELDS.find((entry) => entry.id === field)?.label}</th>)}
               </tr>
@@ -531,12 +537,12 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
               </SortableContext>
               {!group.tasks.length ? (
                 <tr className="mb-empty-row">
-                  <td className="mb-td" colSpan={fields.length + 2}>{draggable ? 'No items yet. Add one below or drag a row here.' : 'No items in this group.'}</td>
+                  <td className="mb-td" colSpan={fields.length + (context.compact ? 1 : 2)}>{draggable ? 'No items yet. Add one below or drag a row here.' : 'No items in this group.'}</td>
                 </tr>
               ) : null}
               {context.canManage && draggable ? (
                 <tr className="mb-add-row">
-                  <td className="mb-td" colSpan={fields.length + 2}>
+                  <td className="mb-td" colSpan={fields.length + (context.compact ? 1 : 2)}>
                     <form onSubmit={submit}>
                       <span className="mb-add-plus" aria-hidden="true">+</span>
                       <input
@@ -554,7 +560,7 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
                 </tr>
               ) : null}
             </tbody>
-            <tfoot><SummaryRow group={group} fields={fields} context={context} /></tfoot>
+            {context.compact ? null : <tfoot><SummaryRow group={group} fields={fields} context={context} /></tfoot>}
           </table>
         </div>
       )}
@@ -562,7 +568,7 @@ function GroupSection({ group, groupTitle, fields, context, groupBy, canMoveTask
   );
 }
 
-export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, actorUserId, mayWorkAsAssignee = true, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch, onSubtaskStatus }: {
+export function BoardTable({ groups, fields, groupBy, project, people, directory = EMPTY_DIRECTORY, now, canManage, canMoveTask, disabled, selectedIds, focusGroupId, actorUserId, mayWorkAsAssignee = true, compact = false, onSelect, onSelectGroup, onCreate, onOpen, onMove, onPatch, onSubtaskStatus }: {
   groups: BoardGroup[];
   fields: BoardFieldId[];
   groupBy: BoardGroupBy;
@@ -577,6 +583,8 @@ export function BoardTable({ groups, fields, groupBy, project, people, directory
   focusGroupId: string | null;
   actorUserId: string;
   mayWorkAsAssignee?: boolean;
+  /** Phone layout: task name and assignee only, no selection, drag or summary row. */
+  compact?: boolean;
   onSelect: (taskId: string, next: boolean) => void;
   onSelectGroup: (taskIds: string[], next: boolean) => void;
   onCreate: (columnId: string, title: string) => void;
@@ -585,7 +593,7 @@ export function BoardTable({ groups, fields, groupBy, project, people, directory
   onPatch: (task: TrackerTask, patch: BoardTaskPatch) => void;
   onSubtaskStatus: (task: TrackerTask, subtaskId: string, status: SubtaskStatus) => void;
 }) {
-  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen, actorUserId, mayWorkAsAssignee, onSubtaskStatus };
+  const context: CellContext = { project, people, directory, now, canManage, disabled, onPatch, onMove, onOpen, actorUserId, mayWorkAsAssignee, onSubtaskStatus, compact };
   if (!groups.length) {
     return <p className="mb-board-empty">No items match the current filters. Clear a filter to see the rest of the board.</p>;
   }

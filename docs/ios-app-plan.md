@@ -55,7 +55,11 @@ In order; each links to the phase that owns it.
   `.env.ios.example`), then `scripts/ios-bundle-check.mjs` refuses to sync a
   bundle with emulators on or a `demo-*` project. `npm run ios:open` opens Xcode.
 - `src/lib/native-shell.ts`: status bar follows the theme; splash hides after
-  first paint (10 s cap).
+  first paint (10 s cap); `markNativeShell()` tags `<html>` with `native-shell`
+  so CSS can tune the phone app alone.
+- Phone-sized Tracker board in the shell (2026-10-01, branch
+  `feature/ios-compact-board`): the task name and assignee per row, the rest in
+  the card dialog. See *Capacitor iOS* in `docs/architecture.md`.
 - Fixed: Auth never resolved in the shell. `getAuth()` waits on a resolver
   iframe that cannot load at `capacitor://`; native now uses `initializeAuth`
   with IndexedDB persistence.
@@ -131,10 +135,10 @@ the TestFlight build:
 - A team file, the scoresheet and a Knowledge resource open in the in-app
   browser; the Excel template and the CSV starter reach the share sheet.
 - **Send invite** opens the share sheet with a `https://www.first-pit.com/join`
-  link. Since 2026-09-21 it is reached from **Manage team → ＋ Add a member**
+  link. Since 2026-09-21 it is reached from **Manage team → Add a member**
   (for an address that already has an account) and from Administration →
   Invitations.
-- **＋ Add a member** for a new address: **Copy the whole message** and **Copy
+- **Add a member** for a new address: **Copy the whole message** and **Copy
   just the password** reach the clipboard inside the shell. `navigator.clipboard`
   can be refused in a WKWebView; if it is, the card's fallback ("select the text
   above and copy it by hand") must show, and the password must be selectable.
@@ -143,6 +147,15 @@ the TestFlight build:
   AutoFill behave, and after saving the member lands on the app still signed in.
 - Keyboard on the board, the card dialog and forms; offline banner in
   airplane mode.
+- **Compact Tracker board** (2026-10-01): each row is the task name and its
+  assignee, with no sideways scroll; tapping the name opens the card dialog,
+  and saving there (assigning a member included) works — it failed with a 400
+  on description-less tasks until the `optionalText` server fix.
+- **Bottom nav** labels are readable (the `.native-shell` CSS) and long labels
+  ("Knowledge base") wrap rather than truncate.
+- **Manage team** on the phone: the team cards, the panel, and the roster as one
+  card per member; the **⋯** actions panel opens in view and closes on a tap
+  outside.
 
 ## Phase C — Universal Links (built)
 

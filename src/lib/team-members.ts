@@ -39,7 +39,7 @@ export function describePasswordProblem(value: string, email?: string | null): s
  * This is not a dead end: it is the signal to offer an invitation instead, in
  * the same dialog. A coach should never have to know in advance which of the
  * two mechanisms an address needs — adding a member is always
- * Manage team → ＋ Add a member, and First Pit picks the path.
+ * Manage team → Add a member, and First Pit picks the path.
  */
 export function isExistingAccountError(error: unknown): boolean {
   const code = typeof error === 'object' && error !== null ? String((error as { code?: unknown }).code ?? '') : '';

@@ -20,11 +20,12 @@ and the release runbook.
 - Firebase client bootstrap with emulator support, invoked from `src/main.tsx`
 - Team context and switcher backed by active Firestore memberships
 - Server-side team creation with baseline policies, settings, and audit logging — limited to coach and mentor accounts (account type chosen once at sign-up), with an optional FLL team number
-- Manage team: the team banner ("Team name · Team #number", editable by coaches), the **active** members, and **＋ Add a member** — the only way to add anyone. For a new address First Pit creates the account and shows a starter password once, which the coach sends from their own mail; the member must choose their own password at first sign-in. For an address that already has an account, the same form sends an invitation instead
+- Manage team: every team you belong to as a card (pick one to manage it, or **Create a new team**), then that team's panel — name and number (editable by coaches), member tiles, search and role filters, the **active** members with a ⋯ menu for Reset password and Suspend, and **Add a member** — the only way to add anyone. For a new address First Pit creates the account and shows a starter password once, which the coach sends from their own mail; the member must choose their own password at first sign-in. For an address that already has an account, the same form sends an invitation instead
 - Administration (coaches and team leaders only): invitations, join requests, suspended members, team settings, safety reports, and the audit record, as tabs
 - Profile → Your teams: every team you belong to, with Leave, plus accepting an invitation or creating another team
 - Email invite: opens Gmail compose in a new tab (the share sheet on iOS) with the invitation already written; First Pit itself sends no email
-- Sidebar in the order Home, Tracker, Scorer, Knowledge base, Manage team, Administration (coaches and team leaders only), View profile, Sign out
+- Sidebar in the order Home, Tracker, Scorer, Knowledge base, Manage team, Administration (coaches and team leaders only); View profile and Sign out are in the account menu on the profile card at the bottom
+- iOS app: a phone-sized Tracker board (task name and assignee per row; tap the name for the full card)
 - Knowledge base: team questions with answers (accepted answer first), polls, and a Resources tab of curated FLL links
 - Scorer: a link to FIRST's official robot game scoresheet (it cannot be embedded), with in-app scoring marked coming soon
 - A landing page with "coming soon" App Store and Google Play badges

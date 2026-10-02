@@ -294,3 +294,21 @@ describe('BoardTable people directory', () => {
     expect(screen.getByRole('heading', { name: 'Unassigned' })).toBeInTheDocument();
   });
 });
+
+describe('BoardTable compact (iOS app)', () => {
+  it('shows only the task name and the assignee', () => {
+    renderBoard({
+      compact: true,
+      fields: ['person'],
+      directory,
+      groups: groupBoardTasks([task({ title: 'Wire the arm', assignedTo: 'ada', checklist: [{ id: 'c1', label: 'Cut', completed: false }], subtasks: [{ id: 's1', title: 'Cut', status: 'todo', assignedTo: null, dueAt: null }] })], 'column', project, now)
+    });
+    expect(screen.getByRole('button', { name: 'Wire the arm' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Person for Wire the arm')).toHaveValue('ada');
+    expect(within(screen.getByRole('table', { name: /To Do/ })).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Item', 'Person']);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reorder/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /subtask/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/done$/)).not.toBeInTheDocument();
+  });
+});

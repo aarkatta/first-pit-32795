@@ -116,7 +116,7 @@ describe('AdministrationPage', () => {
     // Adding a member is always Manage team -> + Add a member.
     expect(screen.queryByRole('textbox', { name: 'Email' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /create invite link/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /manage team → ＋ add a member/i })).toHaveAttribute('href', '/team');
+    expect(screen.getByRole('link', { name: /manage team → add a member/i })).toHaveAttribute('href', '/team');
 
     expect(screen.queryByRole('switch', { name: 'Team files' })).not.toBeInTheDocument();
     expect(screen.queryByText('Priya Nair')).not.toBeInTheDocument();
