@@ -126,10 +126,10 @@ export function AddMemberDialog({ teamId, teamName, teamNumber, coachName, onlin
         <div className="form-actions">
           {nativeShell ? (
             <button className="button" type="button" onClick={() => void shareText({ title: inviteEmailSubject(message), text: inviteEmailBody(message) }).catch((error: unknown) => setRequestState(getRequestState(error, online)))}>
-              ✉ Send invite
+              Send invite
             </button>
           ) : (
-            <a className="button" href={inviteGmailHref(message)} target="_blank" rel="noopener noreferrer">✉ Email invite with Gmail</a>
+            <a className="button" href={inviteGmailHref(message)} target="_blank" rel="noopener noreferrer">Email invite with Gmail</a>
           )}
           <button className="button button--ghost" type="button" onClick={() => void copyToClipboard(message.link)}>Copy link</button>
           <button className="button button--ghost" type="button" onClick={onCancel}>Done</button>
