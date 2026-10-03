@@ -46,6 +46,7 @@ function getBrandMark(appName: string) {
 const routeLabels: { to: string; label: string }[] = [
   // Tabs of the tracker rather than destinations of their own, so they carry a
   // page title without a navigation entry.
+  { to: '/calendar', label: 'Calendar' },
   { to: '/milestones', label: 'Milestones' },
   { to: '/import', label: 'Import tasks' },
   { to: '/board-setup', label: 'Board setup' },
@@ -64,9 +65,9 @@ const routeLabels: { to: string; label: string }[] = [
 /**
  * The tracker's board is a wide table, so its screens use the full width beside
  * the sidebar instead of the centred reading column the other pages use. All
- * four tabs share it so the tab bar does not jump when switching between them.
+ * five tabs share it so the tab bar does not jump when switching between them.
  */
-const wideRoutes = ['/coordination', '/milestones', '/import', '/board-setup', '/tracker'];
+const wideRoutes = ['/coordination', '/calendar', '/milestones', '/import', '/board-setup', '/tracker'];
 
 function isWideRoute(pathname: string) {
   return wideRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));

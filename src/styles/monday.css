@@ -1055,6 +1055,166 @@ and summary rows ---------- */
   margin-top: 0;
 }
 
+/* Tracker calendar: the board's cards and the milestones, by date. */
+.monday .cal { padding: 18px; }
+
+.monday .cal-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.monday .cal-header h3 { margin: 2px 0 0; }
+
+.monday .cal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.monday .cal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  color: var(--mb-ink-soft);
+  font-size: 13px;
+}
+
+.monday .cal-nav {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--mb-line);
+  border-radius: 6px;
+  color: var(--mb-ink);
+  background: var(--mb-surface);
+  font: 500 14px 'Figtree', 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.monday .cal-nav:hover { background: var(--mb-hover); }
+
+.monday .cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--mb-line-soft);
+  border-left: 1px solid var(--mb-line-soft);
+}
+
+.monday .cal-weekday {
+  padding: 6px 8px;
+  border-right: 1px solid var(--mb-line-soft);
+  border-bottom: 1px solid var(--mb-line-soft);
+  color: var(--mb-ink-soft);
+  background: var(--mb-page);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.monday .cal-day {
+  min-width: 0;
+  min-height: 112px;
+  padding: 4px;
+  border-right: 1px solid var(--mb-line-soft);
+  border-bottom: 1px solid var(--mb-line-soft);
+  background: var(--mb-surface);
+}
+
+.monday .cal-day.is-outside { background: var(--mb-page); }
+.monday .cal-day.is-outside .cal-day__number { color: var(--mb-ink-soft); }
+.monday .cal-day.is-selected { box-shadow: inset 0 0 0 2px var(--mb-blue); }
+
+.monday .cal-day__number {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 13px;
+  color: var(--mb-ink);
+  background: transparent;
+  font: 600 13px 'Figtree', 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.monday .cal-day__number:hover { background: var(--mb-hover); }
+
+.monday .cal-day.is-today .cal-day__number {
+  color: #fff;
+  background: var(--mb-blue);
+}
+
+/* The count stands in for the chips on small screens, where they are hidden. */
+.monday .cal-day__count { display: none; }
+
+.monday .cal-day__entries {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.monday .cal-chip {
+  display: block;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-left: 3px solid var(--mb-fill, var(--mb-gray));
+  border-radius: 4px;
+  color: var(--mb-ink);
+  background: color-mix(in srgb, var(--mb-fill, var(--mb-gray)) 14%, var(--mb-surface));
+  font-size: 12px;
+  line-height: 1.35;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monday .cal-chip:hover { background: color-mix(in srgb, var(--mb-fill, var(--mb-gray)) 26%, var(--mb-surface)); }
+.monday .cal-chip--milestone { font-weight: 700; }
+.monday .cal-chip.is-done { color: var(--mb-ink-soft); text-decoration: line-through; }
+
+.monday .cal-more {
+  padding: 2px 6px;
+  border: 0;
+  color: var(--mb-blue);
+  background: transparent;
+  font: 600 12px 'Figtree', 'DM Sans', sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.monday .cal-agenda { margin-top: 16px; }
+
+.monday .cal-agenda h4 {
+  margin: 0 0 8px;
+  color: var(--mb-ink);
+  font: 700 15px 'Figtree', 'DM Sans', sans-serif;
+}
+
+.monday .cal-agenda ul {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monday .cal-agenda .cal-chip {
+  padding: 8px 10px;
+  font-size: 14px;
+  white-space: normal;
+}
+
+.monday .cal-footnote { margin: 14px 0 0; }
+
+
 @media (max-width: 720px) {
   .monday.reference-page {
     padding: 12px;
@@ -1080,6 +1240,24 @@ and summary rows ---------- */
   .monday .mb-board-identity h2 {
     font-size: 21px;
   }
+
+  /* Seven columns leave no room for titles on a phone: each day shows a count,
+     and the list under the grid carries the selected day's entries. */
+  .monday .cal { padding: 12px; }
+  .monday .cal-day { min-height: 52px; padding: 2px; }
+  .monday .cal-day__entries { display: none; }
+  .monday .cal-day__number { min-width: 44px; height: 44px; border-radius: 22px; justify-content: center; }
+  .monday .cal-day__count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    color: #fff;
+    background: var(--mb-purple);
+    font-size: 10px;
+  }
+  .monday .cal-nav { min-width: 44px; min-height: 44px; }
 
   /* Touch targets stay at 44px on small screens without stretching desktop density. */
   .monday .mb-td,

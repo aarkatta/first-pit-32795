@@ -37,7 +37,7 @@ Product boundaries and non-goals live in `AGENTS.md`. Day-to-day conventions
 
 ### MVP includes
 
-Dashboard, Questions, Polls, Resources, Scorer (a link to FIRST's official scoresheet), Roles, Tracker, Storage Area, Notifications, Profile Customization, and core safety/admin controls. Chat, the calendar, How-to Videos and the team-defined scorer were built and later removed from the product; see their sections below.
+Dashboard, Questions, Polls, Resources, Scorer (a link to FIRST's official scoresheet), Roles, Tracker, Storage Area, Notifications, Profile Customization, and core safety/admin controls. Chat, the calendar, How-to Videos and the team-defined scorer were built and later removed from the product; see their sections below. The Tracker's Calendar tab is a read-only view of tasks and milestones by date, not the removed events calendar.
 
 ### Explicitly deferred
 
@@ -1368,7 +1368,34 @@ explicit `allow read, write: if false` blocks; the catch-all deny covers them,
 and `tests/firestore-rules-phase3.integration.mjs` asserts that for every role
 including a platform admin.
 
-The `/calendar` route still redirects to `/coordination` for old links.
+The `/calendar` route is now the Tracker's Calendar tab (below), so old links
+land on a real page. `safeNotificationRoute` still maps a stored `/calendar`
+notification link to `/coordination`.
+
+### Tracker calendar view
+
+The Tracker has a **Calendar** tab (`/calendar`, `src/pages/CalendarPage.tsx`).
+It is a view, not a return of the removed feature: there are no events, no
+recurrence and no external sync, and it adds no collection, rule, index or
+callable — a web-only change that needs no Firebase deploy.
+
+- **Tasks** come from the same per-column listeners the board uses
+  (`subscribeProjectTasks`), so the calendar shows exactly the cards the board
+  has loaded (50 per column) and updates live. A card sits on its `dueAt`, else
+  its `endAt`, else its `startAt`; a card with none is counted in a footnote.
+- **Milestones** come from `loadTeamGoals` and sit on their target date.
+  Archived milestones are left off. A failed milestone read leaves them off
+  rather than hiding the tasks.
+- Every entry is a link back to where it is edited — the card dialog on the
+  board (`/coordination?project=…&task=…`) or the milestone
+  (`/milestones?goal=…`). Nothing is edited on the calendar, so every role that
+  can read the board, parents included, sees the same thing.
+- "Only my tasks" narrows cards to the viewer's assignments and keeps milestones.
+- On narrow screens a day shows a count instead of titles; the list under the
+  grid carries the selected day's entries.
+
+The month maths (`monthGrid`, `calendarEntries`, `groupEntriesByDay`) are pure
+functions in `src/lib/calendar-view.ts`.
 
 ## v1 launch hardening (2026-08-29)
 

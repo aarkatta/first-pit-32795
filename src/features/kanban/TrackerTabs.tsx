@@ -2,15 +2,17 @@ import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 /**
- * The tracker is one place with four views: the board, the milestones above it,
- * the spreadsheet import that fills it, and the setup behind it. They are
+ * The tracker is one place with five views: the board, the same work by date,
+ * the milestones above it, the spreadsheet import that fills it, and the setup
+ * behind it. They are
  * separate routes so each keeps its own deep links and loads only its own data,
  * but they read as tabs of one screen rather than four sidebar destinations.
  */
-export type TrackerTab = 'board' | 'milestones' | 'import' | 'setup';
+export type TrackerTab = 'board' | 'calendar' | 'milestones' | 'import' | 'setup';
 
 const TABS: Array<{ id: TrackerTab; to: string; label: string; icon: string; coachOnly?: boolean }> = [
   { id: 'board', to: '/coordination', label: 'Board', icon: '▦' },
+  { id: 'calendar', to: '/calendar', label: 'Calendar', icon: '▤' },
   { id: 'milestones', to: '/milestones', label: 'Milestones', icon: '◎' },
   { id: 'import', to: '/import', label: 'Import tasks', icon: '⭳', coachOnly: true },
   { id: 'setup', to: '/board-setup', label: 'Board setup', icon: '⚙', coachOnly: true }

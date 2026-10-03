@@ -223,10 +223,13 @@ because nobody proved the mailbox. See *Coach-provisioned member accounts* in
   redirects to `/team`. Search, State lab and Emulators pages were
   removed (`/search` → Home). Tracker routes render full-width
   (`wideRoutes` → `.app-main--wide`); other pages use a centred 1440px column.
-- The tracker is four routes presented as tabs by
+- The tracker is five routes presented as tabs by
   `src/features/kanban/TrackerTabs.tsx` and absent from the sidebar:
-  `/coordination` (board), `/milestones`, `/import`, `/board-setup`. The last two
+  `/coordination` (board), `/calendar`, `/milestones`, `/import`, `/board-setup`. The last two
   are coach-only and read the team's single board through `src/lib/use-team-board.ts`.
+  The Calendar tab (`CalendarPage`, maths in `src/lib/calendar-view.ts`) is a
+  read-only month view of the board's cards and the milestones by date: it
+  reuses the board's own queries and adds no collection, rule, index or callable.
   `/files` is its own sidebar destination; `/notifications` is reached from the
   top-bar bell (`src/components/NotificationBell.tsx`, live unread badge + recent
   list). Their shared reads and listeners live in `src/lib/coordination-data.ts`.
