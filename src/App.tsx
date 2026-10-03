@@ -16,6 +16,7 @@ const CoordinationPage = lazy(() => import('@/pages/CoordinationPage').then((mod
 const CreateTeamPage = lazy(() => import('@/pages/CreateTeamPage').then((module) => ({ default: module.CreateTeamPage })));
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage').then((module) => ({ default: module.JoinTeamPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })));
+const CalendarPage = lazy(() => import('@/pages/CalendarPage').then((module) => ({ default: module.CalendarPage })));
 const BoardSetupPage = lazy(() => import('@/pages/BoardSetupPage').then((module) => ({ default: module.BoardSetupPage })));
 const ImportTasksPage = lazy(() => import('@/pages/ImportTasksPage').then((module) => ({ default: module.ImportTasksPage })));
 const MilestonesPage = lazy(() => import('@/pages/MilestonesPage').then((module) => ({ default: module.MilestonesPage })));
@@ -74,6 +75,7 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
             <Route path="/coordination" element={<ProtectedRoute><CoordinationPage /></ProtectedRoute>} />
             <Route path="/board-setup" element={<ProtectedRoute><BoardSetupPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><ImportTasksPage /></ProtectedRoute>} />
+            <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
             <Route path="/milestones" element={<ProtectedRoute><MilestonesPage /></ProtectedRoute>} />
             <Route path="/files" element={<ProtectedRoute><TeamFilesPage /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
@@ -84,10 +86,9 @@ export function AppRoutes({ clientEnv }: AppRoutesProps = {}) {
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/tracker" element={<CoordinationAlias />} />
-            {/* Chat and the calendar were removed from the product, but
-                notifications already delivered to a mailbox still carry their
-                deep links. Landing on Manage team beats a not-found page. */}
-            <Route path="/calendar" element={<CoordinationAlias />} />
+            {/* Chat was removed from the product, but notifications already
+                delivered to a mailbox still carry its deep links. Landing on
+                Manage team beats a not-found page. */}
             <Route path="/chat" element={<Navigate to="/team" replace />} />
             <Route path="/teams/new" element={<ProtectedRoute><CreateTeamPage /></ProtectedRoute>} />
             {/* Invitation acceptance, reached from an emailed `/join?invite=<id>` link.
