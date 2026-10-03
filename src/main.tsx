@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { getFirebaseServices } from './lib/firebase';
 import { installNativeLinkHandler } from './lib/native-links';
-import { hideNativeSplash } from './lib/native-shell';
+import { hideNativeSplash, markNativeShell } from './lib/native-shell';
 import { registerGlobalErrorHandlers } from './lib/report-error';
 import './styles/global.css';
 import './styles/reference-ui.css';
@@ -35,6 +35,9 @@ bootstrapFirebaseClient();
 // iOS shell only: new-tab links open in the in-app Safari view and downloads
 // go to the share sheet (see native-links.ts). A no-op on the web.
 installNativeLinkHandler();
+
+// iOS shell only: lets CSS size things for the phone app (see `.native-shell`).
+markNativeShell();
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

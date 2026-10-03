@@ -20,9 +20,12 @@ and the release runbook.
 - Firebase client bootstrap with emulator support, invoked from `src/main.tsx`
 - Team context and switcher backed by active Firestore memberships
 - Server-side team creation with baseline policies, settings, and audit logging — limited to coach and mentor accounts (account type chosen once at sign-up), with an optional FLL team number
-- Manage team: one page with the team overview for everyone ("Team name · Team #number") and, for coaches and team leaders, administration — editing the team name and number, invite links, join approvals, role assignment, membership lifecycle, and leadership transfer
-- Email invite: a one-click button opens Gmail compose in a new tab with the invitation already written; First Pit itself sends no email
-- Sidebar in the order Home, Tracker, Scorer, Knowledge base, Manage team, View profile, Sign out
+- Manage team: every team you belong to as a card (pick one to manage it, or **Create a new team**), then that team's panel — name and number (editable by coaches), member tiles, search and role filters, the **active** members with a ⋯ menu for Reset password and Suspend, and **Add a member** — the only way to add anyone. For a new address First Pit creates the account and shows a starter password once, which the coach sends from their own mail; the member must choose their own password at first sign-in. For an address that already has an account, the same form sends an invitation instead
+- Administration (coaches and team leaders only): invitations, join requests, suspended members, team settings, safety reports, and the audit record, as tabs
+- Profile → Your teams: every team you belong to, with Leave, plus accepting an invitation or creating another team
+- Email invite: opens Gmail compose in a new tab (the share sheet on iOS) with the invitation already written; First Pit itself sends no email
+- Sidebar in the order Home, Tracker, Scorer, Knowledge base, Manage team, Administration (coaches and team leaders only); View profile and Sign out are in the account menu on the profile card at the bottom
+- iOS app: a phone-sized Tracker board (task name and assignee per row; tap the name for the full card)
 - Knowledge base: team questions with answers (accepted answer first), polls, and a Resources tab of curated FLL links
 - Scorer: a link to FIRST's official robot game scoresheet (it cannot be embedded), with in-app scoring marked coming soon
 - A landing page with "coming soon" App Store and Google Play badges
@@ -36,7 +39,7 @@ and the release runbook.
 - A work-breakdown tracker: milestones → categories → tasks → subtasks, numbered (1, 1.1, 1.1.1), with progress rolling up at every level
 - One board screen — a grouped, sortable, filterable table with status, person, category, priority, start/end/due dates, timeline, labels and files — plus accessible card movement, conflict detection, and role-scoped controls
 - Tracker tabs for Board, Milestones, Import tasks and Board setup, so project management lives in one place
-- A new team's board starts pre-filled with the standard season plan's categories and tasks; coaches, team leaders and students add and edit tasks, mentors and parents view
+- A new team's board starts pre-filled with the standard season plan's categories and tasks; coaches, team leaders and students add and edit tasks; mentors view and may progress work assigned to them; parents view only and can never be assigned a task
 - A standard 12-week, 48-task FLL template (`public/first-pit-task-template.xlsx`, rebuilt by `npm run template:build`) that teams edit and upload back
 - Spreadsheet import with a row-by-row preview: categories created on the fly, statuses matched to board columns, assignees resolved server-side by name or email, subtasks nested under their task
 - Team milestones with server-maintained progress counters, achieved/reopen state, and dashboard highlights
@@ -87,7 +90,7 @@ Two aggregate gates cover everything; prefer them over running the pieces by han
   runs on every push and pull request.
 - `npm run verify` — the complete gate: `verify:static` plus `npm run test:firebase`
   (every rules and emulator suite). CI runs this on `main` and on demand, because
-  it starts the emulators thirteen times. Needs the Firebase CLI and a Java
+  it starts the emulators ten times. Needs the Firebase CLI and a Java
   runtime; takes several minutes. Run it before a release.
 
 The individual scripts behind them, for iterating on one thing:
@@ -100,7 +103,9 @@ The individual scripts behind them, for iterating on one thing:
 - `npm run test:release` — static release gate (Capacitor metadata, Vercel routing,
   brand and social metadata, the production emulator guard, secret scan)
 - `npm run test:firebase` — every rules and emulator suite; individual suites such as
-  `npm run test:rules:phase3` or `npm run test:phase3-emulator` run on their own
+  `npm run test:rules:phase3`, `npm run test:phase3-emulator` or
+  `npm run test:provisioning-emulator` (coach-created accounts and the forced
+  password change) run on their own
 
 ## Route strategy
 

@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
   updateMembershipStatus: vi.fn(),
   createInvitation: vi.fn(),
   provisionTeamMember: vi.fn(),
-  resetTeamMemberPassword: vi.fn()
+  resetTeamMemberPassword: vi.fn(),
+  setActiveTeamId: vi.fn()
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
@@ -33,13 +34,13 @@ vi.mock('@/lib/team-members', async (importOriginal) => {
 
 import { ManageTeamPage } from './ManageTeamPage';
 
-function membership(role: string, team: Record<string, unknown> = { name: 'Robotics', id: 'team-1' }) {
+function membership(role: string, team: Record<string, unknown> = { name: 'Robotics', id: 'team-1', createdBy: 'coach-1' }) {
   return { teamId: 'team-1', role, status: 'active', team };
 }
 
 function withTeam(role: string, extra: Record<string, unknown> = {}) {
-  const active = membership(role, (extra.team as Record<string, unknown>) ?? { name: 'Robotics', id: 'team-1' });
-  mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [active], activeTeam: active, ...extra });
+  const active = membership(role, (extra.team as Record<string, unknown>) ?? { name: 'Robotics', id: 'team-1', createdBy: 'coach-1' });
+  mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [active], activeTeam: active, setActiveTeamId: mocks.setActiveTeamId, ...extra });
   return active;
 }
 
@@ -55,6 +56,11 @@ const roster: TeamRoster = {
 
 function renderPage() {
   return render(<MemoryRouter><ManageTeamPage /></MemoryRouter>);
+}
+
+/** Opens a member's kebab actions menu by its accessible label. */
+function openActions(name: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }));
 }
 
 beforeEach(() => {
@@ -95,54 +101,89 @@ describe('ManageTeamPage team overview', () => {
     unmount();
     withTeam('student');
     renderPage();
-    expect(screen.queryByRole('link', { name: /create another team/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /create a new team/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the active team when the coach has several', () => {
+  it('shows every team as a card, marks the active one, and offers a create card', () => {
     const robotics = membership('coach');
-    const builders = { teamId: 'team-2', role: 'coach', status: 'active', team: { name: 'Builders', id: 'team-2' } };
-    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [robotics, builders], activeTeam: robotics });
+    const builders = { teamId: 'team-2', role: 'coach', status: 'active', team: { name: 'Builders', id: 'team-2', createdBy: 'coach-1' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [robotics, builders], activeTeam: robotics, setActiveTeamId: mocks.setActiveTeamId });
     renderPage();
+    // Both teams are present as cards, not just the active one.
+    expect(screen.getByText('Builders')).toBeInTheDocument();
+    expect(screen.getByText('Viewing')).toBeInTheDocument();
+    // The active team drives the panel below.
     expect(screen.getByRole('heading', { name: 'Robotics' })).toBeInTheDocument();
-    expect(screen.queryByText('Builders')).not.toBeInTheDocument();
-    expect(screen.getByText(/One of your 2 teams\. Everything below is for Robotics only/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /create a new team/i })).toHaveAttribute('href', '/teams/new');
+    expect(screen.getByText(/Showing Robotics only/)).toBeInTheDocument();
+  });
+
+  it('switches the active team when another card is clicked', async () => {
+    const robotics = membership('coach');
+    const builders = { teamId: 'team-2', role: 'coach', status: 'active', team: { name: 'Builders', id: 'team-2', createdBy: 'coach-1' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [robotics, builders], activeTeam: robotics, setActiveTeamId: mocks.setActiveTeamId });
+    renderPage();
+    fireEvent.click(screen.getByText('Builders').closest('button') as HTMLButtonElement);
+    await waitFor(() => expect(mocks.setActiveTeamId).toHaveBeenCalledWith('team-2'));
+  });
+
+  it('marks a card whose roster failed and retries it when chosen', async () => {
+    const robotics = membership('coach');
+    const builders = { teamId: 'team-2', role: 'coach', status: 'active', team: { name: 'Builders', id: 'team-2', createdBy: 'coach-1' } };
+    mocks.useTeamContext.mockReturnValue({ status: 'ready', teams: [robotics, builders], activeTeam: robotics, setActiveTeamId: mocks.setActiveTeamId });
+    mocks.listTeamMembers.mockImplementation((teamId: string) => teamId === 'team-2'
+      ? Promise.reject(new Error('unavailable'))
+      : Promise.resolve({ members: [], truncated: false }));
+    renderPage();
+    // Not stuck on "Loading…": the failure is named on the card.
+    expect(await screen.findByText('Members unavailable')).toBeInTheDocument();
+    expect(mocks.listTeamMembers.mock.calls.filter(([teamId]) => teamId === 'team-2')).toHaveLength(1);
+    fireEvent.click(screen.getByText('Builders').closest('button') as HTMLButtonElement);
+    expect(mocks.setActiveTeamId).toHaveBeenCalledWith('team-2');
+    await waitFor(() => expect(mocks.listTeamMembers.mock.calls.filter(([teamId]) => teamId === 'team-2')).toHaveLength(2));
   });
 
   it('lets a coach edit the team name and number together', async () => {
     const patchTeam = vi.fn();
-    withTeam('coach', { team: { name: 'Robotics', id: 'team-1', teamNumber: null }, patchTeam });
+    withTeam('coach', { team: { name: 'Robotics', id: 'team-1', teamNumber: null, createdBy: 'coach-1' }, patchTeam });
     mocks.updateTeamDetails.mockResolvedValue({ teamId: 'team-1', name: 'TechSummer', teamNumber: '12345' });
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit team name & number' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit team details' }));
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'TechSummer' } });
     fireEvent.change(screen.getByLabelText('Team number'), { target: { value: '12345' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(mocks.updateTeamDetails).toHaveBeenCalledWith('team-1', { name: 'TechSummer', teamNumber: '12345' }));
-    expect(await screen.findByRole('heading', { name: 'TechSummer · Team #12345' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'TechSummer #12345' })).toBeInTheDocument();
     expect(patchTeam).toHaveBeenCalledWith('team-1', { name: 'TechSummer', teamNumber: '12345' });
   });
 
-  it('shows the team number to a student without an edit control or admin link', () => {
-    withTeam('student', { team: { name: 'Robotics', id: 'team-1', teamNumber: '777' } });
+  it('shows the team number to a student without an edit control or add-member button', () => {
+    withTeam('student', { team: { name: 'Robotics', id: 'team-1', teamNumber: '777', createdBy: 'coach-1' } });
     renderPage();
-    expect(screen.getByRole('heading', { name: 'Robotics · Team #777' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /team name/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Administration' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Robotics #777' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit team details/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add a member/i })).not.toBeInTheDocument();
   });
 
-  it('keeps leaving and joining other teams off the page — they live on the profile', () => {
+  it('keeps leaving and accepting invitations off the page — they live on the profile', () => {
     withTeam('coach');
     renderPage();
     expect(screen.queryByRole('button', { name: /leave team/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/LEAVE THIS TEAM/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /accept an invitation/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /create another team/i })).not.toBeInTheDocument();
+  });
+
+  it('offers team creation to a mentor who does not run this team', () => {
+    mocks.useAccountType.mockReturnValue({ status: 'ready', accountType: 'mentor' });
+    withTeam('mentor');
+    renderPage();
+    expect(screen.getByRole('link', { name: /create a new team/i })).toHaveAttribute('href', '/teams/new');
+    // A mentor cannot administer the team, so the add-member control stays hidden.
+    expect(screen.queryByRole('button', { name: /add a member/i })).not.toBeInTheDocument();
   });
 });
 
 describe('ManageTeamPage roster', () => {
-  it('shows the roster as a table and sends administration elsewhere', async () => {
+  it('shows the roster as a table with status and last-active columns', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);
     renderPage();
@@ -150,11 +191,39 @@ describe('ManageTeamPage roster', () => {
     expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Member', 'Role', 'Status', 'Actions']);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
-    expect(within(rows[0]).getByText('(you)')).toBeInTheDocument();
-    // You cannot suspend yourself.
-    expect(within(rows[0]).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
+    expect(within(rows[0]).getByText('You')).toBeInTheDocument();
+    // You cannot suspend yourself and you did not create the account, so no menu.
+    expect(within(rows[0]).queryByRole('button', { name: /actions for/i })).not.toBeInTheDocument();
     expect(within(rows[1]).getByRole('combobox', { name: 'Role for Amir Khan' })).toHaveValue('student');
-    expect(screen.getByRole('link', { name: 'Administration' })).toHaveAttribute('href', '/admin');
+    expect(within(rows[1]).getByText('Not signed in')).toBeInTheDocument();
+  });
+
+  it('summarises the active team with stat tiles', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    renderPage();
+    await screen.findByRole('table');
+    const tile = (label: string) => screen.getByText(label).closest('.team-stat') as HTMLElement;
+    expect(within(tile('Members')).getByText('2')).toBeInTheDocument();
+    expect(within(tile('Coaches & leaders')).getByText('1')).toBeInTheDocument();
+    expect(within(tile('Students')).getByText('1')).toBeInTheDocument();
+    expect(within(tile('Not signed in yet')).getByText('1')).toBeInTheDocument();
+  });
+
+  it('filters the roster by search box and role chip', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    renderPage();
+    await screen.findByRole('table');
+    // Search narrows to a single member.
+    fireEvent.change(screen.getByPlaceholderText('Search members'), { target: { value: 'amir' } });
+    expect(screen.queryByText('Dana Ruiz')).not.toBeInTheDocument();
+    expect(screen.getByText('Amir Khan')).toBeInTheDocument();
+    // Clearing search and choosing the Coaches chip shows coaches only.
+    fireEvent.change(screen.getByPlaceholderText('Search members'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /coaches 1/i }));
+    expect(screen.getByText('Dana Ruiz')).toBeInTheDocument();
+    expect(screen.queryByText('Amir Khan')).not.toBeInTheDocument();
   });
 
   it('lists active members only, so Manage team stays clean', async () => {
@@ -165,8 +234,7 @@ describe('ManageTeamPage roster', () => {
     expect(rows).toHaveLength(2);
     expect(screen.queryByText('Sam Suspended')).not.toBeInTheDocument();
     expect(screen.queryByText('Rae Removed')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '2 people on Robotics' })).toBeInTheDocument();
-    // Every row is active, so there is nothing to Restore here.
+    expect(screen.getByText(/Showing 2 of 2 on Robotics/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
   });
 
@@ -175,17 +243,18 @@ describe('ManageTeamPage roster', () => {
     mocks.listTeamMembers.mockResolvedValue(roster);
     mocks.updateMembershipStatus.mockResolvedValue({});
     renderPage();
-    const amirRow = within(await screen.findByRole('table')).getAllByRole('row')[2];
+    await screen.findByRole('table');
     mocks.listTeamMembers.mockResolvedValue({ ...roster, members: roster.members.map((member) => member.userId === 'student-1' ? { ...member, status: 'suspended' } : member) });
-    fireEvent.click(within(amirRow).getByRole('button', { name: 'Suspend' }));
+    openActions('Amir Khan');
+    fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
     await waitFor(() => expect(mocks.updateMembershipStatus).toHaveBeenCalledWith('team-1', 'student-1', 'suspended'));
 
-    const notice = await screen.findByRole('status');
-    expect(notice).toHaveTextContent('Amir Khan is suspended');
-    expect(within(notice).getByRole('link', { name: /administration → suspended/i })).toHaveAttribute('href', '/admin?tab=suspended');
+    const notice = await screen.findByText(/Amir Khan is suspended/);
+    const noticeBox = notice.closest('.roster-notice') as HTMLElement;
+    expect(within(noticeBox).getByRole('link', { name: /administration → suspended/i })).toHaveAttribute('href', '/admin?tab=suspended');
     await waitFor(() => expect(within(screen.getByRole('table')).queryByText('Amir Khan')).not.toBeInTheDocument());
 
-    fireEvent.click(within(notice).getByRole('button', { name: 'Undo' }));
+    fireEvent.click(within(noticeBox).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(mocks.updateMembershipStatus).toHaveBeenLastCalledWith('team-1', 'student-1', 'active'));
     await waitFor(() => expect(screen.queryByText(/is suspended/)).not.toBeInTheDocument());
   });
@@ -198,21 +267,23 @@ describe('ManageTeamPage roster', () => {
     });
     renderPage();
     await screen.findByRole('table');
-    expect(screen.queryByRole('button', { name: /team leader/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /make leader/i })).not.toBeInTheDocument();
+    // "Team leaders" is only a filter chip, never an assignable role control.
+    expect(screen.queryByRole('button', { name: /make .*team leader/i })).not.toBeInTheDocument();
   });
 
-  it("stops the only coach from giving up the coach role, and says what to do", async () => {
+  it('warns the sole coach and locks their own demotion', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);
     renderPage();
     const own = await screen.findByRole('combobox', { name: 'Role for Dana Ruiz' });
     const options = Object.fromEntries(Array.from(own.querySelectorAll('option')).map((option) => [option.value, option.disabled]));
     expect(options).toEqual({ student: true, parent: true, mentor: true, coach: false });
-    expect(screen.getByText(/you're the only coach — make another member a coach first/i)).toBeInTheDocument();
+    expect(screen.getByText(/You're the only coach on Robotics/)).toBeInTheDocument();
+    expect(screen.getByText(/Locked: only coach/)).toBeInTheDocument();
     // Other members' roles are unaffected.
     expect(Array.from(screen.getByRole('combobox', { name: 'Role for Amir Khan' }).querySelectorAll('option')).every((option) => !option.disabled)).toBe(true);
-    // And making a student a coach is exactly what unlocks it.
+    // Making a student a coach is exactly what unlocks it.
     fireEvent.change(screen.getByRole('combobox', { name: 'Role for Amir Khan' }), { target: { value: 'coach' } });
     await waitFor(() => expect(mocks.assignTeamRole).toHaveBeenCalledWith('team-1', 'student-1', 'coach'));
   });
@@ -254,15 +325,53 @@ describe('ManageTeamPage roster', () => {
     });
   });
 
-  it('offers Reset password only for accounts this team created', async () => {
+  it('offers Reset password in the menu only for accounts this team created', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);
     renderPage();
     const rows = within(await screen.findByRole('table')).getAllByRole('row').slice(1);
-    // Dana signed up herself, so a coach has no password lever over her account.
-    expect(within(rows[0]).queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument();
-    expect(within(rows[1]).getByRole('button', { name: 'Reset password' })).toBeInTheDocument();
-    expect(within(rows[1]).getByText(/has not signed in yet/i)).toBeInTheDocument();
+    // Dana signed up herself, so a coach has no password lever over her account — no menu at all.
+    expect(within(rows[0]).queryByRole('button', { name: /actions for/i })).not.toBeInTheDocument();
+    // Amir was provisioned by this team, so the menu offers Reset password.
+    openActions('Amir Khan');
+    expect(screen.getByRole('button', { name: 'Reset password' })).toBeInTheDocument();
+  });
+
+  it('moves focus into the actions panel and returns it on Escape', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    renderPage();
+    await screen.findByRole('table');
+    const trigger = screen.getByRole('button', { name: 'Actions for Amir Khan' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const panel = screen.getByRole('group', { name: 'Actions for Amir Khan' });
+    expect(trigger).toHaveAttribute('aria-controls', panel.id);
+    // Opening lands on the first action rather than leaving focus on the button.
+    expect(within(panel).getByRole('button', { name: 'Reset password' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Actions for Amir Khan' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('says when a member was added by a coach versus joined on their own', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue({
+      ...roster,
+      members: [
+        { ...roster.members[0], joinedAt: '2026-09-01T12:00:00.000Z' },
+        { ...roster.members[1], joinedAt: '2026-10-01T12:00:00.000Z' },
+        { userId: 'mentor-1', role: 'mentor', status: 'active', displayName: 'Mo Mentor', photoURL: null, initials: 'MM', provisionedByThisTeam: false, mustSetPassword: false, joinedAt: '2026-09-15T12:00:00.000Z' }
+      ]
+    });
+    renderPage();
+    await screen.findByRole('table');
+    // The creator is the owner; a provisioned account was added; anyone else joined.
+    expect(screen.getByText('Team owner')).toBeInTheDocument();
+    expect(screen.getByText(/^Added /)).toBeInTheDocument();
+    expect(screen.getByText(/^Joined /)).toBeInTheDocument();
+    expect(screen.queryByText(/^Invited/)).not.toBeInTheDocument();
   });
 
   it('shows a student the roster without any membership controls', async () => {
@@ -272,7 +381,7 @@ describe('ManageTeamPage roster', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Member', 'Role', 'Status']);
     expect(screen.queryByRole('combobox', { name: /role for/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /actions for/i })).not.toBeInTheDocument();
   });
 
   it('keeps the page usable when the roster cannot load', async () => {
@@ -426,12 +535,14 @@ describe('ManageTeamPage adding a member', () => {
     expect(screen.queryByRole('button', { name: /invite ada@example.com/i })).not.toBeInTheDocument();
   });
 
-  it('issues a fresh password from the roster and says nothing was kept on a replay', async () => {
+  it('issues a fresh password from the menu and says nothing was kept on a replay', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);
     mocks.resetTeamMemberPassword.mockResolvedValue({ userId: 'student-1', temporaryPassword: null, replayed: true });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+    await screen.findByRole('table');
+    openActions('Amir Khan');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
     await waitFor(() => expect(mocks.resetTeamMemberPassword).toHaveBeenCalledWith('team-1', 'student-1'));
     expect(await screen.findByText(/already has an account/i)).toBeInTheDocument();
     expect(screen.getByText(/no new password to show/i)).toBeInTheDocument();

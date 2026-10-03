@@ -100,6 +100,11 @@ h3,
   transform: rotate(-3deg);
   box-shadow: none;
 }
+/* The logo lockup: FIRST PIT with a "by Tech Titans NC" subtitle under it. */
+.brand-text { display: flex; flex-direction: column; gap: 1px; line-height: 1.08; }
+.brand-text strong { font-size: 18px; letter-spacing: -0.01em; }
+.brand-text small { margin: 0; text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 700; color: #b8c5be; }
+.brand-text .brand-accent { color: var(--acid); }
 
 .team-badge,
 .profile-avatar {
@@ -132,13 +137,6 @@ h3,
   color: #aebbb4;
   font-size: 12px;
   font-weight: 600;
-}
-
-.sidebar-nav__link > span {
-  width: 19px;
-  color: #829188;
-  font-size: 16px;
-  text-align: center;
 }
 
 .sidebar-nav__link:hover,
@@ -200,6 +198,41 @@ h3,
   color: #aebbb4;
   font-size: 9px;
 }
+
+/* The account menu: the profile card is a disclosure that pops "View profile"
+   and "Sign out" up above itself. */
+.profile-menu { position: relative; }
+.profile-menu > summary { cursor: pointer; list-style: none; }
+.profile-menu > summary::-webkit-details-marker { display: none; }
+.profile-menu > summary::marker { content: ''; }
+.profile-menu__panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1c2b22;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+.profile-menu__item {
+  display: block;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #e7efe9;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.profile-menu__item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.profile-menu__item:disabled { opacity: 0.7; cursor: default; }
 
 .main-panel {
   min-width: 0;
@@ -539,10 +572,6 @@ td {
     color: var(--blue);
   }
 
-  .bottom-nav__link span {
-    font-size: 20px;
-  }
-
   .bottom-nav__link small {
     max-width: 100%;
     overflow: hidden;
@@ -558,8 +587,12 @@ td {
   }
 
   .mobile-secondary-nav > summary {
+    width: auto;
+    padding: 0 12px;
     list-style: none;
     cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .mobile-secondary-nav > summary::-webkit-details-marker {
@@ -1120,7 +1153,7 @@ and profile compositions. */
   align-items: end;
   padding: 30px;
   border-radius: 18px;
-  background: #1a3129;
+  background: #12211a;
   color: #fff;
 }
 .team-hero h3 { margin: 10px 0 7px; font: 700 32px 'Space Grotesk', sans-serif; }
@@ -1155,6 +1188,8 @@ and profile compositions. */
 .report-form fieldset label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .report-form input[type='radio'] { width: auto; min-height: 0; }
 .report-sent { margin: 8px 0 0; color: #2f6b2a; font-weight: 700; }
+/* Scrolls sideways when the table is wider than its frame. The per-row actions
+   panel is portalled and fixed-positioned (RosterTable), so this cannot clip it. */
 .roster-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: white; }
 .roster-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; }
 .roster-table th { padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-align: left; text-transform: uppercase; }
@@ -1166,7 +1201,6 @@ and profile compositions. */
 .roster-avatar { display: grid; flex: none; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #dce4ff; color: #3048a9; font-size: 11px; font-weight: 800; }
 .roster-table select { width: 140px; min-height: 34px; padding: 0 8px; font-size: 13px; }
 .roster-table__actions { text-align: right; white-space: nowrap; }
-.roster-table__actions .text-button + .text-button { margin-left: 14px; }
 .roster-status { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #e3f3de; color: #2f6b2a; font-size: 12px; font-weight: 700; }
 .roster-status--suspended { background: #fdeee0; color: #9a4a06; }
 .roster-table__inactive strong { color: var(--muted); }
@@ -1433,3 +1467,159 @@ textarea:focus-visible,
 .memberships-list { display: grid; gap: 4px; margin: 14px 0; padding: 0; list-style: none; }
 .memberships-list .form-actions { flex-wrap: wrap; justify-content: flex-end; margin: 0; }
 .roster-table__hint { display: block; max-width: 180px; margin-top: 4px; color: #9a4a06; font-size: 12px; line-height: 1.3; }
+
+/* Manage team on a phone: the roster table restacks as one card per member —
+   avatar, name and status on top, role underneath, actions last. Desktop keeps
+   the table. The markup is unchanged, so screen readers still get a table. */
+@media (max-width: 760px) {
+  section[aria-labelledby="roster-heading"] > .section-heading { flex-wrap: wrap; align-items: center; gap: 12px; }
+  .roster-table-wrap { overflow: visible; border: 0; border-radius: 0; background: transparent; }
+  .roster-table,
+  .roster-table tbody { display: block; min-width: 0; border: 0; border-radius: 0; box-shadow: none; overflow: visible; background: transparent; }
+  .roster-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .roster-table tbody { display: grid; gap: 10px; }
+  .roster-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "member status" "role role" "actions actions";
+    gap: 10px 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: white;
+  }
+  .roster-table td,
+  .roster-table tbody tr:first-child td { display: block; padding: 0; border: 0; }
+  .roster-table tbody tr:hover td { background: transparent; }
+  .roster-table__cell--member { grid-area: member; min-width: 0; }
+  .roster-table__cell--member strong { overflow-wrap: anywhere; }
+  .roster-table__cell--status { grid-area: status; align-self: start; }
+  .roster-table__cell--role { grid-area: role; }
+  .roster-table__cell--role::before { content: 'Role'; display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+  .roster-table select { width: 100%; min-height: 44px; font-size: 16px; }
+  .roster-table__hint { max-width: none; }
+  .roster-table__actions { grid-area: actions; display: flex !important; flex-wrap: wrap; gap: 4px 18px; text-align: left; white-space: normal; }
+  .roster-table__actions:empty { display: none !important; }
+  .roster-menu__trigger { width: 44px; height: 44px; }
+}
+
+/* iOS app only (`markNativeShell`): the bottom-nav labels are the only thing
+   in each tab, so 9px is unreadable on a phone. Long labels ("Knowledge base")
+   wrap to two lines instead of truncating, and the tabs share the bar's full
+   width rather than leaving an empty fifth column. The web keeps its sizes. */
+@media (max-width: 960px) {
+  .native-shell .bottom-nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .native-shell .bottom-nav__link { align-items: center; min-height: 52px; }
+  .native-shell .bottom-nav__link small {
+    font-size: 14px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+/* ─── Manage teams: team picker + selected-team panel ─────────────────────── */
+/* The top bar already shows the page title, so the picker starts the page;
+   drop the default section-heading top margin. */
+.manage-teams .section-heading { margin-top: 0; }
+
+.team-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.team-picker > li { display: flex; }
+.team-card {
+  display: flex; flex-direction: column; gap: 14px; width: 100%;
+  padding: 18px; border: 2px solid var(--line); border-radius: 16px;
+  background: #fff; text-align: left; cursor: pointer; color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.team-card:hover { border-color: #c7cec8; }
+.team-card:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.team-card--active { border-color: var(--acid); box-shadow: 0 0 0 3px rgba(200, 241, 53, 0.4); }
+.team-card__top { display: flex; align-items: center; gap: 12px; }
+.team-card__title { display: grid; min-width: 0; }
+.team-card__title strong { overflow-wrap: anywhere; font-size: 16px; }
+.team-card__title small { color: var(--muted); font-size: 12px; }
+.team-card__badge {
+  margin-left: auto; padding: 4px 10px; border-radius: 999px;
+  background: #152112; color: var(--acid); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.team-card__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #f0f2ee; color: #4a524c; font-size: 12px; font-weight: 700; }
+.pill--warn { background: #fdeee0; color: #9a4a06; }
+.team-card--create {
+  align-items: center; justify-content: center; gap: 8px;
+  border-style: dashed; background: transparent; color: var(--muted); text-align: center; min-height: 120px;
+}
+.team-card--create:hover { color: var(--ink); border-color: #b9c0ba; }
+.team-card--create strong { font-size: 15px; }
+.team-card__plus { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #eceee9; color: var(--ink); font-size: 24px; font-weight: 700; }
+
+/* Selected team panel */
+/* The hero rounds its own top corners to sit inside the panel's radius. */
+.team-panel { margin-top: 24px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
+.team-panel__hero { display: flex; align-items: center; gap: 18px; padding: 24px 28px; background: #12211a; color: #fff; border-radius: 17px 17px 0 0; }
+.team-badge--lg { width: 60px; height: 60px; border-radius: 14px; font-size: 20px; flex: none; }
+.team-panel__id { flex: 1; min-width: 0; }
+.team-panel__id h3 { margin: 0; font: 800 28px 'Space Grotesk', sans-serif; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.team-panel__id .team-number { color: var(--muted); font-weight: 700; }
+.team-panel__id > p { margin: 4px 0 0; color: #b8c5be; }
+.team-panel__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+/* Match the production banner: an acid (lime) primary and a translucent ghost,
+   both with the app's 3d bottom edge. These beat the base `.button` (ink) and
+   `.button--ghost` (white) by selector specificity. */
+.team-panel__hero .button,
+.team-panel__hero .button--ghost { position: relative; transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out); }
+.team-panel__hero .button { background: var(--acid); color: #14200e; font-weight: 800; border: 0; box-shadow: var(--edge-3d-acid), 0 3px 0 #8fb01c, var(--elev-1); }
+.team-panel__hero .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--edge-3d-acid), 0 4px 0 #8fb01c, var(--elev-2); }
+.team-panel__hero .button:active:not(:disabled) { transform: translateY(2px); box-shadow: var(--edge-3d-acid), 0 1px 0 #8fb01c, var(--elev-0); }
+.team-panel__hero .button--ghost { background: rgba(255, 255, 255, 0.1); color: #f6faf7; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: var(--edge-3d), 0 3px 0 rgba(0, 0, 0, 0.3); }
+.team-panel__hero .button--ghost:hover:not(:disabled),
+.team-panel__hero .button--ghost:focus-visible { background: rgba(255, 255, 255, 0.2); border-color: transparent; color: #fff; box-shadow: var(--edge-3d), 0 4px 0 rgba(0, 0, 0, 0.3); }
+.team-panel__hero .team-number-form { margin-top: 0; }
+
+.team-stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.team-stat { padding: 20px 28px; border-left: 1px solid var(--line); }
+.team-stat:first-child { border-left: 0; }
+.team-stat strong { display: block; font: 800 28px 'Space Grotesk', sans-serif; }
+.team-stat span { color: var(--muted); font-size: 13px; }
+
+.team-panel__body { padding: 22px 28px 26px; }
+.team-panel__scope { margin: 0 0 14px; color: var(--muted); }
+.roster-notice--warn { background: #fdf6ec; border-color: #f0d9b5; }
+
+.roster-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+.roster-search { flex: 1; min-width: 220px; }
+.roster-search input { width: 100%; min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfbf8; }
+.chip-filter { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.chip:hover { border-color: #c7cec8; }
+.chip:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.chip--active { background: #152112; border-color: #152112; color: #fff; }
+
+.roster-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 14px 2px 0; color: var(--muted); }
+
+/* Roster row extras */
+.roster-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 6px; background: #eceee9; color: #4a524c; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: middle; }
+.roster-tag--you { background: #e9ecfd; color: #3048a9; }
+.roster-table__subtitle { display: block; color: var(--muted); }
+.roster-status--active { background: #e3f3de; color: #2f6b2a; }
+.roster-status--pending { background: #fdeee0; color: #9a4a06; }
+
+/* Kebab actions menu */
+.roster-menu__trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; }
+.roster-menu__trigger:hover:not(:disabled) { border-color: #c7cec8; background: #f7f8f5; }
+.roster-menu__trigger:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+/* Portalled to <body>; RosterTable sets top/right from the trigger's position. */
+.roster-menu__list { position: fixed; z-index: 50; display: grid; min-width: 180px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 12px 30px rgba(17, 24, 39, 0.16); }
+.roster-menu__list button { padding: 10px 12px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.roster-menu__list button:hover:not(:disabled),
+.roster-menu__list button:focus-visible { background: #f0f2ee; outline: none; }
+.roster-menu__danger { color: #a3301f; }
+.roster-table__truncated { margin: 10px 2px 0; }
+
+@media (max-width: 760px) {
+  .team-stats { grid-template-columns: repeat(2, 1fr); }
+  .team-stat:nth-child(odd) { border-left: 0; }
+  .team-stat:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .team-panel__hero { flex-wrap: wrap; }
+  .team-panel__actions { width: 100%; }
+}

@@ -8,12 +8,14 @@ const mocks = vi.hoisted(() => ({
   doc: vi.fn(() => 'profile-ref'),
   onSnapshot: vi.fn(),
   unsubscribe: vi.fn(),
-  getFirebaseServices: vi.fn(() => ({ firestore: 'firestore' }))
+  getFirebaseServices: vi.fn(() => ({ firestore: 'firestore' })),
+  isNativeShell: vi.fn(() => false)
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
 vi.mock('@/lib/team-context', () => ({ useTeamContext: mocks.useTeamContext }));
 vi.mock('@/lib/firebase', () => ({ getFirebaseServices: mocks.getFirebaseServices }));
+vi.mock('@/lib/native-shell', () => ({ isNativeShell: mocks.isNativeShell }));
 vi.mock('firebase/firestore', () => ({ doc: mocks.doc, onSnapshot: mocks.onSnapshot }));
 vi.mock('./NotificationBell', () => ({
   NotificationBell: ({ teamId, userId }: { teamId: string; userId: string }) => <button type="button">{`Bell ${teamId} ${userId}`}</button>
@@ -27,6 +29,7 @@ describe('AppShell route and canonical profile metadata', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isNativeShell.mockReturnValue(false);
     mocks.useAuth.mockReturnValue({ status: 'authenticated', user: { uid: 'user-1', email: 'auth@example.com', displayName: 'Stale Auth' }, signOut });
     mocks.useTeamContext.mockReturnValue({
       teams: [
@@ -40,6 +43,17 @@ describe('AppShell route and canonical profile metadata', () => {
       next({ data: () => ({ displayName: 'Saved Profile', photoURL: null }) });
       return mocks.unsubscribe;
     });
+  });
+
+  it('puts Scorer in the iOS bottom bar and Knowledge base in its Menu', () => {
+    mocks.isNativeShell.mockReturnValue(true);
+    render(<MemoryRouter initialEntries={['/']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Home content</p></AppShell></MemoryRouter>);
+    const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Tracker', 'Scorer', 'Manage team']);
+    fireEvent.click(screen.getByLabelText('Open workspace menu'));
+    const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
+    expect(within(secondary).getByRole('link', { name: 'Knowledge base' })).toBeInTheDocument();
+    expect(within(secondary).queryByRole('link', { name: 'Scorer' })).not.toBeInTheDocument();
   });
 
   it('names and exposes the Knowledge base in desktop/mobile navigation and shows the Firestore profile', () => {
@@ -79,7 +93,7 @@ describe('AppShell route and canonical profile metadata', () => {
     render(<MemoryRouter initialEntries={['/scorer']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Scorer content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(within(primary).getAllByRole('link')).toHaveLength(4);
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '?Knowledge base', '▤Manage team']);
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Tracker', 'Knowledge base', 'Manage team']);
 
     fireEvent.click(screen.getByLabelText('Open workspace menu'));
     const secondary = screen.getByRole('navigation', { name: 'Mobile secondary navigation' });
@@ -144,9 +158,15 @@ describe('AppShell route and canonical profile metadata', () => {
   it('lists only product destinations: no State lab, Emulators or Search', () => {
     render(<MemoryRouter initialEntries={['/team']}><AppShell online appName="First Pit" appTagline="Team hub"><p>Team content</p></AppShell></MemoryRouter>);
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    // Order is a product decision: Home, Tracker, Scorer, Knowledge base, Manage team, View profile, Sign out.
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['⌂Home', '▦Tracker', '◫Scorer', '?Knowledge base', '▤Manage team', '◉View profile']);
-    expect(within(primary).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    // Order is a product decision: Home, Tracker, Scorer, Knowledge base, Manage team.
+    // View profile and Sign out moved into the account menu in the sidebar footer.
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Tracker', 'Scorer', 'Knowledge base', 'Manage team']);
+    expect(within(primary).queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(within(primary).queryByRole('link', { name: 'View profile' })).not.toBeInTheDocument();
+    // They live behind the account menu in the sidebar footer instead.
+    const accountMenu = screen.getByText('auth@example.com').closest('details') as HTMLElement;
+    expect(within(accountMenu).getByRole('link', { name: 'View profile' })).toHaveAttribute('href', '/profile');
+    expect(within(accountMenu).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Search team workspace' })).not.toBeInTheDocument();
   });
 

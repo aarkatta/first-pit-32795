@@ -63,6 +63,7 @@ import { loadFileSharing, type FileSharing } from '@/lib/coordination-data';
 import { ATTACHMENT_ACCEPT, attachmentProblem } from '@/lib/task-attachments';
 import { dateTimeInputValue, formatDueDate, toDate } from '@/lib/dates';
 import { createOperationId } from '@/lib/ids';
+import { isNativeShell } from '@/lib/native-shell';
 
 type KanbanBoardProps = {
   teamId: string;
@@ -378,7 +379,7 @@ export function TaskDetails({
           <h3 id="task-attachments-heading">Attachments</h3>
           <AttachmentList files={attachments} status={attachmentsStatus} onRetry={() => onReloadAttachments?.()} />
           {canManage && onUploadFile && fileSharing === 'disabled' ? (
-            <p className="mb-attachment-note">Team files are turned off for this team. Turn them on in <strong>Manage team → Team settings</strong> to attach files.</p>
+            <p className="mb-attachment-note">Team files are turned off for this team. Turn them on in <strong>Administration → Team settings</strong> to attach files.</p>
           ) : null}
           {canManage && onUploadFile && fileSharing === 'teamOnly' ? (
             attachments.length >= MAX_TASK_ATTACHMENTS ? <p className="mb-attachment-note">This card has the most files it can hold ({MAX_TASK_ATTACHMENTS}).</p> : (
@@ -720,7 +721,13 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
       : groupBoardTasks(sortedTasks, groupBy, selectedProject, now),
     [goals, groupBy, now, selectedProject, sortedTasks]
   );
-  const visibleFields = useMemo(() => BOARD_FIELDS.map((field) => field.id).filter((field) => !hiddenFields.includes(field)), [hiddenFields]);
+  // The iOS app shows a phone-sized board: each row is the task name and its
+  // assignee, and tapping the name opens the card with everything else.
+  const compact = useMemo(() => isNativeShell(), []);
+  const visibleFields = useMemo<BoardFieldId[]>(
+    () => compact ? ['person'] : BOARD_FIELDS.map((field) => field.id).filter((field) => !hiddenFields.includes(field)),
+    [compact, hiddenFields]
+  );
   const assignees = useMemo(() => boardPeople(tasks), [tasks]);
   const labels = useMemo(() => boardLabels(tasks), [tasks]);
   const directory = useMemo(() => memberMap(members), [members]);
@@ -904,6 +911,7 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
         onGroupByChange={setGroupBy}
         hiddenFields={hiddenFields}
         onHiddenFieldsChange={setHiddenFields}
+        showFieldPicker={!compact}
         people={people}
         directory={directory}
         labels={labels}
@@ -936,6 +944,7 @@ export function KanbanBoard({ teamId, canManage, canEditTasks, actorRole, actorU
             focusGroupId={focusGroupId}
             actorUserId={actorUserId}
             mayWorkAsAssignee={mayWorkAsAssignee}
+            compact={compact}
             onSelect={selectTask}
             onSelectGroup={selectGroup}
             onOpen={(task) => { setTaskConflict(false); setSelectedTask(task); }}

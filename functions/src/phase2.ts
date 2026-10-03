@@ -70,6 +70,17 @@ export function requireText(value: unknown, label: string, maxLength = 4000): st
   return trimmed;
 }
 
+/**
+ * `requireText` for a field that may be blank, such as a task description: an
+ * empty or all-whitespace string is stored as ''. Without it a record created
+ * with no description could never be saved again, since an edit form sends the
+ * field back as ''.
+ */
+export function optionalText(value: unknown, label: string, maxLength = 4000): string {
+  if (typeof value === 'string' && !value.trim()) return '';
+  return requireText(value, label, maxLength);
+}
+
 export function requireEmail(value: unknown): string {
   if (typeof value !== 'string') throw new HttpsError('invalid-argument', 'A valid email address is required.');
   const email = value.trim().toLowerCase();
@@ -170,6 +181,15 @@ export function requireMembershipStatus(value: unknown): ManagedMembershipStatus
     throw new HttpsError('invalid-argument', 'Membership status is invalid.');
   }
   return value;
+}
+
+/**
+ * A stored Firestore `Timestamp` as an ISO string, or null for anything else.
+ * A callable must not return a raw Timestamp: the browser receives it as
+ * `{_seconds, _nanoseconds}`, which `toDate()` cannot read.
+ */
+export function timestampToIso(value: unknown): string | null {
+  return value instanceof Timestamp ? value.toDate().toISOString() : null;
 }
 
 export function requireTeamId(request: CallableRequest<unknown>): string {

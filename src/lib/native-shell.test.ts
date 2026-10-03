@@ -13,7 +13,7 @@ vi.mock('@capacitor/status-bar', () => ({
 }));
 vi.mock('@capacitor/splash-screen', () => ({ SplashScreen: { hide: mocks.hide } }));
 
-import { hideNativeSplash, isNativeShell, syncNativeStatusBar } from './native-shell';
+import { hideNativeSplash, isNativeShell, markNativeShell, syncNativeStatusBar } from './native-shell';
 
 describe('native shell', () => {
   beforeEach(() => {
@@ -52,5 +52,15 @@ describe('native shell', () => {
     mocks.setStyle.mockRejectedValue(new Error('gone'));
     await expect(hideNativeSplash()).resolves.toBeUndefined();
     await expect(syncNativeStatusBar('light')).resolves.toBeUndefined();
+  });
+
+  it('tags the document root in the shell only', () => {
+    const shell = document.createElement('html');
+    markNativeShell(shell);
+    expect(shell.classList.contains('native-shell')).toBe(true);
+    mocks.isNativePlatform.mockReturnValue(false);
+    const web = document.createElement('html');
+    markNativeShell(web);
+    expect(web.classList.contains('native-shell')).toBe(false);
   });
 });

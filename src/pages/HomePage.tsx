@@ -13,13 +13,9 @@ import { markNotificationRead } from '@/lib/phase3-service';
 import { safeInternalRoute } from '@/lib/notification-route';
 import { formatDateLabel, formatDueDate, toDate } from '@/lib/dates';
 import { dueTone } from '@/lib/board-view';
-import { teamNumberSuffix } from '@/lib/domain';
+import { roleLabel, teamNumberSuffix } from '@/lib/domain';
 import { initialsOf, listTeamMembers, memberMap, nameOf, type TeamMember } from '@/lib/directory';
 import '@/styles/dashboard.css';
-
-function roleLabel(role: string | undefined) {
-  return role === 'teamLeader' ? 'Team leader' : role ? role[0].toUpperCase() + role.slice(1) : 'Member';
-}
 
 function roleEmptyCopy(role: string | undefined) {
   if (role === 'coach' || role === 'teamLeader') return { title: 'Make this team useful', message: 'Create the first task or milestone so everyone has a clear next step.', action: '/coordination', label: 'Open coordination' };

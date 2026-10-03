@@ -26,7 +26,8 @@ import {
   requireAccountType,
   requireOperationReceipt,
   teamCreationRefusal,
-  teamOperationRef
+  teamOperationRef,
+  timestampToIso
 } from './phase2.js';
 import {
   completeFileUpload as completeFileUploadCommand,
@@ -891,7 +892,8 @@ export const listTeamMembers = onCall(async (request) => {
       // rather than sent as false.
       ...(isAdmin ? {
         provisionedByThisTeam: profile.provisionedByTeamId === teamId,
-        mustSetPassword: profile.mustSetPassword === true
+        mustSetPassword: profile.mustSetPassword === true,
+        joinedAt: timestampToIso(membership.createdAt)
       } : {})
     };
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));

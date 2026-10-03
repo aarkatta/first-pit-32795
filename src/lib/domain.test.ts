@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   canBeAssignedTasks,
   teamNumberSuffix,
+  nameInitials,
+  roleLabel,
   canEditKnowledge,
   canEditTasks,
   hasTeamRole,
@@ -95,5 +97,21 @@ describe('canBeAssignedTasks', () => {
     for (const role of ['coach', 'teamLeader', 'mentor', 'student']) expect(canBeAssignedTasks(role)).toBe(true);
     expect(canBeAssignedTasks('parent')).toBe(false);
     expect(canBeAssignedTasks(null)).toBe(false);
+  });
+});
+
+describe('display helpers', () => {
+  it('labels roles for people, with a readable fallback', () => {
+    expect(roleLabel('coach')).toBe('Coach');
+    expect(roleLabel('teamLeader')).toBe('Team leader');
+    expect(roleLabel(undefined)).toBe('Member');
+    expect(roleLabel('')).toBe('Member');
+  });
+
+  it('takes up to two initials from a name', () => {
+    expect(nameInitials('Tech Titans NC')).toBe('TT');
+    expect(nameInitials('  robotics  ')).toBe('R');
+    expect(nameInitials('', 'FP')).toBe('FP');
+    expect(nameInitials(null, 'T')).toBe('T');
   });
 });

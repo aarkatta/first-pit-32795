@@ -458,6 +458,18 @@ export function teamNumberSuffix(teamNumber: string | null | undefined): string 
   return teamNumber ? ` · Team #${teamNumber}` : '';
 }
 
+/** A team role as a label: "Coach", "Student", "Team leader"; "Member" when unknown. */
+export function roleLabel(role: string | null | undefined): string {
+  if (role === 'teamLeader') return 'Team leader';
+  return role ? `${role[0].toUpperCase()}${role.slice(1)}` : 'Member';
+}
+
+/** Up to two initials from a display name ("Tech Titans" → "TT"), or the fallback. */
+export function nameInitials(name: string | null | undefined, fallback = ''): string {
+  const letters = (name ?? '').trim().split(/\s+/).map((word) => word[0] ?? '').join('').slice(0, 2).toUpperCase();
+  return letters || fallback;
+}
+
 export type AuthorizationClaims = { platformAdmin?: boolean };
 
 export type Permission =

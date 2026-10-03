@@ -3,15 +3,11 @@ import { Link } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAccountType } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
-import { isCoachOrLeader, mayOfferTeamCreation, teamNumberSuffix } from '@/lib/domain';
+import { isCoachOrLeader, mayOfferTeamCreation, roleLabel, teamNumberSuffix } from '@/lib/domain';
 import { leaveTeam } from '@/lib/phase2-service';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
 import { useOnlineStatus } from '@/lib/use-online-status';
-
-function roleLabel(role: string) {
-  return role === 'teamLeader' ? 'Team leader' : `${role[0]?.toUpperCase() ?? ''}${role.slice(1)}`;
-}
 
 /**
  * The teams you belong to, on your profile.

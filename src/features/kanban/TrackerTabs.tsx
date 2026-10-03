@@ -10,12 +10,12 @@ import type { ReactNode } from 'react';
  */
 export type TrackerTab = 'board' | 'calendar' | 'milestones' | 'import' | 'setup';
 
-const TABS: Array<{ id: TrackerTab; to: string; label: string; icon: string; coachOnly?: boolean }> = [
-  { id: 'board', to: '/coordination', label: 'Board', icon: '▦' },
-  { id: 'calendar', to: '/calendar', label: 'Calendar', icon: '▤' },
-  { id: 'milestones', to: '/milestones', label: 'Milestones', icon: '◎' },
-  { id: 'import', to: '/import', label: 'Import tasks', icon: '⭳', coachOnly: true },
-  { id: 'setup', to: '/board-setup', label: 'Board setup', icon: '⚙', coachOnly: true }
+const TABS: Array<{ id: TrackerTab; to: string; label: string; coachOnly?: boolean }> = [
+  { id: 'board', to: '/coordination', label: 'Board' },
+  { id: 'calendar', to: '/calendar', label: 'Calendar' },
+  { id: 'milestones', to: '/milestones', label: 'Milestones' },
+  { id: 'import', to: '/import', label: 'Import tasks', coachOnly: true },
+  { id: 'setup', to: '/board-setup', label: 'Board setup', coachOnly: true }
 ];
 
 export function TrackerTabs({ canManage, children }: { canManage: boolean; children: ReactNode }) {
@@ -25,7 +25,7 @@ export function TrackerTabs({ canManage, children }: { canManage: boolean; child
       <nav className="mb-views tracker-tabs" aria-label="Tracker views">
         {visible.map((tab) => (
           <NavLink key={tab.id} to={tab.to} className={({ isActive }) => (isActive ? 'is-active' : '')} end>
-            <span aria-hidden="true">{tab.icon}</span> {tab.label}
+            {tab.label}
           </NavLink>
         ))}
       </nav>

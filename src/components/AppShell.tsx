@@ -6,8 +6,9 @@ import { NotificationBell } from './NotificationBell';
 import { useAuth } from '@/lib/auth-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
-import { isCoachOrLeader } from '@/lib/domain';
+import { isCoachOrLeader, nameInitials } from '@/lib/domain';
 import { getFirebaseServices } from '@/lib/firebase';
+import { isNativeShell } from '@/lib/native-shell';
 
 type AppShellProps = {
   children: ReactNode;
@@ -17,14 +18,16 @@ type AppShellProps = {
 };
 
 // Sidebar order. View profile and Sign out follow these in the sidebar; the
-// four `mobile` entries fill the phone's bottom bar and the rest go in its ☰
-// menu. Team files (`/files`) has no entry: it is reached from task cards.
+// four `mobile` entries fill the phone's bottom bar and the rest go in its Menu
+// menu. The iOS app uses `nativeMobile` instead: "Knowledge base" wraps to two
+// lines in its larger tab labels, so Scorer takes that slot. Team files
+// (`/files`) has no entry: it is reached from task cards.
 const navItems = [
-  { to: '/', label: 'Home', icon: '⌂', mobile: true },
-  { to: '/coordination', label: 'Tracker', icon: '▦', mobile: true },
-  { to: '/scorer', label: 'Scorer', icon: '◫' },
-  { to: '/knowledge', label: 'Knowledge base', icon: '?', mobile: true },
-  { to: '/team', label: 'Manage team', icon: '▤', mobile: true }
+  { to: '/', label: 'Home', mobile: true, nativeMobile: true },
+  { to: '/coordination', label: 'Tracker', mobile: true, nativeMobile: true },
+  { to: '/scorer', label: 'Scorer', mobile: false, nativeMobile: true },
+  { to: '/knowledge', label: 'Knowledge base', mobile: true, nativeMobile: false },
+  { to: '/team', label: 'Manage team', mobile: true, nativeMobile: true }
 ];
 
 /**
@@ -32,11 +35,7 @@ const navItems = [
  * Hiding it is presentation only — `AdministrationPage` refuses anyone else on
  * its own and every callable behind it re-checks the role.
  */
-const adminNavItem = { to: '/admin', label: 'Administration', icon: '⚙', mobile: false };
-
-function getBrandMark(appName: string) {
-  return appName.trim().split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase();
-}
+const adminNavItem = { to: '/admin', label: 'Administration', mobile: false, nativeMobile: false };
 
 /**
  * Routes that carry a page title but no navigation entry. Without them every
@@ -87,14 +86,16 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   const [signOutState, setSignOutState] = useState<RequestState | null>(null);
   const [profile, setProfile] = useState<{ displayName: string; photoURL: string | null } | null>(null);
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const activeTeam = teams.find((team) => team.teamId === activeTeamId);
   const activeTeamName = activeTeam?.team?.name ?? 'Unnamed team';
   const isAdmin = isCoachOrLeader(activeTeam);
   const visibleNavItems = isAdmin
     ? navItems.flatMap((item) => (item.to === '/team' ? [item, adminNavItem] : [item]))
     : navItems;
-  const mobileItems = visibleNavItems.filter((item) => item.mobile);
-  const secondaryItems = visibleNavItems.filter((item) => !item.mobile);
+  const inBottomBar = (item: (typeof navItems)[number]) => (isNativeShell() ? item.nativeMobile : item.mobile);
+  const mobileItems = visibleNavItems.filter(inBottomBar);
+  const secondaryItems = visibleNavItems.filter((item) => !inBottomBar(item));
   const currentPageLabel = pageLabel(location.pathname);
 
   useEffect(() => {
@@ -114,6 +115,20 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
       } : null);
     }, () => setProfile(null));
   }, [authStatus, user]);
+
+  // Close the account menu on an outside click or Escape, like a real popover.
+  useEffect(() => {
+    function onPointer(event: MouseEvent) {
+      const menu = profileMenuRef.current;
+      if (menu?.open && !menu.contains(event.target as Node)) menu.removeAttribute('open');
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') profileMenuRef.current?.removeAttribute('open');
+    }
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
+  }, []);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -136,32 +151,33 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar" aria-label="First Pit workspace navigation">
         <Link className="brand brand-dark" to="/">
-          <span className="brand-mark" aria-hidden="true">{getBrandMark(appName)}</span>
-          <span>{appName}</span>
+          <span className="brand-mark" aria-hidden="true">{nameInitials(appName)}</span>
+          <span className="brand-text">
+            <strong>{appName}</strong>
+            <small>by <span className="brand-accent">Tech Titans NC</span></small>
+          </span>
         </Link>
 
         <nav className="sidebar-nav" aria-label="Primary">
           {visibleNavItems.map((item) => (
             <NavLink key={item.to} className="sidebar-nav__link" to={item.to} end={item.to === '/'}>
-              <span aria-hidden="true">{item.icon}</span>{item.label}
+              {item.label}
             </NavLink>
           ))}
-          {authStatus === 'authenticated' ? <>
-            <NavLink className="sidebar-nav__link" to="/profile">
-              <span aria-hidden="true">◉</span>View profile
-            </NavLink>
-            <button className="sidebar-nav__link sidebar-nav__button" type="button" disabled={signingOut} onClick={() => void handleSignOut()}>
-              <span aria-hidden="true">⏻</span>{signingOut ? 'Signing out…' : 'Sign out'}
-            </button>
-          </> : null}
         </nav>
 
         {authStatus === 'authenticated' ? (
           <div className="sidebar-footer">
-            <div className="profile-button profile-button--static">
-              <span className="profile-avatar" aria-hidden="true">{profile?.photoURL ? <img src={profile.photoURL} alt="" /> : (profile?.displayName || user?.displayName || user?.email || 'FP').slice(0, 2).toUpperCase()}</span>
-              <span><strong>{profile?.displayName || user?.displayName || user?.email || 'Signed in'}</strong><small>{user?.email ?? 'Signed in'}</small></span>
-            </div>
+            <details className="profile-menu" ref={profileMenuRef}>
+              <summary className="profile-button" aria-label="Account menu">
+                <span className="profile-avatar" aria-hidden="true">{profile?.photoURL ? <img src={profile.photoURL} alt="" /> : (profile?.displayName || user?.displayName || user?.email || 'FP').slice(0, 2).toUpperCase()}</span>
+                <span><strong>{profile?.displayName || user?.displayName || user?.email || 'Signed in'}</strong><small>{user?.email ?? 'Signed in'}</small></span>
+              </summary>
+              <div className="profile-menu__panel">
+                <Link className="profile-menu__item" to="/profile" onClick={() => profileMenuRef.current?.removeAttribute('open')}>View profile</Link>
+                <button className="profile-menu__item profile-menu__button" type="button" disabled={signingOut} onClick={() => void handleSignOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button>
+              </div>
+            </details>
           </div>
         ) : (
           <div className="sidebar-footer"><Link className="button" to="/auth">Sign in</Link></div>
@@ -171,8 +187,11 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
       <section className="main-panel">
         <header className="topbar">
           <div className="mobile-brand">
-            <span className="brand-mark" aria-hidden="true">{getBrandMark(appName)}</span>
-            <strong>FIRST PIT</strong>
+            <span className="brand-mark" aria-hidden="true">{nameInitials(appName)}</span>
+            <span className="brand-text">
+              <strong>{appName}</strong>
+              <small>by <span className="brand-accent">Tech Titans NC</span></small>
+            </span>
           </div>
           <div className="topbar-title">
             <span className="eyebrow">{authStatus === 'authenticated' ? 'TEAM WORKSPACE' : appTagline.toUpperCase()}</span>
@@ -192,11 +211,11 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
             <span className={`connection-status connection-status--${online ? 'online' : 'offline'}`}><i aria-hidden="true" />{online ? 'Online' : 'Offline'}</span>
             {authStatus === 'authenticated' && user && activeTeamId ? <NotificationBell teamId={activeTeamId} userId={user.uid} online={online} /> : null}
             {authStatus === 'authenticated' ? <details className="mobile-secondary-nav" ref={mobileMenuRef}>
-              <summary className="top-action" aria-label="Open workspace menu"><span aria-hidden="true">☰</span></summary>
+              <summary className="top-action" aria-label="Open workspace menu">Menu</summary>
               <div className="mobile-secondary-nav__panel">
                 <nav className="mobile-secondary-nav__links" aria-label="Mobile secondary navigation">
-                  {secondaryItems.map((item) => <NavLink key={item.to} to={item.to} onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">{item.icon}</span>{item.label}</NavLink>)}
-                  <NavLink to="/profile" onClick={() => mobileMenuRef.current?.removeAttribute('open')}><span aria-hidden="true">◉</span>View profile</NavLink>
+                  {secondaryItems.map((item) => <NavLink key={item.to} to={item.to} onClick={() => mobileMenuRef.current?.removeAttribute('open')}>{item.label}</NavLink>)}
+                  <NavLink to="/profile" onClick={() => mobileMenuRef.current?.removeAttribute('open')}>View profile</NavLink>
                 </nav>
                 <button className="text-button" type="button" aria-label="Sign out from mobile menu" disabled={signingOut} onClick={() => void handleSignOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button>
               </div>
@@ -211,7 +230,7 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
         </main>
 
         <nav className="bottom-nav" aria-label="Mobile navigation">
-          {mobileItems.map((item) => <NavLink key={item.to} className="bottom-nav__link" to={item.to} end={item.to === '/'}><span aria-hidden="true">{item.icon}</span><small>{item.label}</small></NavLink>)}
+          {mobileItems.map((item) => <NavLink key={item.to} className="bottom-nav__link" to={item.to} end={item.to === '/'}><small>{item.label}</small></NavLink>)}
         </nav>
 
         <footer className="footer"><span>Private team workspace</span><span>Web + Capacitor shell</span></footer>

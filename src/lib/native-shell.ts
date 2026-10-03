@@ -19,6 +19,15 @@ export function isNativeShell(): boolean {
 }
 
 /**
+ * Tag the document root with `native-shell` inside the iOS shell, so CSS can
+ * tune the app for iOS alone (larger bottom-nav labels) without touching the
+ * web. A no-op in a browser.
+ */
+export function markNativeShell(root: HTMLElement = document.documentElement): void {
+  if (isNativeShell()) root.classList.add('native-shell');
+}
+
+/**
  * Match the iOS status bar text to the app theme. Capacitor's `Style.Dark` means
  * light text for a dark background. A no-op on the web, and a plugin failure is
  * cosmetic, so it is swallowed rather than surfaced.

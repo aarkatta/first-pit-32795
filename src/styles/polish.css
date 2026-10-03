@@ -102,27 +102,6 @@
   transform: scale(0.98);
 }
 
-.sidebar-nav__button {
-  width: 100%;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-
-.sidebar-nav__button:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
-
-.profile-button--static,
-.profile-button--static:hover {
-  background: transparent;
-  box-shadow: none;
-}
 
 .topbar {
   height: 72px;
@@ -790,5 +769,120 @@ tbody tr:last-child td {
   .member-grid article:hover,
   .score-card:hover {
     transform: none;
+  }
+}
+
+/* ---------- iOS app top bar (`markNativeShell`) ----------
+   The phone top bar fits the logo, team switcher, online dot, bell and Menu on
+   one row, which wraps FIRST PIT onto two lines. In the iOS app it becomes two
+   rows: the logo lockup with the bell and a hamburger Menu, then the team
+   switcher full width beneath. The online dot only appears when offline. The
+   web keeps its single-row bar. */
+@media (max-width: 960px) {
+  .native-shell .topbar {
+    flex-wrap: wrap;
+    row-gap: 12px;
+    column-gap: 10px;
+    padding: 12px 16px 14px;
+  }
+
+  .native-shell .top-actions {
+    display: contents;
+  }
+
+  .native-shell .mobile-brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 12px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .native-shell .mobile-brand .brand-mark {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 11px;
+    font-size: 15px;
+    transform: none;
+  }
+
+  .native-shell .mobile-brand .brand-text {
+    min-width: 0;
+    gap: 3px;
+  }
+
+  .native-shell .mobile-brand .brand-text strong {
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Acid green has no contrast on the light bar; the tagline goes olive. */
+  .native-shell .mobile-brand .brand-text small,
+  .native-shell .mobile-brand .brand-accent {
+    color: #4a6a12;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .native-shell .connection-status--online {
+    display: none;
+  }
+
+  .native-shell .topbar-team {
+    order: 1;
+    flex: 1 0 100%;
+    max-width: none;
+    min-height: 48px;
+    padding: 0 14px;
+  }
+
+  .native-shell .topbar-team select,
+  .native-shell .topbar-team__name {
+    flex: 1;
+    font-size: 15px;
+  }
+
+  .native-shell .topbar-team select {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 26px 0 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right center / 18px;
+  }
+
+  .native-shell .top-action {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* "Menu" becomes a hamburger icon; the summary keeps its aria-label. */
+  .native-shell .mobile-secondary-nav > summary {
+    width: 44px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .native-shell .mobile-secondary-nav > summary::before {
+    content: '';
+    width: 18px;
+    height: 14px;
+    background:
+      linear-gradient(currentColor, currentColor) top / 100% 2px no-repeat,
+      linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom / 100% 2px no-repeat;
+    border-radius: 1px;
+  }
+
+  .native-shell .mobile-secondary-nav__panel,
+  .native-shell .notification-bell__panel {
+    top: calc(68px + env(safe-area-inset-top, 0px));
   }
 }

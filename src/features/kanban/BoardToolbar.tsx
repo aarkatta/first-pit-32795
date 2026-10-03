@@ -27,6 +27,8 @@ type BoardToolbarProps = {
   onGroupByChange: (groupBy: BoardGroupBy) => void;
   hiddenFields: BoardFieldId[];
   onHiddenFieldsChange: (fields: BoardFieldId[]) => void;
+  /** False in the iOS app, whose board always shows the task name and assignee only. */
+  showFieldPicker?: boolean;
   people: string[];
   /** Resolved roster so the person filter lists names instead of Firebase UIDs. */
   directory?: Map<string, TeamMember>;
@@ -82,6 +84,7 @@ export function BoardToolbar({
   onGroupByChange,
   hiddenFields,
   onHiddenFieldsChange,
+  showFieldPicker = true,
   people,
   directory = EMPTY_DIRECTORY,
   labels,
@@ -112,23 +115,22 @@ export function BoardToolbar({
         {canManage ? (
           <>
             <button className="mb-import-item" type="button" disabled={disabled} onClick={onImport}>
-              <span aria-hidden="true">⭳</span> Import from Excel
+              Import from Excel
             </button>
             <button className="mb-import-item" type="button" onClick={onOpenSetup}>
-              <span aria-hidden="true">⚙</span> Board setup
+              Board setup
             </button>
           </>
         ) : null}
 
         <label className="mb-search">
-          <span aria-hidden="true">⌕</span>
           <span className="visually-hidden">Search items</span>
           <input type="search" value={filters.query} placeholder="Search" onChange={(event) => onFiltersChange({ ...filters, query: event.target.value })} />
         </label>
 
         <details className="mb-menu">
           <summary className={filters.person ? 'is-on' : ''}>
-            <span aria-hidden="true">◍</span> {personLabel}
+            {personLabel}
           </summary>
           <div className="mb-menu-panel">
             <p className="mb-menu-title">Filter by person</p>
@@ -146,7 +148,7 @@ export function BoardToolbar({
 
         <details className="mb-menu">
           <summary className={filterCount ? 'is-on' : ''}>
-            <span aria-hidden="true">▽</span> Filter{filterCount ? ` / ${filterCount}` : ''}
+            Filter{filterCount ? ` / ${filterCount}` : ''}
           </summary>
           <div className="mb-menu-panel">
             <label className="mb-menu-field">Priority
@@ -183,7 +185,7 @@ export function BoardToolbar({
 
         <details className="mb-menu">
           <summary className={sort.key !== 'manual' ? 'is-on' : ''}>
-            <span aria-hidden="true">↕</span> Sort
+            Sort
           </summary>
           <div className="mb-menu-panel">
             <label className="mb-menu-field">Sort by
@@ -200,9 +202,10 @@ export function BoardToolbar({
           </div>
         </details>
 
+        {showFieldPicker ? (
         <details className="mb-menu">
           <summary className={hiddenFields.length ? 'is-on' : ''}>
-            <span aria-hidden="true">◎</span> Hide{hiddenFields.length ? ` / ${hiddenFields.length}` : ''}
+            Hide{hiddenFields.length ? ` / ${hiddenFields.length}` : ''}
           </summary>
           <div className="mb-menu-panel">
             <p className="mb-menu-title">Columns</p>
@@ -218,10 +221,11 @@ export function BoardToolbar({
             ))}
           </div>
         </details>
+        ) : null}
 
         <details className="mb-menu">
           <summary className={groupBy !== 'column' ? 'is-on' : ''}>
-            <span aria-hidden="true">▤</span> Group by
+            Group by
           </summary>
           <div className="mb-menu-panel">
             {BOARD_GROUP_OPTIONS.map((option) => (

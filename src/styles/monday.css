@@ -524,6 +524,21 @@
   padding-left: 14px;
 }
 
+/* iOS app: the task name and its assignee, fitted to the phone with no sideways scroll. */
+.monday .mb-table--compact {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.monday .mb-table--compact .mb-th--item,
+.monday .mb-table--compact .mb-td--item {
+  min-width: 0;
+}
+
+.monday .mb-table--compact .mb-th:not(.mb-th--item) {
+  width: 64px;
+}
+
 /* ---------- Rows ---------- */
 
 .monday .mb-row {

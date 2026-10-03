@@ -191,14 +191,18 @@ policy, report, moderation, or audit documents directly.
 
 ### Role matrix
 
-| Role | Team read | Request membership | Invite/approve/manage | Assign roles/policy | Moderate/audit |
-| --- | --- | --- | --- | --- | --- |
-| Student | own active team | yes, when policy allows | no | no | report only |
-| Parent | own active team | no default | no | no | report only |
-| Mentor | own active team | no default | no | no | report only |
-| Coach | team roster | no default | yes | yes | yes |
-| Team Leader | team roster | no default | yes | yes | yes |
-| Platform Admin | all authorized records | administrative override | yes | yes | yes |
+| Role | Team read | Request membership | Add/approve/manage members | Assign roles/policy | Moderate/audit | Tracker |
+| --- | --- | --- | --- | --- | --- | --- |
+| Student | own active team | yes, when policy allows | no | no | report only | edit and move any task; assignable |
+| Parent | own active team | no default | no | no | report only | view only; **never assignable** |
+| Mentor | own active team | no default | no | no | report only | view; progress work assigned to them |
+| Coach | team roster | no default | yes | yes | yes | full, plus board setup and import |
+| Team Leader | team roster | no default | yes | yes | yes | same as coach |
+| Platform Admin | all authorized records | administrative override | yes | yes | yes | full |
+
+Team Leader is a legacy title with exactly a coach's permissions; nothing in
+the UI assigns it any more (see *Manage team*). A team must always keep at
+least one active coach (`assertNotLastCoach`).
 
 Platform Admin is a Firebase Auth `platformAdmin == true` custom claim. Claim
 issuance and revocation remain an operational responsibility; clients do not
@@ -242,8 +246,8 @@ through `patchTeam` on the team context rather than waiting for a re-read.
 
 ### Team settings panel
 
-Administration shows two team settings, each as an On/Off switch with its
-current state (2026-09-19): **Team files** (`fileSharing`: `teamOnly` / `disabled`
+Administration's **Team settings** tab shows two team settings, each as an
+On/Off switch with its current state (2026-09-19): **Team files** (`fileSharing`: `teamOnly` / `disabled`
 — attachments on task cards are refused while off) and **Join requests**
 (`membershipApproval`: `coachApproval` / `inviteOnly`). The panel used to be
 "Private by design" with toggles for `directMessaging` and
@@ -252,7 +256,7 @@ are no longer shown, though `updateTeamPolicy` still accepts them and stored
 values are untouched. Discoverability is always private and has no setting.
 Below the two switches, **Team messaging**, **Message history limit** and **Team
 discovery** appear greyed out as "Coming soon" placeholders (`PLANNED_SETTINGS`
-in `TeamAdminPage.tsx`): always Off, disabled, and wired to nothing. Making any
+in `AdministrationPage.tsx`): always Off, disabled, and wired to nothing. Making any
 of them real is a product and youth-safety decision (public discovery is an MVP
 non-goal in `AGENTS.md`).
 
@@ -300,7 +304,7 @@ step, then `completeFileUpload` checks its bytes. The card shows progress and
 a plain error for a wrong type or a file over 10 MB (`attachmentProblem` in
 `src/lib/task-attachments.ts`, mirroring `ALLOWED_FILE_TYPES`). **Attach a team
 file** still links an existing one. With **Team files** off the card says so
-and points to Manage team → Team settings. A card holds at most 10 files
+and points to Administration → Team settings. A card holds at most 10 files
 (`MAX_TASK_ATTACHMENTS`). Uploading stays coach/team-leader only because
 `createFileMetadata` requires a team admin; students see the files but get no
 upload control. No callable, rule or index changed.
@@ -311,13 +315,13 @@ First Pit sends no email for invitations — there is no mail provider.
 `createInvitation` stores a pending invitation (normalized email, role, team
 name, 7-day expiry, audit record) and returns its id; the coach sends the
 invite link (`/join?invite=<id>`) themselves. Since 2026-09-21 invitations are
-created only from **Manage team → ＋ Add a member**, when the address already
+created only from **Manage team → Add a member**, when the address already
 has an account; the dialog copies the link on creation, and Administration's
 Invitations tab keeps **Copy link** on every pending invitation. The invitee must sign in as, and verify, the invited
 address before `acceptInvitation` succeeds.
 
 **Email invite (2026-09-18).** To save the coach retyping the message, the
-Administration section offers **✉ Email invite with Gmail** under the
+Administration section offers **Email invite with Gmail** under the
 confirmation of a new invitation, and **Email invite** on every pending one.
 Each opens Gmail's compose screen (`https://mail.google.com/mail/?view=cm&…`) in
 a new tab, in whichever Gmail account the browser is signed in to, with the
@@ -349,7 +353,7 @@ admits the invited, verified address only. Two failure modes are handled:
 ### Coach-provisioned member accounts (2026-09-21)
 
 The second way onto a team, beside invitations. A coach opens **Manage team →
-＋ Add a member**, gives a name, an email address (typed twice) and a role;
+Add a member**, gives a name, an email address (typed twice) and a role;
 `provisionTeamMember` creates the Firebase Auth account with a generated
 single-use password and returns it once. The coach passes the credentials on
 from their own mailbox, and `PasswordSetupGate` makes the member replace the
@@ -410,6 +414,18 @@ provisioning makes First Pit the party creating identities for minors on a third
 party's say-so. Recording the coach's confirmation that the family agreed — a
 checkbox written into the audit event, or making the parent's address the
 provisioning field for students — is the cheap mitigation and is not built.
+
+**Verification record — 21 September 2026** (`feature/manage-team`, PR #14).
+`npm run verify:static` passed: lint, three typechecks, coverage (89.9%
+statements), functions build, web build, release check. `npm run test:firebase`
+passed in full after the provisioning work, including the new
+`test:provisioning-emulator` — the generated password signs in, stops working
+once the member chooses their own, is absent from the operation receipt, and a
+reset reaches only accounts the team provisioned. The later rules changes were
+verified with `test:rules`, `test:phase3-emulator` and `test:phase7-emulator`
+run individually (on alternate ports, beside a running local emulator session):
+parents refused on every assignment path, `isMinor` refused on client writes
+and scrubbed on save. Not yet exercised in a browser or on the iOS build.
 
 ### Safe policy defaults
 
@@ -733,6 +749,15 @@ free text: same trimming and length bounds, no "/" rule, and control characters
 still rejected. Titles, descriptions, comments, category, project, goal and
 template names use it; every identifier still uses `requireString`.
 
+`requireText` refuses an empty string, which is wrong for a field that may be
+blank. The task dialog sends every field on save, so a task with no description
+— all 48 cards the standard plan seeds — failed every dialog save, assigning a
+member included, with "Task description is invalid." (a 400; fixed 2026-10-01).
+`optionalText` (`phase2.ts`) stores a blank value as `''` and otherwise
+validates like `requireText`; the task description uses it in `updateTask`,
+`createTask` and `createKanbanTask`. Use it for any free-text field an edit form
+can send back empty.
+
 ### Planned dates
 
 A task carries `startAt`, `endAt` and `dueAt`: the planned window and the
@@ -937,7 +962,9 @@ Phase 5 stores Questions, How-to Videos, and Polls in top-level Firestore collec
 
 ### The Knowledge base page (as of 2026-09-18)
 
-`/knowledge` is titled **Knowledge base** and has three tabs:
+`/knowledge` is titled **Knowledge base** and has three tabs. A plain visit
+opens **Resources**; `?tab=`, `?question=` and `?poll=` open the tab they name or
+point into (`src/lib/knowledge-tabs.ts`).
 
 - **Questions** — the team's recent questions (bounded, "Load more" cursor),
   an "Ask your team" form, and per question: Answers, Mark helpful, Save and
@@ -997,7 +1024,7 @@ project management. Notifications are reached from the top-bar bell
 (capped at 99+, reading at most 100 documents) and, only while open, the eight
 most recent; its "See all" link opens the full `/notifications` page. Each loads only its own records, so a team whose policy
 or rules deny one still gets the others, and the phone's four-slot bar carries
-Home, Tracker, Knowledge base and Manage team; everything else is in the ☰ menu.
+Home, Tracker, Knowledge base and Manage team; everything else is in the Menu.
 Search results for a milestone and a file now deep-link to `/milestones?goal=`
 and `/files?file=`; links stored before the split still resolve to the tracker.
 
@@ -1083,34 +1110,47 @@ web client and stays deployed only so tabs on an older bundle can still save.
 
 ## App shell and navigation
 
-As of 2026-09-18 (`src/components/AppShell.tsx`):
+As of 2026-10-01 (`src/components/AppShell.tsx`):
 
-- **Sidebar:** Home, Tracker, Scorer, Knowledge base, Manage team, View
-  profile, Sign out, in that order; the footer shows who is signed in. Team
-  files (`/files`) has no entry and is reached from task cards. The phone's
-  bottom bar carries Home, Tracker, Knowledge base and Manage team; Scorer,
-  View profile and Sign out sit in the ☰ menu.
+- **Logo:** the "FP" mark (acid rounded square) beside **FIRST PIT**, with a
+  smaller "by **Tech Titans NC**" line under it (the team name in acid). The
+  app name itself stays "First Pit" (`VITE_APP_NAME`), so page titles read
+  "… | First Pit"; the "by" line is part of the lockup markup only.
+- **Sidebar:** Home, Tracker, Scorer, Knowledge base, Manage team, and
+  **Administration** (coaches and team leaders only), in that order. Team files
+  (`/files`) has no entry and is reached from task cards.
+- **Account menu:** the footer card (avatar, name, email) is a `<details>`
+  disclosure that opens **View profile** and **Sign out** above itself; it
+  closes on an outside click, Escape, or choosing an item. Those two were
+  sidebar entries until 2026-10-01.
+- **Phone:** the bottom bar carries Home, Tracker, Knowledge base and Manage
+  team; Scorer, Administration, View profile and Sign out sit in the top-bar
+  Menu, since the sidebar (and its account menu) is hidden on a phone. The
+  iOS app swaps two of them (`nativeMobile` in `AppShell.tsx`): its bar is
+  Home, Tracker, Scorer and Manage team, with Knowledge base in the Menu,
+  because its larger labels wrap "Knowledge base" onto two lines.
 - **Top bar:** the **active team** (badge and name), then online status and
   the notification **bell**. The team sits on every page so a coach with
   several teams always sees which one they are working in; with more than one
   team it is the team switcher (a dropdown), otherwise just the name. It
   replaced the switcher that sat at the top of the sidebar and the one in the
-  phone's ☰ menu (2026-09-19). The notification **bell**
+  phone's Menu (2026-09-19). The notification **bell**
   (`NotificationBell`) — a live unread count for the active team (99+ cap, at
   most 100 documents read), a dropdown of the eight most recent that is read
   only while open, and "See all" to `/notifications`. Notifications are no
   longer a sidebar entry.
-- **Manage team** (`/team`, `src/pages/ManageTeamPage.tsx`) replaced Team hub
-  and Team admin: one page with the team overview for every member, followed
-  for coaches and team leaders by the administration sections (invite links,
-  safety defaults, roster and roles, invitations, join approvals, moderation,
-  audit history). Hiding them is presentation only — `TeamAdminPage` refuses
-  non-coaches itself and every administrative callable re-checks the role.
-  Coaches do not get the overview's short roster preview; the full roster is
-  below it. `/hub`, `/admin` and `/team/admin` redirect to `/team`, so stored
-  links, emailed `next=` paths and notifications keep working. Sign-in and team
-  creation land on `/team`. See *Manage team* below.
-- **Removed pages:** Search (`/search` redirects to Home; the ⌕ top-bar icon is
+- **Manage team** (`/team`, `src/pages/ManageTeamPage.tsx`) is a picker of
+  every team the viewer belongs to, above the chosen team's people and Add a
+  member.
+  **Administration** (`/admin`, `src/pages/AdministrationPage.tsx`) holds
+  invitations, join requests, suspended members, team settings, safety and
+  audit, and refuses non-coaches itself; every administrative callable
+  re-checks the role. Leaving or joining teams is on the profile. Until
+  2026-09-21 all of this was one long Manage team page. `/hub` redirects to
+  `/team` and `/team/admin` to `/admin`, so stored links, emailed `next=` paths
+  and notifications keep working. Sign-in and team creation land on `/team`.
+  See *Manage team* and *Administration* below.
+- **Removed pages:** Search (`/search` redirects to Home; the top-bar search icon is
   gone), and the development-only State lab (`/states`) and Emulators
   (`/emulators`) pages, which now fall through to not-found.
 - **Layout width:** pages sit in a centred 1440px column, except the four
@@ -1119,26 +1159,44 @@ As of 2026-09-18 (`src/components/AppShell.tsx`):
 
 ## Manage team
 
-`/team` (`ManageTeamPage`), as of 2026-09-21, is the roster and nothing else.
-The administration that used to sit below it moved to `/admin`.
+`/team` (`ManageTeamPage`), redesigned 2026-10-01, picks a team and manages its
+people. Administration lives on `/admin`; the page title is the top bar's, so
+the page has no heading of its own.
 
-- **Banner** — "Team name · Team #number" (the number in accent colour, omitted
-  until set), the viewer's role, the active member count, and the created date.
-  Coaches and team leaders get **Edit team name & number**, which opens an
-  inline form (name 2–80 characters, number up to 8 digits, empty clears it)
-  saved through `updateTeamDetails`, and a link to **Administration**. Others see
-  the name and number only. The banner's ghost buttons keep a dark hover state;
-  the global `.button--ghost:hover` would otherwise whiten them and hide their
-  white label.
-- **Team members** — one table for everyone (`RosterTable`), **active members
-  only**: Manage team stays clean by rule (2026-09-21), so suspended, removed and
-  pending people are never listed here. A coach or team leader also gets the
-  role select, **Suspend**, and **Reset password** on rows the
-  team provisioned; a member sees names, roles and statuses only. A **Has not
-  signed in yet** badge marks anyone still owing a password change. Suspending
-  someone takes their row away and shows a notice with **Undo** and a link to
-  Administration → Suspended, where they are restored.
-- **＋ Add a member** (coaches and team leaders) — **the only way to add
+- **Team picker** — every team the viewer belongs to, as a card: badge,
+  name, "Team #number", and chips for the member count, the viewer's role and
+  how many have not signed in. The active team is outlined and marked
+  **Viewing**; choosing another card calls `setActiveTeamId`, so the top-bar
+  switcher and every other page follow. Each team's roster is read once
+  (`listTeamMembers`) and cached, so the card counts and the panel share one
+  read; a card whose read failed says **Members unavailable** and retries when
+  chosen. A dashed **Create a new team** card links to `/teams/new` for accounts
+  `mayOfferTeamCreation` allows.
+- **Team panel** — a dark header (`#12211a`, the sidebar colour) with the
+  team's badge, "Name #number", the viewer's role and created date, and for
+  coaches and team leaders **Edit team details** (the inline name and number
+  form, saved through `updateTeamDetails`) and **Add a member** (acid primary).
+  Below it, four tiles: Members, Coaches & leaders, Students, Not signed in
+  yet; then, for a sole coach, a warning to add a second coach.
+- **Team members** — a search box and role chips (All, Coaches, Team leaders,
+  Students, Mentors, Parents, each with a count) over one table for everyone
+  (`RosterTable`), **active members only**: Manage team stays clean by rule
+  (2026-09-21), so suspended, removed and pending people are never listed here.
+  Columns are Member, Role and Status. Under each name: **Team owner** for the
+  team's creator (`team.createdBy`), else **Added \<date\>** for an account the
+  team created (still on its starter password) or **Joined \<date\>**, from the
+  admin-only `joinedAt` that `listTeamMembers` returns. Status is **Active** or
+  **Not signed in** (`mustSetPassword`). There is no "last active" column:
+  nothing records activity. A coach or team leader also gets the role select
+  and a **⋯** button per row that opens **Reset password** (accounts the team
+  provisioned) and **Suspend** (anyone but yourself). That panel is portalled
+  to `<body>` with fixed positioning, so neither the table's horizontal scroll
+  nor the page-entrance transform clips it; opening it focuses the first action
+  and Escape returns focus to the button. A member sees names, roles and
+  statuses only. Suspending someone takes their row away and shows a notice with
+  **Undo** and a link to Administration → Suspended, where they are restored.
+  Below 760px the table restacks as one card per member.
+- **Add a member** (coaches and team leaders) — **the only way to add
   anyone**, decided 2026-09-21. `AddMemberDialog` calls `provisionTeamMember`:
   a new address gets an account and `CredentialsCard` shows the starter
   password; an address that already has an account is refused
@@ -1153,14 +1211,15 @@ team, so since 2026-09-21 they live on the profile rather than here: Profile →
 **Your teams** (`MembershipsPanel`) lists every membership with its role and its
 own **Leave…** (with confirmation, and a leadership reminder for coaches — the
 server's last-coach refusal is shown verbatim), plus **Accept an invitation** and
-**Create another team** (offered per `mayOfferTeamCreation`). Manage team keeps
-only its empty state for someone with no team at all.
+**Create another team** (offered per `mayOfferTeamCreation`). Creating a team is
+also offered on Manage team, as the picker's **Create a new team** card, and in
+its empty state for someone with no team at all.
 
 **A team always keeps a coach (2026-09-21).** The server has always refused a
 role change, suspension or departure that would leave no active coach
 (`assertNotLastCoach`, inside the transaction). Manage team now says so before
-the coach tries: on the sole coach's row the non-coach roles are disabled, with
-"the only coach — make another member a coach first". When other coaches exist,
+the coach tries: the panel warns that they are the only coach, and on their row
+the non-coach roles are disabled with "Locked: only coach". When other coaches exist,
 a coach changing their *own* role is asked to confirm, since it ends their coach
 access the moment it saves; changing another member's role applies at once.
 
@@ -1181,12 +1240,12 @@ callable behind it. One `loadAdminData` read feeds six tabs, and `?tab=<id>`
 opens a given one (Manage team's suspend notice links to `?tab=suspended`):
 
 - **Invitations** — a status list only, with no create form: invitations are
-  created from **＋ Add a member**. Pending invitations offer **Email invite**,
+  created from **Add a member**. Pending invitations offer **Email invite**,
   **Copy link** and **Revoke** (see *Invitations are links, not emails*).
 - **Join requests** — approve or reject, with the team ID to share.
 - **Suspended** — members who keep their account but have lost access to the
   team, each with **Restore** (back to active with the role they had). Removed
-  members are not listed; they come back through **＋ Add a member**, which
+  members are not listed; they come back through **Add a member**, which
   invites an existing account.
 - **Team settings** — Team files and Join requests, plus the greyed-out planned
   settings.
@@ -1597,9 +1656,23 @@ npm run ios:open                     # opens ios/App in Xcode
   `automatic` inset padded twice and showed the bare web view behind the home
   indicator. `release-check` asserts the setting.
 - **Native chrome** lives in `src/lib/native-shell.ts` (`isNativeShell`,
-  `syncNativeStatusBar`, `hideNativeSplash`); each is a no-op on the web. The
-  status bar follows the resolved theme from `PreferencesProvider`; the splash
-  hides after the first paint, capped at 10 s in `capacitor.config.ts`.
+  `markNativeShell`, `syncNativeStatusBar`, `hideNativeSplash`); each is a no-op
+  on the web. The status bar follows the resolved theme from
+  `PreferencesProvider`; the splash hides after the first paint, capped at 10 s
+  in `capacitor.config.ts`.
+- **iOS-only CSS.** `markNativeShell()` (called from `main.tsx`) adds
+  `native-shell` to `<html>` inside the shell, so styles can target the phone
+  app alone: `.native-shell .bottom-nav…` gives the bottom bar readable,
+  wrapping labels across its full width, and `.native-shell .topbar…` lays the
+  top bar out in two rows — logo, bell and a hamburger Menu, then the team
+  switcher full width — with the online dot shown only when offline.
+- **Compact Tracker board (iOS).** In the shell `KanbanBoard` shows each row as
+  the task name and its assignee only (`compact`, `visibleFields = ['person']`);
+  tapping the name opens the card with everything else. `BoardTable` drops the
+  select checkboxes, drag handle, subtask toggle and checklist/description
+  markers, `BoardToolbar` hides the column picker (`showFieldPicker`), and
+  `.mb-table--compact` (`monday.css`) fits the phone with no sideways scroll.
+  The web board is unchanged.
 - **Native Google sign-in** needs `ios/App/App/GoogleService-Info.plist` (the
   iOS app `com.firstpit.app`, registered in the production project). It is
   gitignored like other platform config and referenced by the Xcode target, so
