@@ -160,4 +160,24 @@ describe('CalendarPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
     expect(screen.getByRole('heading', { name: /March 2026/ })).toBeInTheDocument();
   });
+
+  it('counts only the viewer\u2019s undated cards once narrowed to them', async () => {
+    await setup([
+      task({ id: 'a', title: 'Mine, no date', assignedTo: 'student-1' }),
+      task({ id: 'b', title: 'Theirs, no date', assignedTo: 'student-2' }),
+      task({ id: 'c', title: 'Also theirs', assignedTo: 'student-2' })
+    ], []);
+    expect(screen.getByText(/3 tasks have no date/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Only my tasks' }));
+    expect(screen.getByText(/1 task has no date/)).toBeInTheDocument();
+  });
+
+  it('does not claim the view is empty while a neighbouring month\u2019s card shows', async () => {
+    // 1 April 2026 is a Wednesday, so April's grid opens with 29-31 March.
+    await setup([task({ id: 'a', title: 'Last day of March', dueAt: '2026-03-31T15:00:00' })], []);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    const grid = screen.getByRole('list', { name: /Days of April 2026/ });
+    expect(within(grid).getByRole('link', { name: 'Task: Last day of March' })).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing is dated in April 2026/)).not.toBeInTheDocument();
+  });
 });

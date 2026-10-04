@@ -37,7 +37,7 @@ function EntryChip({ entry }: { entry: CalendarEntry }) {
       title={entry.title}
       aria-label={`${kind}: ${entry.title}${entry.done ? ' (done)' : ''}`}
     >
-      <span aria-hidden="true">{entry.kind === 'milestone' ? '◎' : ''}</span>
+      {entry.kind === 'milestone' ? <span aria-hidden="true">◎ </span> : null}
       {entry.title}
     </Link>
   );
@@ -100,7 +100,9 @@ export function CalendarPage() {
     return () => { active = false; };
   }, [attempt, firestore, teamId]);
 
-  const now = useMemo(() => new Date(), []);
+  // Re-read on "Today" rather than only at mount: a calendar left open past
+  // midnight must still jump to the real today and highlight the right cell.
+  const [now, setNow] = useState(() => new Date());
   const days = useMemo(() => monthGrid(month, now), [month, now]);
   const weekdays = useMemo(() => weekdayLabels(), []);
   const entries = useMemo(() => {
@@ -108,14 +110,22 @@ export function CalendarPage() {
     return onlyMine && user ? filterEntriesForMember(all, user.uid) : all;
   }, [goals, onlyMine, project, tasks, user]);
   const byDay = useMemo(() => groupEntriesByDay(entries), [entries]);
-  const undated = useMemo(() => undatedTaskCount(tasks), [tasks]);
-  const monthHasEntries = days.some((day) => day.inMonth && byDay.has(day.key));
+  const undated = useMemo(() => undatedTaskCount(tasks, onlyMine ? user?.uid ?? null : null), [onlyMine, tasks, user]);
+  // The grid, not the month: a padded day from the neighbouring month still
+  // draws its chips, so claiming the view is empty while they show is wrong.
+  const gridHasEntries = days.some((day) => byDay.has(day.key));
   const selectedDay = days.find((day) => day.key === selectedKey) ?? null;
   const selectedEntries = byDay.get(selectedKey) ?? [];
 
   function showMonth(next: Date, select?: Date) {
     setMonth(startOfMonth(next));
     setSelectedKey(dayKey(select ?? startOfMonth(next)));
+  }
+
+  function showToday() {
+    const today = new Date();
+    setNow(today);
+    showMonth(today, today);
   }
 
   if (teamStatus === 'loading') return <StatePanel variant="loading" title="Loading the calendar" message="Checking your active team membership." />;
@@ -144,14 +154,14 @@ export function CalendarPage() {
               Only my tasks
             </label>
             <button type="button" className="cal-nav" onClick={() => showMonth(addMonths(month, -1))} aria-label="Previous month">‹</button>
-            <button type="button" className="cal-nav" onClick={() => showMonth(now, now)}>Today</button>
+            <button type="button" className="cal-nav" onClick={() => showToday()}>Today</button>
             <button type="button" className="cal-nav" onClick={() => showMonth(addMonths(month, 1))} aria-label="Next month">›</button>
           </div>
         </header>
 
         {!project ? (
           <p>This team has no board yet, so only milestones appear here. Open the Board tab to set one up.</p>
-        ) : !monthHasEntries ? (
+        ) : !gridHasEntries ? (
           <p>
             Nothing is dated in {monthLabel(month)}{onlyMine ? ' for you' : ''}. Give a task a due date on the Board, or a milestone a target date, and it appears here.
           </p>

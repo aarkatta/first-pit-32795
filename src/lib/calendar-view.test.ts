@@ -161,4 +161,15 @@ describe('grouping and filtering', () => {
     expect(filterEntriesForMember(entries, 'student-1').map((entry) => entry.key)).toEqual(['task-a', 'milestone-g1']);
     expect(filterEntriesForMember(entries, 'nobody').map((entry) => entry.key)).toEqual(['milestone-g1']);
   });
+
+  it('counts the undated cards of one member, not the team, when narrowed', () => {
+    const tasks = [
+      task({ id: 'a', assignedTo: 'student-1' }),
+      task({ id: 'b', assignedTo: 'student-2' }),
+      task({ id: 'c', dueAt: '2026-03-12T15:00:00', assignedTo: 'student-1' })
+    ];
+    expect(undatedTaskCount(tasks)).toBe(2);
+    expect(undatedTaskCount(tasks, 'student-1')).toBe(1);
+    expect(undatedTaskCount(tasks, 'nobody')).toBe(0);
+  });
 });

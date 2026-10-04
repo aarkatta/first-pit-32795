@@ -120,7 +120,9 @@ export function groupEntriesByDay(entries: CalendarEntry[]): Map<string, Calenda
   const byDay = new Map<string, CalendarEntry[]>();
   for (const entry of entries) {
     const key = dayKey(entry.day);
-    byDay.set(key, [...(byDay.get(key) ?? []), entry]);
+    const day = byDay.get(key);
+    if (day) day.push(entry);
+    else byDay.set(key, [entry]);
   }
   for (const list of byDay.values()) {
     list.sort((first, second) => (first.kind === second.kind ? first.title.localeCompare(second.title) : first.kind === 'milestone' ? -1 : 1));
@@ -133,6 +135,11 @@ export function filterEntriesForMember(entries: CalendarEntry[], userId: string)
   return entries.filter((entry) => entry.kind === 'milestone' || entry.assignedTo === userId);
 }
 
-export function undatedTaskCount(tasks: TrackerTask[]): number {
-  return tasks.filter((task) => !taskCalendarDate(task)).length;
+/**
+ * Cards the calendar cannot place. `userId` narrows the count the same way
+ * `filterEntriesForMember` narrows the grid, so the footnote counts the tasks
+ * the viewer is actually looking at rather than the whole team's.
+ */
+export function undatedTaskCount(tasks: TrackerTask[], userId?: string | null): number {
+  return tasks.filter((task) => !taskCalendarDate(task) && (!userId || task.assignedTo === userId)).length;
 }
