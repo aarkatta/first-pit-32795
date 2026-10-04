@@ -55,7 +55,9 @@ capacity. Team chat (channels, messages, announcements) and the calendar
 (events, recurrence, Google Calendar sync) were built and then **removed from
 the product**, as were the Search page and the development-only State lab and
 Emulators pages (2026-09-17); their collections, rules, indexes and callables are gone, and the
-catch-all deny now covers any documents left behind.
+catch-all deny now covers any documents left behind. The Tracker's Calendar tab
+is not that feature: it is a read-only view of existing tasks and milestones by
+date and stores nothing.
 
 ## Repository Structure
 
