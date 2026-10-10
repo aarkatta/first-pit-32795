@@ -189,11 +189,14 @@ the message written (`src/lib/invite-email.ts`) — no server email, no provider
 nothing stored. `inviteMailtoHref` is kept, unused, for a later non-Gmail option.
 
 *Provisioning* (`functions/src/team-members.ts`) is for someone with no First Pit
-account: `provisionTeamMember` creates the Auth account and returns a generated
-password **once**, the coach passes it on from their own mailbox, and
-`PasswordSetupGate` forces the member to replace it before they reach any team
-data. Rules that module exists to hold: the password is never stored, logged or
-put in a URL (`CredentialsCard` copies, it does not build a Gmail link); an
+account: `provisionTeamMember` creates the Auth account with the shared starter
+password (`DEFAULT_MEMBER_PASSWORD`, `FLL2026` — the same for every team, and
+what **Reset password** goes back to), the coach passes it on from their own
+mailbox, and `PasswordSetupGate` forces the member to replace it before they
+reach any team data. Rules that module exists to hold: an account on the starter
+password always has `mustSetPassword` set; the password is never logged, written
+to a receipt or put in a URL (`CredentialsCard` copies, it does not build a
+Gmail link); an
 address that already has an account is refused so consent stays with the
 invitation flow; `resetTeamMemberPassword` only reaches accounts where
 `users/{uid}.provisionedByTeamId` is this team; and `emailVerified` stays false

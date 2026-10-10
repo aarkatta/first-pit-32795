@@ -157,6 +157,16 @@ describe('ManageTeamPage team overview', () => {
     expect(patchTeam).toHaveBeenCalledWith('team-1', { name: 'TechSummer', teamNumber: '12345' });
   });
 
+  it('will not save team details without a team number', () => {
+    withTeam('coach', { team: { name: 'Robotics', id: 'team-1', teamNumber: '777', createdBy: 'coach-1' } });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit team details' }));
+    expect(screen.getByLabelText('Team number')).toBeRequired();
+    fireEvent.change(screen.getByLabelText('Team number'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mocks.updateTeamDetails).not.toHaveBeenCalled();
+  });
+
   it('shows the team number to a student without an edit control or add-member button', () => {
     withTeam('student', { team: { name: 'Robotics', id: 'team-1', teamNumber: '777', createdBy: 'coach-1' } });
     renderPage();
@@ -404,11 +414,11 @@ describe('ManageTeamPage roster', () => {
 });
 
 describe('ManageTeamPage adding a member', () => {
-  it('creates the account and shows the starter password exactly once', async () => {
+  it('creates the account and shows the starter password to pass on', async () => {
     withTeam('coach');
     mocks.provisionTeamMember.mockResolvedValue({
       userId: 'student-2', email: 'ada@example.com', displayName: 'Ada Lovelace',
-      role: 'student', temporaryPassword: 'Falcon-Gear-Orbit-4821', replayed: false
+      role: 'student', temporaryPassword: 'FLL2026', replayed: false
     });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /add a member/i }));
@@ -429,18 +439,23 @@ describe('ManageTeamPage adding a member', () => {
       expect.stringContaining('provision')
     ));
 
-    expect(await screen.findByText('Falcon-Gear-Orbit-4821')).toBeInTheDocument();
-    expect(screen.getByText(/only time the password is shown/i)).toBeInTheDocument();
-    // Dismissing it takes the password away for good.
+    // The confirmation is for the coach: highlighted on the card, in full.
+    const confirmation = (await screen.findByText('Member added successfully!')).closest('p');
+    expect(confirmation).toHaveClass('credentials-card__success');
+    expect(confirmation).toHaveTextContent(
+      `Member added successfully! They can log in using their email and the temporary password: FLL2026 on ${window.location.host}. They will be required to change it upon their first login.`
+    );
+    expect(screen.getByRole('heading', { name: 'Ada Lovelace is on the team' })).toBeInTheDocument();
+    // Dismissing the card takes the password off the screen.
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-    expect(screen.queryByText('Falcon-Gear-Orbit-4821')).not.toBeInTheDocument();
+    expect(screen.queryByText('FLL2026')).not.toBeInTheDocument();
   });
 
   it('copies the message for the coach to paste, and never builds a URL with the password in it', async () => {
     withTeam('coach');
     mocks.provisionTeamMember.mockResolvedValue({
       userId: 'student-2', email: 'ada@example.com', displayName: 'Ada Lovelace',
-      role: 'student', temporaryPassword: 'Falcon-Gear-Orbit-4821', replayed: false
+      role: 'student', temporaryPassword: 'FLL2026', replayed: false
     });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -454,14 +469,16 @@ describe('ManageTeamPage adding a member', () => {
     fireEvent.click(await screen.findByRole('button', { name: /copy the whole message/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const copied = String(writeText.mock.calls[0][0]);
-    expect(copied).toContain('Falcon-Gear-Orbit-4821');
+    // The coach-only confirmation stays on the screen and out of what is sent.
+    expect(copied).not.toContain('Member added successfully');
+    expect(copied).toContain('FLL2026');
     expect(copied).toContain('ada@example.com');
     expect(copied).toContain('Dana Ruiz');
 
     // A live password must never reach a link — it would land in the coach's
     // browser history. Every link on the page has to be free of it.
     for (const link of screen.queryAllByRole('link')) {
-      expect(link.getAttribute('href') ?? '').not.toContain('Falcon-Gear-Orbit-4821');
+      expect(link.getAttribute('href') ?? '').not.toContain('FLL2026');
     }
     Reflect.deleteProperty(navigator, 'clipboard');
   });
@@ -535,7 +552,7 @@ describe('ManageTeamPage adding a member', () => {
     expect(screen.queryByRole('button', { name: /invite ada@example.com/i })).not.toBeInTheDocument();
   });
 
-  it('issues a fresh password from the menu and says nothing was kept on a replay', async () => {
+  it('resets a password from the menu and shows none on a replay', async () => {
     withTeam('coach');
     mocks.listTeamMembers.mockResolvedValue(roster);
     mocks.resetTeamMemberPassword.mockResolvedValue({ userId: 'student-1', temporaryPassword: null, replayed: true });
@@ -546,5 +563,18 @@ describe('ManageTeamPage adding a member', () => {
     await waitFor(() => expect(mocks.resetTeamMemberPassword).toHaveBeenCalledWith('team-1', 'student-1'));
     expect(await screen.findByText(/already has an account/i)).toBeInTheDocument();
     expect(screen.getByText(/no new password to show/i)).toBeInTheDocument();
+  });
+
+  it('confirms a reset in its own words, not as a new member', async () => {
+    withTeam('coach');
+    mocks.listTeamMembers.mockResolvedValue(roster);
+    mocks.resetTeamMemberPassword.mockResolvedValue({ userId: 'student-1', temporaryPassword: 'FLL2026', replayed: false });
+    renderPage();
+    await screen.findByRole('table');
+    openActions('Amir Khan');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
+    expect(await screen.findByText('Password reset successfully!')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: "Amir Khan's password was reset" })).toBeInTheDocument();
+    expect(screen.queryByText('Member added successfully!')).not.toBeInTheDocument();
   });
 });

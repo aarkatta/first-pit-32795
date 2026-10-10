@@ -2,45 +2,23 @@ import { describe, expect, it } from 'vitest';
 import {
   accountTypeForRole,
   assertProvisionedByTeam,
-  generateTemporaryPassword,
+  DEFAULT_MEMBER_PASSWORD,
   MAX_MEMBER_PASSWORD_LENGTH,
   MIN_MEMBER_PASSWORD_LENGTH,
-  PASSWORD_WORDS,
   requireNewPassword,
   requirePersonName,
-  requireProvisionableRole,
-  temporaryPasswordEntropyBits
+  requireProvisionableRole
 } from '../src/team-members.js';
 
-describe('temporary password generation', () => {
-  it('builds a readable Word-Word-Word-1234 credential', () => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const password = generateTemporaryPassword();
-      expect(password).toMatch(/^[A-Z][a-z]{3,5}-[A-Z][a-z]{3,5}-[A-Z][a-z]{3,5}-\d{4}$/);
-      // Repeated words read as a transcription slip to whoever copies this down.
-      const words = password.split('-').slice(0, 3);
-      expect(new Set(words).size).toBe(3);
-    }
+describe('the starter password', () => {
+  it('is the one shared default Firebase Auth will accept', () => {
+    expect(DEFAULT_MEMBER_PASSWORD).toBe('FLL2026');
+    // Firebase Auth refuses anything shorter than six characters.
+    expect(DEFAULT_MEMBER_PASSWORD.length).toBeGreaterThanOrEqual(6);
   });
 
-  it('keeps the word list unambiguous and typable', () => {
-    expect(PASSWORD_WORDS.length).toBeGreaterThanOrEqual(64);
-    expect(new Set(PASSWORD_WORDS).size).toBe(PASSWORD_WORDS.length);
-    for (const word of PASSWORD_WORDS) {
-      expect(word).toMatch(/^[a-z]{4,6}$/);
-    }
-  });
-
-  it('keeps the search space above 32 bits', () => {
-    // The floor that justifies handing this to a coach to read out: see the
-    // comment on temporaryPasswordEntropyBits for why 33 bits is enough here
-    // and would not be for a stored credential.
-    expect(temporaryPasswordEntropyBits()).toBeGreaterThan(32);
-  });
-
-  it('does not repeat itself', () => {
-    const generated = new Set(Array.from({ length: 500 }, () => generateTemporaryPassword()));
-    expect(generated.size).toBe(500);
+  it('can never be kept as a member\'s own password', () => {
+    expect(() => requireNewPassword(DEFAULT_MEMBER_PASSWORD)).toThrow('between');
   });
 });
 

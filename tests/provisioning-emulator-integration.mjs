@@ -2,7 +2,7 @@
  * Coach-provisioned member accounts, end to end against the emulator suite.
  *
  * The assertions that matter here are the ones a unit test cannot make: that
- * the generated password really signs the member in, that it stops working
+ * the starter password really signs the member in, that it stops working
  * once they choose their own, and that a coach's reset lever reaches only the
  * accounts their own team created.
  */
@@ -129,7 +129,8 @@ async function auditActions(teamId, targetUserId) {
     .map((row) => row.document.fields?.metadata?.mapValue?.fields?.action?.stringValue ?? null);
 }
 
-const TEMP_PASSWORD_SHAPE = /^[A-Z][a-z]{3,5}-[A-Z][a-z]{3,5}-[A-Z][a-z]{3,5}-\d{4}$/;
+// `DEFAULT_MEMBER_PASSWORD` in functions/src/team-members.ts.
+const STARTER_PASSWORD = 'FLL2026';
 
 const suffix = Date.now();
 const coach = await createUser(`provision-coach-${suffix}@example.com`);
@@ -156,7 +157,7 @@ await callFails('provisionTeamMember', coach.idToken, { teamId, displayName: 'Co
 const provisioned = await call('provisionTeamMember', coach.idToken, {
   teamId, displayName: '  Ada   Lovelace ', email: studentEmail.toUpperCase(), operationId: 'op-provision-student'
 });
-if (!TEMP_PASSWORD_SHAPE.test(provisioned.temporaryPassword)) throw new Error(`Temporary password had an unexpected shape: ${provisioned.temporaryPassword}`);
+if (provisioned.temporaryPassword !== STARTER_PASSWORD) throw new Error(`Provisioning did not hand out the starter password: ${provisioned.temporaryPassword}`);
 if (provisioned.email !== studentEmail) throw new Error('The provisioned email was not normalized to lower case.');
 if (provisioned.displayName !== 'Ada Lovelace') throw new Error('The provisioned name was not whitespace-collapsed.');
 if (provisioned.role !== 'student') throw new Error('Provisioning did not default to the student role.');
@@ -232,7 +233,7 @@ await callFails('resetTeamMemberPassword', studentSession.idToken, { teamId, use
 await callFails('resetTeamMemberPassword', coach.idToken, { teamId, userId: 'no-such-member' }, 'NOT_FOUND');
 
 const reset = await call('resetTeamMemberPassword', coach.idToken, { teamId, userId: studentId, operationId: 'op-reset-student' });
-if (!TEMP_PASSWORD_SHAPE.test(reset.temporaryPassword)) throw new Error(`The reset password had an unexpected shape: ${reset.temporaryPassword}`);
+if (reset.temporaryPassword !== STARTER_PASSWORD) throw new Error(`A reset did not go back to the starter password: ${reset.temporaryPassword}`);
 await signInFails(studentEmail, chosenPassword, 'the member password after a coach reset');
 studentSession = await signInSucceeds(studentEmail, reset.temporaryPassword, 'the reset password');
 if ((await readDocument(`users/${studentId}`)).mustSetPassword?.booleanValue !== true) throw new Error('A reset did not re-arm the password prompt.');

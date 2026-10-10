@@ -65,7 +65,7 @@ const student = await createUser(`phase7-student-${suffix}@example.com`);
 const outsider = await createUser(`phase7-outsider-${suffix}@example.com`);
 // Only coach and mentor accounts create teams; the type is declared once.
 await call('setAccountType', coach.idToken, { accountType: 'coach' });
-const team = await call('createTeam', coach.idToken, { name: `Phase 7 Integration ${suffix}` });
+const team = await call('createTeam', coach.idToken, { name: `Phase 7 Integration ${suffix}`, teamNumber: '7001' });
 const teamId = team.teamId;
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: student.email, role: 'student' });
 await call('acceptInvitation', student.idToken, { invitationId: invitation.invitationId });
@@ -92,7 +92,7 @@ for (const entry of search.results) if (entry.teamId !== teamId || !entry.deepLi
 if (!search.results.some((entry) => entry.type === 'Task' && entry.recordId === taskId)) throw new Error('Global search returned a task without its record ID.');
 
 await call('setAccountType', outsider.idToken, { accountType: 'mentor' });
-const otherTeam = await call('createTeam', outsider.idToken, { name: `Phase 7 Other Team ${suffix}` });
+const otherTeam = await call('createTeam', outsider.idToken, { name: `Phase 7 Other Team ${suffix}`, teamNumber: '7002' });
 await call('createQuestion', outsider.idToken, { teamId: otherTeam.teamId, questionId: `phase7-private-${suffix}`, visibility: 'team', title: 'Programming private other team', body: 'Should never appear for the student.', category: 'Programming', tags: ['programming'] });
 const scopedSearch = await call('globalSearch', student.idToken, { query: 'private other team' });
 if (scopedSearch.results.some((entry) => entry.recordId === `phase7-private-${suffix}`)) throw new Error('Global search leaked a record from a team without an active membership.');

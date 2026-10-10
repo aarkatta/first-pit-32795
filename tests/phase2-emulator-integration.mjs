@@ -94,14 +94,15 @@ const joiner = await createUser(`phase2-joiner-${suffix}@example.com`);
 let expiredInvitee = await createUser(`phase2-expired-${suffix}@example.com`);
 
 // Team creation is for coach and mentor accounts; the type is declared once.
-await callFails('createTeam', joiner.idToken, { name: 'No account type yet' }, 'FAILED_PRECONDITION');
+await callFails('createTeam', joiner.idToken, { name: 'No account type yet', teamNumber: '2001' }, 'FAILED_PRECONDITION');
 await call('setAccountType', student.idToken, { accountType: 'student' });
-await callFails('createTeam', student.idToken, { name: 'Student team' }, 'PERMISSION_DENIED');
+await callFails('createTeam', student.idToken, { name: 'Student team', teamNumber: '2002' }, 'PERMISSION_DENIED');
 await callFails('setAccountType', student.idToken, { accountType: 'coach' }, 'FAILED_PRECONDITION');
 const unchangedType = await call('setAccountType', student.idToken, { accountType: 'student' });
 if (unchangedType.changed !== false) throw new Error('Re-declaring the same account type was not a no-op.');
 await callFails('setAccountType', coach.idToken, { accountType: 'teamLeader' }, 'INVALID_ARGUMENT');
 await call('setAccountType', coach.idToken, { accountType: 'coach' });
+await callFails('createTeam', coach.idToken, { name: `Phase 2 Integration ${suffix}` }, 'INVALID_ARGUMENT');
 const team = await call('createTeam', coach.idToken, { name: `Phase 2 Integration ${suffix}`, teamNumber: '1234' });
 const teamId = team.teamId;
 if ((await readDocument(`teams/${teamId}`, coach.idToken)).fields?.teamNumber?.stringValue !== '1234') throw new Error('createTeam did not store the team number.');
@@ -115,7 +116,7 @@ const studentInvitationId = `${teamId}_${globalThis.Buffer.from(student.email).t
 student = await verifyUser(student);
 await call('acceptInvitation', student.idToken, { invitationId: studentInvitationId });
 
-// Team details: coach / team leader only; name 2–80 chars, number digits only, empty clears it.
+// Team details: coach / team leader only; name 2–80 chars, number required and digits only.
 const teamName = `Phase 2 Integration ${suffix}`;
 await callFails('updateTeamDetails', student.idToken, { teamId, name: teamName, teamNumber: '9999' }, 'PERMISSION_DENIED');
 await callFails('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: '12ab' }, 'INVALID_ARGUMENT');
@@ -123,8 +124,11 @@ await callFails('updateTeamDetails', coach.idToken, { teamId, name: 'x', teamNum
 await call('updateTeamDetails', coach.idToken, { teamId, name: `Renamed ${suffix}`, teamNumber: '4242' });
 const renamed = (await readDocument(`teams/${teamId}`, student.idToken)).fields;
 if (renamed?.teamNumber?.stringValue !== '4242' || renamed?.name?.stringValue !== `Renamed ${suffix}`) throw new Error('updateTeamDetails did not store the new name and number for members to read.');
-await call('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: null });
-if (!('nullValue' in ((await readDocument(`teams/${teamId}`, coach.idToken)).fields?.teamNumber ?? {}))) throw new Error('updateTeamDetails did not clear the number.');
+// The number is mandatory: it can be changed but never cleared or left out.
+await callFails('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: null }, 'INVALID_ARGUMENT');
+await callFails('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: '' }, 'INVALID_ARGUMENT');
+if ((await readDocument(`teams/${teamId}`, coach.idToken)).fields?.teamNumber?.stringValue !== '4242') throw new Error('A refused updateTeamDetails changed the team number.');
+await call('updateTeamDetails', coach.idToken, { teamId, name: teamName, teamNumber: '1234' });
 
 const expiredInvitation = await call('createInvitation', coach.idToken, { teamId, email: expiredInvitee.email, role: 'student', operationId: 'op-invite-expired' });
 expiredInvitee = await verifyUser(expiredInvitee);
@@ -170,10 +174,10 @@ if (leaveResponse.response.status === 200) throw new Error('A sole coach was all
 // the membership decides, so an invited student cannot relabel their way in.
 let dual = await createUser(`phase2-dual-${suffix}@example.com`);
 await call('setAccountType', dual.idToken, { accountType: 'coach' });
-const guardTeam = await call('createTeam', coach.idToken, { name: `Phase 2 dual-role guard ${suffix}` });
+const guardTeam = await call('createTeam', coach.idToken, { name: `Phase 2 dual-role guard ${suffix}`, teamNumber: '2003' });
 const dualInvitation = await call('createInvitation', coach.idToken, { teamId: guardTeam.teamId, email: dual.email, role: 'student' });
 dual = await verifyUser(dual);
 await call('acceptInvitation', dual.idToken, { invitationId: dualInvitation.invitationId });
-await callFails('createTeam', dual.idToken, { name: 'Dual role team' }, 'PERMISSION_DENIED');
+await callFails('createTeam', dual.idToken, { name: 'Dual role team', teamNumber: '2004' }, 'PERMISSION_DENIED');
 
 globalThis.console.log('Phase 2 Functions integration passed: team creation by account type, invitation verification/expiry, role assignment, policy update, join approval, report, moderation, and sole-coach protection.');

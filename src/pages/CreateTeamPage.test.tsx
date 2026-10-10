@@ -25,20 +25,21 @@ beforeEach(() => {
 });
 
 describe('CreateTeamPage', () => {
-  it('submits the team name to the server', async () => {
+  it('submits the team name and number to the server', async () => {
     renderPage();
     expect(mocks.useAccountType).toHaveBeenCalledWith('coach-1');
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
-    await waitFor(() => expect(mocks.createTeam).toHaveBeenCalledWith('Robotics Team', ''));
-  });
-
-  it('submits the optional team number with the name', async () => {
-    renderPage();
-    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
-    fireEvent.change(screen.getByLabelText(/team number/i), { target: { value: '12345' } });
+    fireEvent.change(screen.getByLabelText('Team number'), { target: { value: '12345' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
     await waitFor(() => expect(mocks.createTeam).toHaveBeenCalledWith('Robotics Team', '12345'));
+  });
+
+  it('will not create a team without a team number', () => {
+    renderPage();
+    expect(screen.getByLabelText('Team number')).toBeRequired();
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
+    expect(mocks.createTeam).not.toHaveBeenCalled();
   });
 
   it('lets a mentor account create a team too', () => {
@@ -53,6 +54,7 @@ describe('CreateTeamPage', () => {
       .mockResolvedValueOnce({ teamId: 'team-1' });
     renderPage();
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Robotics Team' } });
+    fireEvent.change(screen.getByLabelText('Team number'), { target: { value: '12345' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
     expect(await screen.findByText('The server is unavailable.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

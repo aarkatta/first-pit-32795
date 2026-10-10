@@ -46,7 +46,6 @@ import {
   configureAuthPersistence,
   isDismissedPopup,
   isNativeShell,
-  requiresEmailVerification,
   resendVerificationEmail,
   sendPasswordRecovery,
   signInWithEmail,
@@ -86,25 +85,21 @@ describe('auth service helpers', () => {
     await sendPasswordRecovery(auth, ' reset@example.com ');
     await signOutCurrentUser(auth);
     expect(mocks.createUserWithEmailAndPassword).toHaveBeenCalledWith(auth, 'new@example.com', 'password');
-    expect(mocks.sendEmailVerification).toHaveBeenCalledWith(user, emailActionCodeSettings());
     expect(mocks.signInWithEmailAndPassword).toHaveBeenCalledWith(auth, 'user@example.com', 'password');
     expect(mocks.sendPasswordResetEmail).toHaveBeenCalledWith(auth, 'reset@example.com');
     expect(mocks.signOut).toHaveBeenCalledWith(auth);
   });
 
-  it('preserves the created user when verification delivery fails so retry is recoverable', async () => {
+  it('creates the account without mailing a verification link', async () => {
+    // Verification is not a condition of getting in, so a mail outage can no
+    // longer leave a new member with an account they cannot use.
     const user = { uid: 'created-user' };
     mocks.createUserWithEmailAndPassword.mockResolvedValue({ user });
-    mocks.sendEmailVerification.mockRejectedValueOnce(new Error('mail unavailable')).mockResolvedValueOnce(undefined);
 
-    await expect(signUpWithEmail(auth, 'new@example.com', 'password')).rejects.toMatchObject({
-      name: 'VerificationEmailDeliveryError',
-      user
-    });
-    await resendVerificationEmail(user as never);
+    await expect(signUpWithEmail(auth, 'new@example.com', 'password')).resolves.toEqual({ user });
 
     expect(mocks.createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
-    expect(mocks.sendEmailVerification).toHaveBeenCalledTimes(2);
+    expect(mocks.sendEmailVerification).not.toHaveBeenCalled();
   });
 
   it('opens a Google popup on the web that forces account selection', async () => {
@@ -279,24 +274,6 @@ describe('auth service helpers', () => {
       expect(isSpentActionCode(Object.assign(new Error('x'), { code: 'auth/invalid-action-code' }))).toBe(true);
       // A network blip is worth retrying; telling the user the link is dead is not.
       expect(isSpentActionCode(Object.assign(new Error('x'), { code: 'auth/network-request-failed' }))).toBe(false);
-    });
-  });
-
-  describe('requiresEmailVerification', () => {
-    const password = { providerId: 'password' };
-    const google = { providerId: 'google.com' };
-
-    it('requires verification only for an unverified password account', () => {
-      expect(requiresEmailVerification({ emailVerified: false, providerData: [password] } as never)).toBe(true);
-      expect(requiresEmailVerification({ emailVerified: true, providerData: [password] } as never)).toBe(false);
-      // Google already proved the address, so there is nothing to verify.
-      expect(requiresEmailVerification({ emailVerified: false, providerData: [google] } as never)).toBe(false);
-      expect(requiresEmailVerification({ emailVerified: false, providerData: [] } as never)).toBe(false);
-      expect(requiresEmailVerification(null)).toBe(false);
-    });
-
-    it('still requires verification when a password provider is linked alongside Google', () => {
-      expect(requiresEmailVerification({ emailVerified: false, providerData: [google, password] } as never)).toBe(true);
     });
   });
 });

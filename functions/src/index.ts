@@ -14,7 +14,7 @@ import {
   requireEmail,
   requireMembershipStatus,
   requireString,
-  optionalTeamNumber,
+  requireTeamNumber,
   requireTeamName,
   requireTeamAdmin,
   requireTeamId,
@@ -151,7 +151,7 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
   }
 
   const name = requireTeamName(request.data?.name);
-  const teamNumber = optionalTeamNumber(request.data?.teamNumber);
+  const teamNumber = requireTeamNumber(request.data?.teamNumber);
 
   const db = getFirestore();
   const auth = request.auth;
@@ -647,14 +647,14 @@ export const transferTeamLeadership = onCall(async (request: Phase2Request) => {
 });
 
 /**
- * Renames the team and sets or clears its FIRST LEGO League number, together.
+ * Renames the team and sets its FIRST LEGO League number, together.
  * Coach / team leader only.
  */
 export const updateTeamDetails = onCall(async (request: Phase2Request) => {
   const teamId = requireTeamId(request);
   const admin = await requireTeamAdmin(request, teamId);
   const name = requireTeamName(getInput(request, 'name'));
-  const teamNumber = optionalTeamNumber(getInput(request, 'teamNumber'));
+  const teamNumber = requireTeamNumber(getInput(request, 'teamNumber'));
   const db = getFirestore();
   const teamRef = db.doc(`teams/${teamId}`);
   await db.runTransaction(async (transaction) => {

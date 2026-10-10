@@ -53,6 +53,7 @@ export function ManageTeamPage() {
 
   const [rosters, setRosters] = useState<Record<string, RosterEntry>>({});
   const [credentials, setCredentials] = useState<ProvisionedMember | null>(null);
+  const [credentialsKind, setCredentialsKind] = useState<'added' | 'reset'>('added');
   const [adding, setAdding] = useState(false);
   const [savedDetails, setSavedDetails] = useState<Record<string, TeamDetails>>({});
   const [detailsDraft, setDetailsDraft] = useState<{ name: string; teamNumber: string } | null>(null);
@@ -255,6 +256,7 @@ export function ManageTeamPage() {
       {credentials ? (
         <CredentialsCard
           member={credentials}
+          kind={credentialsKind}
           teamName={teamName}
           teamNumber={teamNumber}
           coachName={user?.displayName ?? null}
@@ -271,6 +273,7 @@ export function ManageTeamPage() {
           online={online}
           onAdded={(member) => {
             setAdding(false);
+            setCredentialsKind('added');
             setCredentials(member);
             void loadRoster(teamId);
           }}
@@ -296,7 +299,7 @@ export function ManageTeamPage() {
                   <input className="team-name-input" value={detailsDraft.name} onChange={(event) => setDetailsDraft({ ...detailsDraft, name: event.target.value })} minLength={2} maxLength={80} required autoFocus />
                 </label>
                 <label>Team number
-                  <input value={detailsDraft.teamNumber} onChange={(event) => setDetailsDraft({ ...detailsDraft, teamNumber: event.target.value })} inputMode="numeric" pattern="[0-9]{1,8}" maxLength={8} placeholder="e.g. 12345" title="Up to 8 digits. Leave empty to remove it." />
+                  <input value={detailsDraft.teamNumber} onChange={(event) => setDetailsDraft({ ...detailsDraft, teamNumber: event.target.value })} inputMode="numeric" pattern="[0-9]{1,8}" maxLength={8} placeholder="e.g. 12345" title="Your FIRST LEGO League team number: up to 8 digits." required />
                 </label>
                 <button className="button button--small" type="submit" disabled={savingDetails || !online}>{savingDetails ? 'Saving…' : 'Save'}</button>
                 <button className="button button--ghost button--small" type="button" disabled={savingDetails} onClick={() => setDetailsDraft(null)}>Cancel</button>
@@ -432,6 +435,7 @@ export function ManageTeamPage() {
                 })}
                 onResetPassword={(member) => void run(async () => {
                   const reset = await resetTeamMemberPassword(teamId, member.userId);
+                  setCredentialsKind('reset');
                   setCredentials({
                     userId: member.userId,
                     email: '',

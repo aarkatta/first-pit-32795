@@ -4,7 +4,7 @@ import { credentialsMessage, credentialsSubject } from './member-credentials';
 const base = {
   displayName: 'Ada Lovelace',
   email: 'ada@example.com',
-  temporaryPassword: 'Falcon-Gear-Orbit-4821',
+  temporaryPassword: 'FLL2026',
   teamName: 'Robotics',
   teamNumber: '12345',
   coachName: 'Dana Ruiz'
@@ -16,7 +16,7 @@ describe('credentialsMessage', () => {
     expect(message).toContain('Hi Ada,');
     expect(message).toContain('Robotics · Team #12345');
     expect(message).toContain('ada@example.com');
-    expect(message).toContain('Falcon-Gear-Orbit-4821');
+    expect(message).toContain('FLL2026');
     expect(message).toContain(window.location.origin);
     expect(message).toContain('— Dana Ruiz');
   });

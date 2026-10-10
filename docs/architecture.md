@@ -132,7 +132,7 @@ context, and the authorization/audit foundation.
 The minimum Firestore collections are:
 
 - `users/{uid}` — the authenticated account profile.
-- `teams/{teamId}` — the team identity and creator, plus an optional FIRST LEGO League `teamNumber` (1–8 digits, or null). It is set at creation (`createTeam`) or later by a coach or team leader together with the team name (`updateTeamDetails`, audited as `team.details.updated`), and shown after the name on Home and Manage team.
+- `teams/{teamId}` — the team identity and creator, plus its FIRST LEGO League `teamNumber` (1–8 digits; null only on teams created before the number became mandatory). It is set at creation (`createTeam`) and changed later by a coach or team leader together with the team name (`updateTeamDetails`, audited as `team.details.updated`), and shown after the name on Home and Manage team.
 - `memberships/{teamId}_{uid}` — the validated team boundary, role, and status.
 - `teamPolicies/{teamId}` — explicit foundation policy defaults.
 - `auditEvents/{eventId}` — server-generated sensitive-operation records.
@@ -233,13 +233,17 @@ and decides one thing: who may create a team (decision of 2026-09-17).
 ### Team name and number
 
 `teams/{teamId}` carries `name` (2–80 characters, whitespace collapsed;
-`requireTeamName`) and an optional FIRST LEGO League `teamNumber` (1–8 digits or
-null; `optionalTeamNumber`, both in `functions/src/phase2.ts`). Create team
-offers the number as an optional field — teams are often numbered after they
-register. Afterwards a coach or team leader edits both together from the Manage
+`requireTeamName`) and a FIRST LEGO League `teamNumber` (1–8 digits;
+`requireTeamNumber`, both in `functions/src/phase2.ts`). The number is
+**mandatory**: `createTeam` refuses a request without one, and the Create team
+form (reached from Manage team's "Create a new team" card) marks the field
+required. Afterwards a coach or team leader edits both together from the Manage
 team banner through `updateTeamDetails`, which re-checks the role inside its
-transaction and writes a `team.details.updated` audit record; an empty number
-clears it. Clients show "Name · Team #12345" (`teamNumberSuffix` in
+transaction and writes a `team.details.updated` audit record; the number can be
+changed there but not cleared. Teams created before the number became mandatory
+keep `teamNumber: null` — nothing backfills them — until a coach next saves the
+team details, which then asks for it; clients therefore still treat the field as
+nullable. Clients show "Name · Team #12345" (`teamNumberSuffix` in
 `src/lib/domain.ts`) on Home and Manage team. Team documents reach the client
 once per membership change, not live, so a successful save is applied locally
 through `patchTeam` on the team context rather than waiting for a re-read.
@@ -354,24 +358,33 @@ admits the invited, verified address only. Two failure modes are handled:
 
 The second way onto a team, beside invitations. A coach opens **Manage team →
 Add a member**, gives a name, an email address (typed twice) and a role;
-`provisionTeamMember` creates the Firebase Auth account with a generated
-single-use password and returns it once. The coach passes the credentials on
-from their own mailbox, and `PasswordSetupGate` makes the member replace the
-password before they reach any team data.
+`provisionTeamMember` creates the Firebase Auth account with the shared starter
+password — `FLL2026`, `DEFAULT_MEMBER_PASSWORD` in
+`functions/src/team-members.ts` — and returns it. The coach passes the
+credentials on from their own mailbox, and `PasswordSetupGate` makes the member
+replace the password before they reach any team data. **Reset password** puts an
+account back on the same starter password. (Until 2026-10-10 both handed out a
+generated `Word-Word-Word-1234` password instead; the fixed one is a product
+decision — one password a coach can say out loud.)
 
 Why it exists: the invitation flow asks the invitee to create an account,
 verify their address and accept — three handoffs, and the middle one routinely
 fails because Firebase's `noreply@<authDomain>` sender lands in spam (see
 `authEmailSender`). A student stuck at the verification gate could not be
 helped by anyone, because by design no coach held any lever over their account.
+That gate no longer stands in front of the app at all (2026-10-04), but
+verification is still what an invitation turns on, so provisioning remains the
+path that needs no mailbox.
 
 **What the design holds onto.**
 
-- *The password is returned once and stored nowhere* — not in the
-  `phase2Operations` receipt, not in the profile, not in a log line. A replay of
-  the same `operationId` returns `temporaryPassword: null` and says to use
-  **Reset password**. `CredentialsCard` copies to the clipboard and deliberately
-  builds no URL: `invite-email.ts` can hand Gmail a pre-written compose screen
+- *The starter password is the same for everyone and only opens the setup
+  gate.* It is a constant in the source, not a secret; `mustSetPassword` is set
+  whenever an account holds it, and `setInitialPassword`'s 10-character minimum
+  means nobody can keep it as their own. It is still never written to the
+  `phase2Operations` receipt, the profile or a log line. A replay of the same
+  `operationId` changes nothing and returns `temporaryPassword: null`.
+  `CredentialsCard` copies to the clipboard and deliberately builds no URL: `invite-email.ts` can hand Gmail a pre-written compose screen
   because an invitation link is safe in a query string, and a live password is
   not — it would land in the coach's browser history.
 - *An address that already has an account is refused* (`already-exists`, with a
@@ -389,8 +402,8 @@ helped by anyone, because by design no coach held any lever over their account.
   would be a claim First Pit cannot support. Only invitation reads require the
   claim (`firestore.rules`), so a provisioned member works everywhere else and
   still has to verify before accepting an invitation to a *second* team.
-  `ProtectedRoute` exempts them from `EmailVerificationGate` on
-  `provisionedByTeamId`, and puts `PasswordSetupGate` ahead of it.
+  `PasswordSetupGate` is the only gate `ProtectedRoute` puts in front of them
+  (the app-wide verification gate was removed on 2026-10-04).
 - *The forced change is enforced server-side.* `setInitialPassword` refuses
   unless `mustSetPassword` is still set, and sets the password itself, so the
   flag cannot clear without the password really changing. The browser cannot
@@ -402,9 +415,16 @@ helped by anyone, because by design no coach held any lever over their account.
 whose credentials the coach is about to email, where under the invitation flow
 the same typo was inert — the invitation simply became unreadable and expired.
 The compensating controls are the confirm-address field and the **Has not
-signed in yet** badge on the roster. And the password travels through two
-mailboxes in plain text; the forced change limits, but does not remove, how
-long it is useful.
+signed in yet** badge on the roster. And **the starter password is shared and
+guessable** (accepted 2026-10-10): from the moment an account is added or reset
+until the member signs in and chooses their own password, anyone who knows that
+member's email address can sign in as them, choose the password and keep the
+account — a teammate, or anyone who has seen the address. Nothing detects it
+beyond the member finding they cannot sign in; the coach's remedy is **Reset
+password** and asking them to sign in straight away. The window is the control:
+the roster's **Not signed in** status shows which accounts are still open.
+Narrowing it (expiring an unused starter password, or a per-team value) is not
+built.
 
 **Open product decision.** Provisioning moves consent from the family to the
 coach: no invitee acts, and the audit trail names the coach as the only actor.
@@ -1315,31 +1335,48 @@ private mode — where the fallback is what keeps sign-in working at all. The
 listener is still registered only after persistence resolves, so a sign-in
 observed in between cannot be stored under the wrong persistence.
 
-### Email verification is enforced, not suggested
+### Email verification is required to accept an invitation, not to sign in
 
-`requiresEmailVerification` is true only for an account carrying a `password`
-provider with `emailVerified === false`. Google has already proved the address,
-so a federated-only account is never gated.
+**Changed 2026-10-04.** Verification used to gate the whole app:
+`ProtectedRoute` rendered an `EmailVerificationGate` in front of every
+protected route for any `password` account with `emailVerified === false`, and
+`signUpWithEmail` mailed the link. Both are gone, along with
+`EmailVerificationGate`, `requiresEmailVerification` and
+`VerificationEmailDeliveryError`.
 
-`ProtectedRoute` renders `EmailVerificationGate` in front of every protected
-route for such a user. This is a gate rather than a banner because an unverified
-address is exactly how an emailed invitation could be accepted by someone who
-does not control it — and here that invitation grants access to a team of
-minors. The only exits are verifying or signing out, and sign-out stays enabled
-offline so nobody is stranded.
+Why: the gate's whole justification was the invitation path — an unverified
+address is how an emailed invitation could be accepted by someone who does not
+control it, and that invitation grants access to a team of minors. But that
+reasoning only ever applied at the moment of acceptance, and the gate charged
+every member for it. Firebase's `noreply@<authDomain>` sender routinely lands
+in spam (see `authEmailSender`), so the cost was members locked out of an app
+whose data does not depend on a proven mailbox at all, with nobody able to help
+them — the same failure that
+[coach-provisioned accounts](#coach-provisioned-member-accounts-2026-09-21) were built to
+route around.
+
+**Where the requirement still lives, unchanged:**
+
+- `firestore.rules` — an `invitations` read needs
+  `request.auth.token.email_verified == true` alongside the matching address.
+- `acceptInvitation` (`functions/src/index.ts`) — refuses with
+  `failed-precondition` unless the token carries the claim.
+- `JoinTeamPage` — shows the verify panel with **Resend verification email**
+  and **I have verified — check again**, so an invitee verifies just in time
+  rather than up front. This is now the only place First Pit sends a
+  verification mail.
 
 `user.reload()` mutates the existing `User` and fires no auth-state change, so
-`refreshVerificationStatus` returns the new value and callers act on it; the
-gate navigates with a full page load once verification succeeds rather than
-pretending React would re-render. `reload()` also leaves the ID token alone,
-and Firestore rules and callables read `email_verified` from the token, so
-`refreshVerificationStatus` forces `getIdToken(true)` as soon as the address is
-verified (2026-09-18) — otherwise the first invitation read after verifying is
-refused.
+`refreshVerificationStatus` returns the new value and callers act on it.
+`reload()` also leaves the ID token alone, and rules and callables read
+`email_verified` from the token, so `refreshVerificationStatus` forces
+`getIdToken(true)` as soon as the address is verified (2026-09-18) — otherwise
+the first invitation read after verifying is refused.
 
-**This changes behavior for existing accounts:** anyone already signed in with
-an unverified password account meets the gate on their next protected
-navigation.
+**What this loosens:** nothing on the invitation path. A signed-in member with
+an unverified address now reaches team data, which is deliberate — every
+authorization inside a team derives from a membership, never from the email
+claim.
 
 ### Closing the loop: `/auth/action`
 

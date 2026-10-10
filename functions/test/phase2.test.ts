@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEAM_POLICY,
-  optionalTeamNumber,
+  requireTeamNumber,
   optionalText,
   requireTeamName,
   requireAccountType,
@@ -161,21 +161,26 @@ describe('requireTeamName', () => {
   });
 });
 
-describe('optionalTeamNumber', () => {
-  it('accepts 1 to 8 digits, as text or a whole number, and treats empty as none', () => {
-    expect(optionalTeamNumber(' 12345 ')).toBe('12345');
-    expect(optionalTeamNumber(678)).toBe('678');
-    expect(optionalTeamNumber('')).toBeNull();
-    expect(optionalTeamNumber(undefined)).toBeNull();
-    expect(optionalTeamNumber(null)).toBeNull();
+describe('requireTeamNumber', () => {
+  it('accepts 1 to 8 digits, as text or a whole number', () => {
+    expect(requireTeamNumber(' 12345 ')).toBe('12345');
+    expect(requireTeamNumber(678)).toBe('678');
+    expect(requireTeamNumber('0042')).toBe('0042');
+  });
+
+  it('refuses a missing or blank number', () => {
+    expect(() => requireTeamNumber('')).toThrow('Team number is required');
+    expect(() => requireTeamNumber('   ')).toThrow('Team number is required');
+    expect(() => requireTeamNumber(undefined)).toThrow('Team number is required');
+    expect(() => requireTeamNumber(null)).toThrow('Team number is required');
   });
 
   it('rejects anything that is not a plain team number', () => {
-    expect(() => optionalTeamNumber('12a45')).toThrow('1 to 8 digits');
-    expect(() => optionalTeamNumber('123456789')).toThrow('1 to 8 digits');
-    expect(() => optionalTeamNumber('-5')).toThrow('1 to 8 digits');
-    expect(() => optionalTeamNumber(1.5)).toThrow('digits only');
-    expect(() => optionalTeamNumber({})).toThrow('digits only');
+    expect(() => requireTeamNumber('12a45')).toThrow('1 to 8 digits');
+    expect(() => requireTeamNumber('123456789')).toThrow('1 to 8 digits');
+    expect(() => requireTeamNumber('-5')).toThrow('1 to 8 digits');
+    expect(() => requireTeamNumber(1.5)).toThrow('digits only');
+    expect(() => requireTeamNumber({})).toThrow('digits only');
   });
 });
 

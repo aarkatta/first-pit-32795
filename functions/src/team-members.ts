@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
@@ -28,14 +27,16 @@ import {
  * `src/lib/auth.ts` documents as the normal case.
  *
  * Provisioning is the second onboarding path: a coach adds a member, the server
- * creates the Firebase Auth account with a generated password, and the coach
- * passes the credentials on from their own mailbox. The member is forced to
- * choose their own password before they reach any team data, which is what
- * turns a shared secret back into a private one.
+ * creates the Firebase Auth account with the shared starter password
+ * (`DEFAULT_MEMBER_PASSWORD`), and the coach passes the credentials on from
+ * their own mailbox. The member is forced to choose their own password before
+ * they reach any team data, which is what turns a shared secret into a private
+ * one.
  *
  * Invariants this module exists to hold:
- *  - the generated password is returned to the caller once and never persisted,
- *    logged, or written to an operation receipt;
+ *  - the starter password only ever opens `PasswordSetupGate`: `mustSetPassword`
+ *    is set whenever an account holds it, and it is too short to be chosen again;
+ *  - it is never logged or written to an operation receipt;
  *  - an address that already has a First Pit account is refused, so joining an
  *    existing account to a team still requires that person's consent;
  *  - a coach may only reset a password for an account this team provisioned
@@ -46,66 +47,18 @@ export const PROVISION_OPERATION_KIND = 'member.provision';
 export const PASSWORD_RESET_OPERATION_KIND = 'member.password.reset';
 
 /**
- * Words the temporary password is built from: 4–6 lowercase letters each, no
- * homoglyph pairs and nothing that reads oddly in combination, because a ten
- * year old types this by hand from a printout or a phone screen.
- */
-export const PASSWORD_WORDS: readonly string[] = [
-  'axle', 'beam', 'belt', 'bolt', 'brick', 'cable', 'chain', 'clamp',
-  'claw', 'clutch', 'crane', 'delta', 'drive', 'drum', 'field', 'flag',
-  'float', 'gauge', 'gear', 'giant', 'glide', 'globe', 'goal', 'hinge',
-  'jump', 'laser', 'latch', 'lever', 'lift', 'light', 'logic', 'loop',
-  'match', 'metal', 'model', 'motor', 'north', 'orbit', 'panel', 'pilot',
-  'pivot', 'pixel', 'plate', 'point', 'power', 'prism', 'pulse', 'pump',
-  'quest', 'radar', 'ramp', 'relay', 'robot', 'rocket', 'rotor', 'route',
-  'scale', 'score', 'screw', 'sensor', 'servo', 'shaft', 'shell', 'shift',
-  'signal', 'solar', 'space', 'spark', 'speed', 'spool', 'sprint', 'stack',
-  'steel', 'storm', 'swift', 'switch', 'table', 'team', 'tile', 'timer',
-  'torque', 'track', 'train', 'tread', 'trophy', 'truss', 'turbo', 'valve',
-  'vector', 'vision', 'wedge', 'wheel', 'winch', 'zone'
-];
-
-const PASSWORD_WORD_COUNT = 3;
-const PASSWORD_DIGIT_FLOOR = 1000;
-const PASSWORD_DIGIT_CEILING = 10000;
-
-/**
- * Search space of `generateTemporaryPassword`, in bits.
+ * The starter password every coach-provisioned account gets, on creation and on
+ * a coach's reset. A product decision (2026-10-10): one password a coach can
+ * say out loud, in place of a generated one per member.
  *
- * Three words out of 94 plus four digits is ~33 bits — far below what a stored
- * credential would need, and deliberately so: the shape has to survive being
- * read aloud at a practice table. It is safe here because the password is
- * single-use in practice (`mustSetPassword` forces a change before the member
- * reaches any team data), because Firebase Auth throttles password sign-in per
- * account and per IP, and because no hash of it is ever stored anywhere an
- * attacker could work offline. Lengthen the word count, not the alphabet, if
- * that ever stops being true.
+ * It is not a secret — it is the same for every team and it is in this file —
+ * so until a member signs in and replaces it, their email address alone opens
+ * the account. What bounds that: `mustSetPassword` keeps such an account behind
+ * `PasswordSetupGate` on the client, `setInitialPassword` is the only way past
+ * it, and `MIN_MEMBER_PASSWORD_LENGTH` stops anyone choosing this value as
+ * their own. Coaches should ask members to sign in promptly.
  */
-export function temporaryPasswordEntropyBits(): number {
-  const combinations = PASSWORD_WORDS.length ** PASSWORD_WORD_COUNT * (PASSWORD_DIGIT_CEILING - PASSWORD_DIGIT_FLOOR);
-  return Math.log2(combinations);
-}
-
-function capitalize(word: string): string {
-  return `${word[0].toUpperCase()}${word.slice(1)}`;
-}
-
-/**
- * A readable single-use password, e.g. `Falcon-Gear-Orbit-4821`.
- *
- * `randomInt` rather than `Math.random`: this is a credential, and it is the
- * only unbiased CSPRNG integer helper in the Node standard library.
- */
-export function generateTemporaryPassword(): string {
-  const words = new Set<string>();
-  // Repeats read as a typo to whoever copies this down by hand, so draw without
-  // replacement. Compared before capitalizing — the set holds the raw words.
-  while (words.size < PASSWORD_WORD_COUNT) {
-    words.add(PASSWORD_WORDS[randomInt(PASSWORD_WORDS.length)]);
-  }
-  const digits = randomInt(PASSWORD_DIGIT_FLOOR, PASSWORD_DIGIT_CEILING);
-  return `${[...words].map(capitalize).join('-')}-${digits}`;
-}
+export const DEFAULT_MEMBER_PASSWORD = 'FLL2026';
 
 /**
  * The minimum length a member's own password may be.
@@ -212,11 +165,12 @@ async function findUserByEmail(email: string) {
 const EXISTING_ACCOUNT_MESSAGE = 'That email address already has a First Pit account. Send them an invitation instead, so they can accept it themselves.';
 
 /**
- * Creates a team member's account and hands the coach a single-use password.
+ * Creates a team member's account with the starter password and hands it to
+ * the coach to pass on.
  *
- * The password is in the return value and nowhere else: not in the operation
- * receipt, not in the member's profile, not in a log line. A replay of a
- * successful call therefore cannot reproduce it, and says so.
+ * The password is in the return value and not in the operation receipt, the
+ * member's profile or a log line. A replay of a successful call creates
+ * nothing, so it returns no password either.
  */
 export async function provisionTeamMember(request: CallableRequest<Record<string, unknown>>) {
   const teamId = requireTeamId(request);
@@ -247,7 +201,7 @@ export async function provisionTeamMember(request: CallableRequest<Record<string
   // and points at it. `createUser` below is the real guard against a race.
   if (await findUserByEmail(email)) throw new HttpsError('already-exists', EXISTING_ACCOUNT_MESSAGE);
 
-  const temporaryPassword = generateTemporaryPassword();
+  const temporaryPassword = DEFAULT_MEMBER_PASSWORD;
   let created;
   try {
     // `emailVerified` stays false: nobody has proved this mailbox. Only
@@ -317,7 +271,7 @@ export async function provisionTeamMember(request: CallableRequest<Record<string
 }
 
 /**
- * Issues a fresh single-use password for an account this team provisioned.
+ * Puts an account this team provisioned back on the starter password.
  *
  * Confined by `assertProvisionedByTeam`: a coach can help the student they
  * created an account for, and can never touch the personal account of a mentor
@@ -333,11 +287,11 @@ export async function resetTeamMemberPassword(request: CallableRequest<Record<st
   const priorOperation = await operationRef.get();
   if (priorOperation.exists) {
     requireOperationReceipt(priorOperation.data() ?? {}, { teamId, actorUserId: admin.uid, kind: PASSWORD_RESET_OPERATION_KIND });
-    // The password was never stored, so a replay cannot return one.
+    // A replay changes nothing, so it hands out no password either.
     return { userId, temporaryPassword: null, replayed: true };
   }
 
-  const temporaryPassword = generateTemporaryPassword();
+  const temporaryPassword = DEFAULT_MEMBER_PASSWORD;
   // The Firestore transaction runs first so the administrative record exists
   // before the credential changes. If the Auth update then fails the audit
   // shows an attempted reset, which is what a moderation review needs to see;

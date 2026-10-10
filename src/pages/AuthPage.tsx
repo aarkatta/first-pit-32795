@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
-import { authEmailSender, completeGoogleRedirect, isDismissedPopup, resendVerificationEmail, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail, VerificationEmailDeliveryError } from '@/lib/auth';
+import { authEmailSender, completeGoogleRedirect, isDismissedPopup, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail } from '@/lib/auth';
 import { bootstrapUserProfile } from '@/lib/profile';
 import { setAccountType } from '@/lib/account-type';
 import { ACCOUNT_TYPE_OPTIONS, type AccountType } from '@/lib/domain';
@@ -53,7 +53,7 @@ function failureCode(error: unknown): string {
 }
 
 export function AuthPage() {
-  const { auth, user, status, error: authError, retry } = useAuth();
+  const { auth, status, error: authError, retry } = useAuth();
   const online = useOnlineStatus();
   const location = useLocation();
   const navigate = useNavigate();
@@ -65,8 +65,6 @@ export function AuthPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [pendingProfileUser, setPendingProfileUser] = useState<User | null>(null);
-  const [pendingVerificationUser, setPendingVerificationUser] = useState<User | null>(null);
-  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
 
   // A redirect sign-in finishes on the next page load, not in the click
   // handler that started it. AuthProvider creates the profile from its own
@@ -88,33 +86,15 @@ export function AuthPage() {
     };
   }, [auth, location.search, navigate]);
 
-  if (status === 'authenticated' && !pendingProfileUser && !pendingVerificationUser && !busy) {
-    const needsVerification = user?.providerData.some((provider) => provider.providerId === 'password') && !user.emailVerified;
+  if (status === 'authenticated' && !pendingProfileUser && !busy) {
     return (
       <section className="card auth-card">
         <p className="eyebrow">Signed in</p>
-        <h1>{needsVerification ? 'Verify your email address.' : 'Your First Pit session is ready.'}</h1>
-        <p>{needsVerification ? `Open the verification link in your inbox before accepting an email invitation. If it is not there, check your spam or junk folder${authEmailSender(auth) ? ` and search for ${authEmailSender(auth)}` : ''}.` : 'Open your team hub to continue.'}</p>
-        {verificationNotice ? <p role="status">{verificationNotice}</p> : null}
-        {needsVerification && user ? (
-          <button className="button secondary" type="button" onClick={() => void resendForSignedInUser(user)}>Resend verification email</button>
-        ) : null}
+        <h1>Your First Pit session is ready.</h1>
+        <p>Open your team hub to continue.</p>
         <Link className="button" to="/team">Open your team</Link>
       </section>
     );
-  }
-
-  async function resendForSignedInUser(currentUser: User) {
-    setBusy(true);
-    setVerificationNotice(null);
-    try {
-      await resendVerificationEmail(currentUser, destination());
-      setVerificationNotice('A new verification email has been sent.');
-    } catch {
-      setVerificationNotice('The verification email could not be sent. Check your connection and try again.');
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function bootstrapPendingProfile(user: User): Promise<boolean> {
@@ -217,15 +197,6 @@ export function AuthPage() {
         setMessage(recoveryNotice(authEmailSender(auth)));
       }
     } catch (requestError) {
-      if (requestError instanceof VerificationEmailDeliveryError) {
-        setPendingVerificationUser(requestError.user);
-        setRequestState({
-          variant: 'error',
-          title: 'Verification email not sent',
-          message: 'Your account was created, but the verification email could not be sent. Retry without creating another account.'
-        });
-        return;
-      }
       const nextState = getRequestState(requestError, online);
       setRequestState(nextState.variant === 'error'
         ? { ...nextState, title: 'Authentication failed', message: authErrorMessage(requestError) }
@@ -237,7 +208,7 @@ export function AuthPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pendingProfileUser || pendingVerificationUser) {
+    if (pendingProfileUser) {
       retryAuthentication();
       return;
     }
@@ -245,26 +216,6 @@ export function AuthPage() {
   }
 
   function retryAuthentication() {
-    if (pendingVerificationUser) {
-      const currentUser = pendingVerificationUser;
-      setBusy(true);
-      setRequestState(null);
-      void resendVerificationEmail(currentUser, destination())
-        .then(async () => {
-          setPendingVerificationUser(null);
-          setPendingProfileUser(currentUser);
-          if (await bootstrapPendingProfile(currentUser)) navigate('/team', { replace: true });
-        })
-        .catch(() => {
-          setRequestState({
-            variant: 'error',
-            title: 'Verification email not sent',
-            message: 'The verification email still could not be sent. Check your connection and try again.'
-          });
-        })
-        .finally(() => setBusy(false));
-      return;
-    }
     if (pendingProfileUser) {
       setRequestState(null);
       void bootstrapPendingProfile(pendingProfileUser).then((ready) => {
@@ -276,9 +227,8 @@ export function AuthPage() {
     retry();
   }
 
-  const title = pendingVerificationUser
-    ? 'Send your verification email'
-    : pendingProfileUser ? 'Finish setting up your account'
+  const title = pendingProfileUser
+    ? 'Finish setting up your account'
     : mode === 'signIn' ? 'Sign in to First Pit' : mode === 'signUp' ? 'Create your account' : 'Recover your account';
 
   return (
@@ -315,7 +265,7 @@ export function AuthPage() {
         {requestState ? <StatePanel {...requestState} actionLabel="Try again" onAction={retryAuthentication} autoFocus /> : null}
         {message ? <StatePanel variant="success" title="Check your inbox" message={message} /> : null}
         <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-        {mode === 'signUp' && !pendingProfileUser && !pendingVerificationUser ? (
+        {mode === 'signUp' && !pendingProfileUser ? (
           <label>I am a
             <select value={accountType} onChange={(event) => setAccountTypeChoice(event.target.value as AccountType | '')} required>
               <option value="">Choose…</option>
@@ -325,8 +275,8 @@ export function AuthPage() {
           </label>
         ) : null}
         {mode !== 'recover' ? <label>Password<input type="password" autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /></label> : null}
-        <button className="submit-button" type="submit" disabled={busy} aria-label={busy ? 'Working' : pendingVerificationUser ? 'Retry verification email' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'}>{busy ? 'Working…' : pendingVerificationUser ? 'Retry verification email' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'} <span aria-hidden="true">→</span></button>
-        {mode !== 'recover' && !pendingProfileUser && !pendingVerificationUser ? (
+        <button className="submit-button" type="submit" disabled={busy} aria-label={busy ? 'Working' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'}>{busy ? 'Working…' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'} <span aria-hidden="true">→</span></button>
+        {mode !== 'recover' && !pendingProfileUser ? (
           <>
             <div className="auth-divider"><span>or</span></div>
             <button className="google-button" type="button" onClick={() => void submitGoogle()} disabled={busy}>

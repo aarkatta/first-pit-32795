@@ -27,16 +27,6 @@ import { publicWebOrigin } from './public-origin';
 
 export { isNativeShell };
 
-export class VerificationEmailDeliveryError extends Error {
-  readonly user: User;
-
-  constructor(user: User, cause: unknown) {
-    super('The account was created, but the verification email could not be sent.', { cause });
-    this.name = 'VerificationEmailDeliveryError';
-    this.user = user;
-  }
-}
-
 /**
  * IndexedDB first, falling back to localStorage.
  *
@@ -96,14 +86,16 @@ async function sendVerification(user: User, next?: string | null): Promise<void>
   }
 }
 
+/**
+ * Creates the account and nothing more.
+ *
+ * First Pit does not verify email addresses to let somebody in: a new account
+ * reaches the app immediately. The one place ownership of a mailbox still has
+ * to be proved is accepting an email invitation, and `JoinTeamPage` sends that
+ * mail itself when it is needed, so sign-up has no reason to.
+ */
 export async function signUpWithEmail(auth: Auth, email: string, password: string): Promise<UserCredential> {
-  const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  try {
-    await sendVerification(credential.user);
-  } catch (error) {
-    throw new VerificationEmailDeliveryError(credential.user, error);
-  }
-  return credential;
+  return createUserWithEmailAndPassword(auth, email.trim(), password);
 }
 
 export function resendVerificationEmail(user: User, next?: string | null): Promise<void> {
@@ -202,18 +194,6 @@ export function isDismissedPopup(error: unknown): boolean {
     || code.includes('auth/cancelled-popup-request')
     // The native Google sheet (iOS shell) reports a dismissal this way.
     || /user canceled the sign-in flow/i.test(code);
-}
-
-/**
- * Whether this account still has to prove it owns its email address.
- *
- * Only password accounts can: a federated provider such as Google has already
- * verified the address, and an account with no password provider has no
- * verification step to complete.
- */
-export function requiresEmailVerification(user: User | null): boolean {
-  if (!user || user.emailVerified) return false;
-  return hasPasswordProvider(user);
 }
 
 /**

@@ -48,9 +48,9 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Private screen')).toBeInTheDocument();
   });
 
-  it('blocks an authenticated password user whose email is still unverified', () => {
-    // An unverified address is how a team invitation could be accepted by
-    // someone who does not control it, so this gates the whole app, not a banner.
+  it('lets an unverified password account into the app', () => {
+    // Verification is no longer a condition of entry. Accepting an email
+    // invitation still needs a proven mailbox, and JoinTeamPage asks there.
     useAuth.mockReturnValue({
       status: 'authenticated',
       error: null,
@@ -58,8 +58,7 @@ describe('ProtectedRoute', () => {
       user: { email: 'coach@example.com', emailVerified: false, providerData: [{ providerId: 'password' }] }
     });
     renderRoute();
-    expect(screen.getByText(/confirm coach@example.com/i)).toBeInTheDocument();
-    expect(screen.queryByText('Private screen')).not.toBeInTheDocument();
+    expect(screen.getByText('Private screen')).toBeInTheDocument();
   });
 
   it('lets a verified user and a Google user straight through', () => {
@@ -112,11 +111,9 @@ describe('ProtectedRoute', () => {
     renderRoute();
     expect(screen.getByRole('heading', { name: /choose your own password/i })).toBeInTheDocument();
     expect(screen.queryByText('Private screen')).not.toBeInTheDocument();
-    // The password step comes first: it is the one they can actually complete.
-    expect(screen.queryByText(/confirm ada@example.com/i)).not.toBeInTheDocument();
   });
 
-  it('exempts a provisioned member from the verification gate once their password is theirs', () => {
+  it('lets a provisioned member through once their password is theirs', () => {
     // Nobody ever mailed them a verification link, and `emailVerified` stays
     // false on purpose — see useProvisionedAccount.
     useAuth.mockReturnValue({

@@ -158,7 +158,7 @@ const teamResponse = await expectStatus(
   {
     method: 'POST',
     headers: { ...authHeader(firstUserToken), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: { name: 'Phase 1 Verification Team' } })
+    body: JSON.stringify({ data: { name: 'Phase 1 Verification Team', teamNumber: '1001' } })
   }
 );
 const teamData = teamResponse.data ?? teamResponse.result ?? teamResponse;
@@ -174,7 +174,7 @@ const outsiderTeamResponse = await expectStatus(
   {
     method: 'POST',
     headers: { ...authHeader(secondUserToken), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: { name: 'Phase 1 Outsider Team' } })
+    body: JSON.stringify({ data: { name: 'Phase 1 Outsider Team', teamNumber: '1002' } })
   }
 );
 const outsiderTeamId = (outsiderTeamResponse.data ?? outsiderTeamResponse.result ?? outsiderTeamResponse)?.teamId;

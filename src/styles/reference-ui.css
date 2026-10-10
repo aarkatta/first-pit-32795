@@ -1450,6 +1450,8 @@ textarea:focus-visible,
 
 /* The one screen where a starter password is visible. */
 .credentials-card { border-left: 4px solid #e0a03a; }
+.credentials-card__success { margin: 14px 0; padding: 16px 18px; border: 1px solid #cfe3bf; border-left: 5px solid var(--success); border-radius: 10px; background: #f6faef; color: var(--text); font-size: 18px; font-weight: 700; line-height: 1.5; }
+.credentials-card__success strong:first-child { color: var(--success); }
 .credentials-card__fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 18px 0; }
 .credentials-card__fields dt { color: var(--text-soft); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .credentials-card__fields dd { margin: 0; }

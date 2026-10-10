@@ -1,10 +1,9 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { StatePanel } from './StatePanel';
-import { EmailVerificationGate } from './EmailVerificationGate';
 import { PasswordSetupGate } from './PasswordSetupGate';
 import { useAuth } from '@/lib/auth-context';
-import { hasPasswordProvider, requiresEmailVerification } from '@/lib/auth';
+import { hasPasswordProvider } from '@/lib/auth';
 import { useProvisionedAccount } from '@/lib/account-type';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
@@ -45,19 +44,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   // A coach-provisioned member still using the password their coach passed on.
-  // Ahead of the verification gate: this is the step they can actually complete,
-  // and no verification mail was ever sent to them.
+  // The only gate left in front of the app: an unverified email address does
+  // NOT hold anyone out, because nothing a signed-in member can reach depends
+  // on a proven mailbox. The one thing that does — accepting an email
+  // invitation — asks for verification on `JoinTeamPage`, at the moment it
+  // matters, instead of blocking the whole app up front.
   if (provisioning.mustSetPassword && hasPasswordProvider(user)) {
     return <PasswordSetupGate user={user!} auth={auth} online={online} />;
-  }
-
-  // Authenticated but unproven: a password account that never opened its
-  // verification link gets the gate instead of the app. A provisioned member is
-  // exempt — their address was never mailed, and `emailVerified` stays false on
-  // purpose, which still makes them verify before joining a second team.
-  if (requiresEmailVerification(user) && !provisioning.provisionedByTeamId) {
-    const next = `${location.pathname}${location.search}${location.hash}`;
-    return <EmailVerificationGate user={user!} auth={auth} online={online} next={next} />;
   }
 
   return children;

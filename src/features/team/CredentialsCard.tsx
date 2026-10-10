@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { copyToClipboard } from '@/lib/clipboard';
 import { credentialsMessage, credentialsSubject } from '@/lib/member-credentials';
+import { publicWebOrigin } from '@/lib/public-origin';
 import type { ProvisionedMember } from '@/lib/team-members';
 
 type CredentialsCardProps = {
   member: ProvisionedMember;
+  /** Whether the card follows Add a member or Reset password. */
+  kind?: 'added' | 'reset';
   teamName: string;
   teamNumber?: string | null;
   coachName?: string | null;
@@ -12,19 +15,22 @@ type CredentialsCardProps = {
 };
 
 /**
- * The one time the starter password is visible.
+ * What a coach passes on after adding a member or resetting their password.
  *
- * Nothing stored it — not the operation receipt, not the member's profile — so
- * leaving this screen really does discard it, and the only way back to a usable
- * credential is Reset password on the roster. The card says so rather than
- * letting a coach discover it later.
+ * The starter password is the same for every member (`DEFAULT_MEMBER_PASSWORD`
+ * in `functions/src/team-members.ts`), so the card's job is the message and the
+ * nudge to sign in soon — an account still on it is only as private as the
+ * member's email address.
+ *
+ * The highlighted confirmation is for the coach only: it is not part of
+ * `credentialsMessage`, the text they copy and send on.
  */
-export function CredentialsCard({ member, teamName, teamNumber, coachName, onDone }: CredentialsCardProps) {
+export function CredentialsCard({ member, kind = 'added', teamName, teamNumber, coachName, onDone }: CredentialsCardProps) {
   const [copied, setCopied] = useState<'message' | 'password' | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
 
   if (!member.temporaryPassword) {
-    // A replayed provision: the server keeps no copy either.
+    // A replayed request: nothing was created or reset this time.
     return (
       <section className="feature-panel" aria-labelledby="credentials-heading">
         <span className="eyebrow">ALREADY CREATED</span>
@@ -52,12 +58,15 @@ export function CredentialsCard({ member, teamName, teamNumber, coachName, onDon
 
   return (
     <section className="feature-panel credentials-card" aria-labelledby="credentials-heading">
-      <span className="eyebrow">SHOWN ONCE</span>
-      <h3 id="credentials-heading">{member.displayName} is on the team</h3>
+      <span className="eyebrow">STARTER PASSWORD</span>
+      <h3 id="credentials-heading">{kind === 'reset' ? `${member.displayName}'s password was reset` : `${member.displayName} is on the team`}</h3>
+      <p className="credentials-card__success" role="status">
+        <strong>{kind === 'reset' ? 'Password reset successfully!' : 'Member added successfully!'}</strong>{' '}
+        They can log in using their email and the temporary password: <strong>{member.temporaryPassword}</strong> on{' '}
+        <strong>{new URL(publicWebOrigin()).host}</strong>. They will be required to change it upon their {kind === 'reset' ? 'next' : 'first'} login.
+      </p>
       <p>
-        Send them these details from your own email. This is the only time the password
-        is shown — nothing here is stored, so if you lose it, issue a new one with
-        <strong> Reset password</strong> on the roster.
+        First Pit does not email them — pass these details on yourself, and ask them to sign in soon.
       </p>
 
       <dl className="credentials-card__fields">

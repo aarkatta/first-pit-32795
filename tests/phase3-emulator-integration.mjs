@@ -73,7 +73,7 @@ const parent = await createUser(`phase3-parent-${suffix}@example.com`);
 const outsider = await createUser(`phase3-outsider-${suffix}@example.com`);
 // Only coach and mentor accounts create teams; the type is declared once.
 await call('setAccountType', coach.idToken, { accountType: 'coach' });
-const team = await call('createTeam', coach.idToken, { name: `Phase 3 Integration ${suffix}` });
+const team = await call('createTeam', coach.idToken, { name: `Phase 3 Integration ${suffix}`, teamNumber: '3001' });
 const teamId = team.teamId;
 const invitation = await call('createInvitation', coach.idToken, { teamId, email: student.email, role: 'student' });
 await call('acceptInvitation', student.idToken, { invitationId: invitation.invitationId });
@@ -434,7 +434,7 @@ await callFails('importProjectTasks', coach.idToken, { ...importInput, operation
 await callFails('importProjectTasks', coach.idToken, { ...importInput, operationId: `bad-column-${suffix}`, columnId: 'no-such-column' }, 'NOT_FOUND');
 await callFails('createProjectFromTemplate', coach.idToken, { teamId, templateId: saved.templateId }, 'NOT_FOUND');
 
-const migrationTeam = await call('createTeam', coach.idToken, { name: `Migration guard ${suffix}` });
+const migrationTeam = await call('createTeam', coach.idToken, { name: `Migration guard ${suffix}`, teamNumber: '3002' });
 const migrationInvitation = await call('createInvitation', coach.idToken, { teamId: migrationTeam.teamId, email: student.email, role: 'student' });
 await call('acceptInvitation', student.idToken, { invitationId: migrationInvitation.invitationId });
 await callFails('ensureDefaultProject', student.idToken, { teamId: migrationTeam.teamId }, 'PERMISSION_DENIED');

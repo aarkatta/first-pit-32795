@@ -10,18 +10,9 @@ const mocks = vi.hoisted(() => ({
   signInWithGoogle: vi.fn(),
   completeGoogleRedirect: vi.fn(),
   isDismissedPopup: vi.fn(),
-  resendVerificationEmail: vi.fn(),
   sendPasswordRecovery: vi.fn(),
   bootstrapUserProfile: vi.fn(),
-  setAccountType: vi.fn(),
-  VerificationEmailDeliveryError: class VerificationEmailDeliveryError extends Error {
-    user: unknown;
-
-    constructor(user: unknown) {
-      super('verification failed');
-      this.user = user;
-    }
-  }
+  setAccountType: vi.fn()
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: mocks.useAuth }));
@@ -32,8 +23,6 @@ vi.mock('@/lib/auth', () => ({
   signInWithGoogle: mocks.signInWithGoogle,
   completeGoogleRedirect: mocks.completeGoogleRedirect,
   isDismissedPopup: mocks.isDismissedPopup,
-  resendVerificationEmail: mocks.resendVerificationEmail,
-  VerificationEmailDeliveryError: mocks.VerificationEmailDeliveryError,
   sendPasswordRecovery: mocks.sendPasswordRecovery
 }));
 vi.mock('@/lib/profile', () => ({ bootstrapUserProfile: mocks.bootstrapUserProfile }));
@@ -51,7 +40,6 @@ beforeEach(() => {
   mocks.signInWithEmail.mockResolvedValue({});
   mocks.signUpWithEmail.mockResolvedValue({ user: { uid: 'new-user' } });
   mocks.sendPasswordRecovery.mockResolvedValue(undefined);
-  mocks.resendVerificationEmail.mockResolvedValue(undefined);
   mocks.bootstrapUserProfile.mockResolvedValue(undefined);
   mocks.setAccountType.mockResolvedValue({ accountType: 'coach', changed: true });
   mocks.signInWithGoogle.mockResolvedValue({ user: { uid: 'google-user' } });
@@ -204,30 +192,15 @@ describe('AuthPage', () => {
     expect(mocks.signUpWithEmail).toHaveBeenCalledTimes(1);
   });
 
-  it('retries verification delivery without repeating account creation', async () => {
-    const user = { uid: 'created-user' };
-    mocks.signUpWithEmail.mockRejectedValueOnce(new mocks.VerificationEmailDeliveryError(user));
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
-    fireEvent.change(screen.getByLabelText(/I am a/), { target: { value: 'coach' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-
-    expect(await screen.findByText(/account was created, but the verification email could not be sent/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/team'));
-    expect(mocks.bootstrapUserProfile).toHaveBeenCalledWith(user);
-    expect(mocks.signUpWithEmail).toHaveBeenCalledTimes(1);
-  });
-
-  it('offers a resend action to a signed-in password user with an unverified email', async () => {
+  it('sends a signed-in password user with an unverified email straight to their team', () => {
+    // Nothing is asked of them here any more: verification is not a condition
+    // of using First Pit, only of accepting an email invitation.
     const user = { emailVerified: false, providerData: [{ providerId: 'password' }] };
     mocks.useAuth.mockReturnValue({ auth: {}, user, status: 'authenticated', error: null, retry: vi.fn() });
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Resend verification email' }));
-    await waitFor(() => expect(mocks.resendVerificationEmail).toHaveBeenCalledWith(user, '/team'));
-    expect(screen.getByRole('status')).toHaveTextContent(/new verification email has been sent/i);
+    expect(screen.getByRole('heading', { name: /session is ready/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open your team' })).toHaveAttribute('href', '/team');
+    expect(screen.queryByRole('button', { name: /verification/i })).not.toBeInTheDocument();
   });
 });

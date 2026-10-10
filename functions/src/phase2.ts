@@ -116,14 +116,14 @@ export function requireTeamName(value: unknown): string {
 }
 
 /**
- * A FIRST LEGO League team number: optional (teams are often numbered after
- * they register), otherwise 1–8 digits. Empty input clears it.
+ * A FIRST LEGO League team number: required, 1–8 digits. Teams created before
+ * it became mandatory may still store null until a coach next saves the details.
  */
-export function optionalTeamNumber(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
+export function requireTeamNumber(value: unknown): string {
+  if (value === undefined || value === null) throw new HttpsError('invalid-argument', 'Team number is required.');
   const text = typeof value === 'number' && Number.isInteger(value) ? String(value) : typeof value === 'string' ? value.trim() : null;
   if (text === null) throw new HttpsError('invalid-argument', 'Team number must be digits only.');
-  if (text === '') return null;
+  if (text === '') throw new HttpsError('invalid-argument', 'Team number is required.');
   if (!/^\d{1,8}$/.test(text)) throw new HttpsError('invalid-argument', 'Team number must be 1 to 8 digits.');
   return text;
 }
