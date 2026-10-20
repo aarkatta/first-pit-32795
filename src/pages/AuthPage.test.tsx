@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   signInWithGoogle: vi.fn(),
   completeGoogleRedirect: vi.fn(),
   isDismissedPopup: vi.fn(),
+  offersGoogleSignIn: vi.fn(),
   sendPasswordRecovery: vi.fn(),
   bootstrapUserProfile: vi.fn(),
   setAccountType: vi.fn()
@@ -23,6 +24,7 @@ vi.mock('@/lib/auth', () => ({
   signInWithGoogle: mocks.signInWithGoogle,
   completeGoogleRedirect: mocks.completeGoogleRedirect,
   isDismissedPopup: mocks.isDismissedPopup,
+  offersGoogleSignIn: mocks.offersGoogleSignIn,
   sendPasswordRecovery: mocks.sendPasswordRecovery
 }));
 vi.mock('@/lib/profile', () => ({ bootstrapUserProfile: mocks.bootstrapUserProfile }));
@@ -46,6 +48,7 @@ beforeEach(() => {
   // No redirect in flight on a normal page load.
   mocks.completeGoogleRedirect.mockResolvedValue(null);
   mocks.isDismissedPopup.mockReturnValue(false);
+  mocks.offersGoogleSignIn.mockReturnValue(true);
 });
 
 describe('AuthPage', () => {
@@ -90,6 +93,27 @@ describe('AuthPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
 
     expect(screen.queryByRole('button', { name: /google/i })).toBeNull();
+  });
+
+  it('offers no Google sign-in in the iOS app', () => {
+    mocks.offersGoogleSignIn.mockReturnValue(false);
+    renderPage();
+    expect(screen.queryByRole('button', { name: /google/i })).toBeNull();
+    expect(screen.queryByText('or')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
+    expect(screen.queryByRole('button', { name: /google/i })).toBeNull();
+  });
+
+  it('sends a Google account to the website when recovering in the iOS app', async () => {
+    mocks.offersGoogleSignIn.mockReturnValue(false);
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'recover@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send recovery email' }));
+
+    const notice = await screen.findByText(/recovery email has been sent/i);
+    expect(notice.textContent).toMatch(/First Pit website/);
   });
 
   it('signs in with email and password', async () => {

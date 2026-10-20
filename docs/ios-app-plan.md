@@ -24,7 +24,7 @@ In order; each links to the phase that owns it.
 1. **Commit Phases A–C** on `launch/v1-hardening` (nothing is committed yet).
    The TestFlight build was archived from this uncommitted tree.
 2. **Run the on-device checks** on the TestFlight build (Phase B list):
-   Google and email sign-in, the verification email link, relaunch keeps the
+   email sign-in (no Google button), the verification email link, relaunch keeps the
    session, files and links in the in-app browser, template and CSV to the
    share sheet, **Send invite**, keyboard, and the offline banner. Note any
    failures; they become fixes before the next build.
@@ -112,22 +112,30 @@ checks.
 8. **Tests.** Done: `native-links`, `public-origin`, and native paths in the
    `auth` tests. `verify:static` is green (505 tests).
 
-**Sign in with Apple is out of scope** (decided 2026-09-18). Google is the only
-third-party sign-in; email and password stay as they are. Review risk: App
-Store guideline 4.8 expects an app offering a third-party login such as Google
-to also offer a privacy-focused login option, and Sign in with Apple is the
-usual way to meet it. If review rejects the build on 4.8, the fallback is to
-add Sign in with Apple then, or to hide Google sign-in in the shell and keep
-email and password only.
+**Sign in with Apple is out of scope** (decided 2026-09-18), and so, since the
+4.8 rejection, is Google in the shell. App Review rejected build 1.0 (5) on
+2026-10-13 under guideline 4.8 (Login Services): an app offering a third-party
+login such as Google must also offer a privacy-focused one. The fix chosen
+(2026-10-19) is the guideline's own exemption for an app that "exclusively uses
+your company's own account setup and sign-in systems": `offersGoogleSignIn()`
+(`src/lib/auth.ts`) is false in the shell, so `AuthPage` shows email and
+password only (coach-provisioned accounts included). The web keeps Google. A
+member whose account has only Google signs in on the website; the recovery
+notice in the app says so. The native Google transport, the plugin and the
+reversed-client-ID URL scheme stay in place, unused, so adding Sign in with
+Apple later can bring Google back. Doing that also needs: the Sign in with Apple
+capability on `com.firstpit.app`, the Apple provider in Firebase, token
+revocation on account deletion (5.1.1(v)), and an answer for "Hide My Email"
+relay addresses, which never match an email invitation (`acceptInvitation`
+compares addresses).
 
-**Exit criteria:** email and Google sign-in, every external link and every
+**Exit criteria:** email sign-in, every external link and every
 download work in the shell on a device; no web regressions.
 **Status:** built; the simulator build launches cleanly with the plugins
 linked, and the TestFlight build installs on a device. Still to check by hand on
 the TestFlight build:
 
-- Google sign-in end to end (sheet opens, account chosen, lands signed in),
-  and sign-out then sign-in shows the account picker again.
+- The sign-in and create-account screens show no Google button (4.8).
 - Email sign-up sends a verification email whose link opens
   `https://www.first-pit.com/auth/action` (needs `www.first-pit.com` in the
   Firebase Auth authorized domains).

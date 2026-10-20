@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { StatePanel } from '@/components/StatePanel';
 import { useAuth } from '@/lib/auth-context';
-import { authEmailSender, completeGoogleRedirect, isDismissedPopup, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail } from '@/lib/auth';
+import { authEmailSender, completeGoogleRedirect, isDismissedPopup, offersGoogleSignIn, sendPasswordRecovery, signInWithEmail, signInWithGoogle, signUpWithEmail } from '@/lib/auth';
 import { bootstrapUserProfile } from '@/lib/profile';
 import { setAccountType } from '@/lib/account-type';
 import { ACCOUNT_TYPE_OPTIONS, type AccountType } from '@/lib/domain';
@@ -39,10 +39,14 @@ function authErrorMessage(error: unknown) {
   return 'That request could not be completed. Try again.';
 }
 
-function recoveryNotice(sender: string | null): string {
+function recoveryNotice(sender: string | null, googleOffered: boolean): string {
   const sent = 'If an account exists for that address, a recovery email has been sent.';
   const where = sender ? ` Check your spam or junk folder and search for ${sender}.` : ' Check your spam or junk folder.';
-  return `${sent}${where} If you created your account with Google, sign in with Google instead — that account has no password to reset.`;
+  // The iOS app has no Google button, so a Google account is pointed at the website.
+  const google = googleOffered
+    ? ' If you created your account with Google, sign in with Google instead — that account has no password to reset.'
+    : ' If you created your account with Google, sign in with Google on the First Pit website — the app signs in with email and password only, and that account has no password to reset.';
+  return `${sent}${where}${google}`;
 }
 
 /** ` (permission-denied)`, or nothing when the error carries no Firebase code. */
@@ -65,6 +69,7 @@ export function AuthPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState | null>(null);
   const [pendingProfileUser, setPendingProfileUser] = useState<User | null>(null);
+  const googleOffered = offersGoogleSignIn();
 
   // A redirect sign-in finishes on the next page load, not in the click
   // handler that started it. AuthProvider creates the profile from its own
@@ -194,7 +199,7 @@ export function AuthPage() {
         // address on a domain they had never corresponded with. Two accounts
         // also had no password to recover — Google sign-in creates no password
         // credential — and enumeration protection makes both cases look alike.
-        setMessage(recoveryNotice(authEmailSender(auth)));
+        setMessage(recoveryNotice(authEmailSender(auth), googleOffered));
       }
     } catch (requestError) {
       const nextState = getRequestState(requestError, online);
@@ -276,7 +281,7 @@ export function AuthPage() {
         ) : null}
         {mode !== 'recover' ? <label>Password<input type="password" autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /></label> : null}
         <button className="submit-button" type="submit" disabled={busy} aria-label={busy ? 'Working' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'}>{busy ? 'Working…' : pendingProfileUser ? 'Retry profile setup' : mode === 'signIn' ? 'Sign in' : mode === 'signUp' ? 'Create account' : 'Send recovery email'} <span aria-hidden="true">→</span></button>
-        {mode !== 'recover' && !pendingProfileUser ? (
+        {googleOffered && mode !== 'recover' && !pendingProfileUser ? (
           <>
             <div className="auth-divider"><span>or</span></div>
             <button className="google-button" type="button" onClick={() => void submitGoogle()} disabled={busy}>

@@ -137,6 +137,20 @@ function authErrorCode(error: unknown): string {
   return error instanceof Error ? ((error as { code?: string }).code ?? error.message) : '';
 }
 
+/**
+ * Whether the sign-in screen offers Google at all.
+ *
+ * Not in the iOS shell. App Store guideline 4.8 requires an app that offers a
+ * third-party login such as Google to also offer a privacy-focused one (in
+ * practice Sign in with Apple); review rejected build 1.0 (5) on it
+ * (2026-10-13). An app that signs in only with its own accounts is exempt, so
+ * the shell offers email and password alone. The web keeps Google, and the
+ * native transport below stays in place for when Apple sign-in is added.
+ */
+export function offersGoogleSignIn(): boolean {
+  return !isNativeShell();
+}
+
 function googleProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   // Always let the user pick an account instead of silently reusing the last one.
