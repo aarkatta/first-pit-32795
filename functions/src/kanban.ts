@@ -18,11 +18,8 @@ import {
   requireTeamMember,
   type TeamAdmin
 } from './phase2.js';
-import { DASHBOARD_AREAS } from './phase7.js';
+import { ALL_AREA_IDS, teamProgram } from './programs.js';
 import { buildStandardPlan } from './standard-plan.js';
-
-/** The judging areas a category may be tied to; the dashboard counts the same ids. */
-const AREA_IDS: readonly string[] = DASHBOARD_AREAS.map((area) => area.id);
 
 type KanbanRequest = CallableRequest<Record<string, unknown>>;
 
@@ -174,7 +171,7 @@ export function projectCategories(project: DocumentData): ProjectCategory[] {
       id: requireString(record.id, 'Category ID', 128),
       name: requireText(record.name, 'Category name', 60),
       color: COLUMN_COLORS.includes(record.color as typeof COLUMN_COLORS[number]) ? String(record.color) : 'slate',
-      areaId: typeof record.areaId === 'string' && AREA_IDS.includes(record.areaId) ? record.areaId : null,
+      areaId: typeof record.areaId === 'string' && ALL_AREA_IDS.includes(record.areaId) ? record.areaId : null,
       goalId: typeof record.goalId === 'string' && record.goalId ? record.goalId : null
     };
   });
@@ -191,7 +188,7 @@ function requireCategoryInput(value: unknown, index: number): { id: string | nul
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpsError('invalid-argument', `Category ${index + 1} is invalid.`);
   const record = value as Record<string, unknown>;
   const areaId = record.areaId === undefined || record.areaId === null || record.areaId === '' ? null : requireString(record.areaId, 'Category judging area', 64);
-  if (areaId !== null && !AREA_IDS.includes(areaId)) throw new HttpsError('invalid-argument', 'Category judging area is not a known area.');
+  if (areaId !== null && !ALL_AREA_IDS.includes(areaId)) throw new HttpsError('invalid-argument', 'Category judging area is not a known area.');
   return {
     id: record.id === undefined || record.id === null || record.id === '' ? null : requireString(record.id, 'Category ID', 128),
     name: requireText(record.name, `Category ${index + 1} name`, 60),
@@ -329,7 +326,8 @@ export const ensureDefaultProject = async (request: KanbanRequest) => {
   let created = false;
   let seededTaskCount = 0;
   if (!projectSnapshot.exists) {
-    const plan = buildStandardPlan();
+    const program = teamProgram((await db.doc(`teams/${teamId}`).get()).data());
+    const plan = buildStandardPlan(program);
     const seedRefs = plan.cards.map(() => db.collection('tasks').doc());
     await db.runTransaction(async (transaction) => {
       await assertTeamAdminInTransaction(transaction, teamId, actor);
@@ -348,7 +346,7 @@ export const ensureDefaultProject = async (request: KanbanRequest) => {
         teamId,
         createdBy: actor.uid,
         name: 'Team Board',
-        description: seed ? 'The standard FLL season plan. Edit, add or remove tasks to fit your team.' : 'Shared team work carried forward from the Tracker.',
+        description: seed ? `The standard ${program.toUpperCase()} season plan. Edit, add or remove tasks to fit your team.` : 'Shared team work carried forward from the Tracker.',
         columns: DEFAULT_PROJECT_COLUMNS,
         categories: seed ? plan.categories : [],
         completedColumnId: 'completed',

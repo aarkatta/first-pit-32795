@@ -1,6 +1,7 @@
 import { dateInputToIso } from './dates';
 import type { ProjectCategory, ProjectColumn, SubtaskStatus, TaskPriority } from './domain';
 import type { ImportTaskRowInput } from './kanban-service';
+import { PROGRAM_AREAS, type TeamProgram } from './programs';
 
 /**
  * Turns a coach's spreadsheet of predefined tasks into rows the
@@ -10,14 +11,8 @@ import type { ImportTaskRowInput } from './kanban-service';
  * what will and will not be imported. The server re-validates all of it.
  */
 
-/** Mirrors `DASHBOARD_AREAS` in functions/src/phase7.ts; the server rejects any other id. */
-export const TASK_AREAS = [
-  { id: 'innovation-project', label: 'Innovation project' },
-  { id: 'robot-design', label: 'Robot design' },
-  { id: 'robot-game', label: 'Robot game' },
-  { id: 'core-values', label: 'Core values' }
-] as const;
-export type TaskAreaId = typeof TASK_AREAS[number]['id'];
+/** Any program's area id; `PROGRAM_AREAS` (src/lib/programs.ts) lists them. */
+export type TaskAreaId = string;
 
 /** Matches the server's per-import cap (one board column page). */
 export const MAX_IMPORT_ROWS = 50;
@@ -71,19 +66,30 @@ const STATUS_ALIASES = new Map<string, string>([
 ]);
 
 /**
- * The four categories the standard template ships map one-to-one onto the
- * judging areas, so a sheet that names them needs no Area column: the dashboard
- * fills in from the category alone.
+ * The categories each standard template ships map onto the program's areas,
+ * so a sheet that names them needs no Area column: the dashboard fills in from
+ * the category alone.
  */
-const CATEGORY_AREA_HINTS: Array<{ match: RegExp; area: TaskAreaId }> = [
-  { match: /core value|project mgmt|project management|teamwork/i, area: 'core-values' },
-  { match: /innovation/i, area: 'innovation-project' },
-  { match: /robot design|build|mechanical|programming|code/i, area: 'robot-design' },
-  { match: /robot game|mission/i, area: 'robot-game' }
-];
+const CATEGORY_AREA_HINTS: Record<TeamProgram, Array<{ match: RegExp; area: TaskAreaId }>> = {
+  fll: [
+    { match: /core value|project mgmt|project management|teamwork/i, area: 'core-values' },
+    { match: /innovation/i, area: 'innovation-project' },
+    { match: /robot design|build|mechanical|programming|code/i, area: 'robot-design' },
+    { match: /robot game|mission/i, area: 'robot-game' }
+  ],
+  ftc: [
+    { match: /think|portfolio|notebook/i, area: 'think' },
+    { match: /control|programming|code|software|autonomous/i, area: 'control' },
+    { match: /design|cad|build|mechanical/i, area: 'design' },
+    { match: /innovat|prototyp/i, area: 'innovate' },
+    { match: /connect|mentor/i, area: 'connect' },
+    { match: /sustain|sponsor|fundrais|budget/i, area: 'sustain' },
+    { match: /reach|outreach|community/i, area: 'reach' }
+  ]
+};
 
-export function areaFromCategory(category: string): TaskAreaId | null {
-  return CATEGORY_AREA_HINTS.find((hint) => hint.match.test(category))?.area ?? null;
+export function areaFromCategory(category: string, program: TeamProgram = 'fll'): TaskAreaId | null {
+  return CATEGORY_AREA_HINTS[program].find((hint) => hint.match.test(category))?.area ?? null;
 }
 
 /** `week-01` sorts and groups; a bare `1` would sit next to `10`. */
@@ -126,12 +132,23 @@ function csvCell(value: string) {
 /** CSV fallback for anyone who cannot open the .xlsx template. */
 export const IMPORT_TEMPLATE_CSV = [IMPORT_TEMPLATE_HEADERS.join(','), ...IMPORT_TEMPLATE_EXAMPLES.map((row) => row.map(csvCell).join(','))].join('\n');
 
-const AREA_ALIASES = new Map<string, TaskAreaId>([
-  ['innovation project', 'innovation-project'], ['innovation', 'innovation-project'], ['project', 'innovation-project'], ['ip', 'innovation-project'],
-  ['robot design', 'robot-design'], ['design', 'robot-design'], ['engineering', 'robot-design'], ['rd', 'robot-design'],
-  ['robot game', 'robot-game'], ['robot', 'robot-game'], ['game', 'robot-game'], ['missions', 'robot-game'], ['rg', 'robot-game'],
-  ['core values', 'core-values'], ['core value', 'core-values'], ['cv', 'core-values'], ['teamwork', 'core-values']
-]);
+const AREA_ALIASES: Record<TeamProgram, Map<string, TaskAreaId>> = {
+  fll: new Map([
+    ['innovation project', 'innovation-project'], ['innovation', 'innovation-project'], ['project', 'innovation-project'], ['ip', 'innovation-project'],
+    ['robot design', 'robot-design'], ['design', 'robot-design'], ['engineering', 'robot-design'], ['rd', 'robot-design'],
+    ['robot game', 'robot-game'], ['robot', 'robot-game'], ['game', 'robot-game'], ['missions', 'robot-game'], ['rg', 'robot-game'],
+    ['core values', 'core-values'], ['core value', 'core-values'], ['cv', 'core-values'], ['teamwork', 'core-values']
+  ]),
+  ftc: new Map([
+    ['think', 'think'], ['portfolio', 'think'], ['engineering portfolio', 'think'], ['notebook', 'think'],
+    ['control', 'control'], ['programming', 'control'], ['code', 'control'], ['software', 'control'], ['autonomous', 'control'],
+    ['design', 'design'], ['cad', 'design'], ['build', 'design'], ['mechanical', 'design'],
+    ['innovate', 'innovate'], ['innovation', 'innovate'],
+    ['connect', 'connect'], ['mentors', 'connect'],
+    ['sustain', 'sustain'], ['sustainability', 'sustain'], ['sponsors', 'sustain'], ['fundraising', 'sustain'],
+    ['reach', 'reach'], ['outreach', 'reach'], ['community', 'reach']
+  ])
+};
 
 const PRIORITY_ALIASES = new Map<string, TaskPriority>([
   ['low', 'low'], ['medium', 'medium'], ['med', 'medium'], ['normal', 'medium'], ['high', 'high'], ['urgent', 'urgent'], ['critical', 'urgent']
@@ -154,11 +171,11 @@ export function mapHeaders(headers: string[]) {
   return { columns, unmapped };
 }
 
-/** `null` for a blank cell, `undefined` for a value that names no known area. */
-export function parseArea(value: string): TaskAreaId | null | undefined {
+/** `null` for a blank cell, `undefined` for a value that names none of the program's areas. */
+export function parseArea(value: string, program: TeamProgram = 'fll'): TaskAreaId | null | undefined {
   const normalized = normalizeHeader(value);
   if (!normalized) return null;
-  return AREA_ALIASES.get(normalized) ?? (TASK_AREAS.some((area) => area.id === value.trim()) ? value.trim() as TaskAreaId : undefined);
+  return AREA_ALIASES[program].get(normalized) ?? PROGRAM_AREAS[program].find((area) => area.id === value.trim())?.id;
 }
 
 export function parsePriority(value: string): TaskPriority | null | undefined {
@@ -231,7 +248,8 @@ export type ImportPreview = {
 };
 
 /** What the board offers, so Status and Category cells can be matched by name. */
-export type ImportContext = { columns: ProjectColumn[]; categories: ProjectCategory[] };
+/** The board a sheet imports into; `program` picks which areas its rows may name. */
+export type ImportContext = { columns: ProjectColumn[]; categories: ProjectCategory[]; program?: TeamProgram };
 
 export function matchColumn(columns: ProjectColumn[], value: string): ProjectColumn | null {
   const normalized = normalizeHeader(value);
@@ -256,6 +274,7 @@ export function buildImportPreview(table: unknown[][], context: ImportContext = 
   const { columns, unmapped } = mapHeaders(cellsOf(table[headerIndex]));
   if (columns.title === undefined) return { rows: [], missingTitleColumn: true, unmappedHeaders: unmapped, truncated: false, newCategories: [] };
   const knownCategories = new Set(context.categories.map((category) => normalizeHeader(category.name)));
+  const program = context.program ?? 'fll';
   const newCategories: string[] = [];
   let sawTaskRow = false;
 
@@ -298,11 +317,11 @@ export function buildImportPreview(table: unknown[][], context: ImportContext = 
       warnings.push('Assignee is too long to match; left unassigned.');
     }
 
-    let area = parseArea(cell('area'));
+    let area = parseArea(cell('area'), program);
     if (area === undefined) warnings.push(`Area “${cell('area')}” is not a judging area, so no area label is added.`);
     // A sheet that names its categories after the judging areas — as the
     // standard template does — needs no Area column at all.
-    if (!area && category) area = areaFromCategory(category);
+    if (!area && category) area = areaFromCategory(category, program);
     const priority = parsePriority(cell('priority'));
     if (priority === undefined) warnings.push(`Priority “${cell('priority')}” is not recognised; using medium.`);
     const dueAt = parseDueDate(cell('dueDate'));
@@ -440,5 +459,5 @@ export function toImportInput(rows: ImportRow[]): ImportTaskRowInput[] {
 }
 
 export function areaLabel(area: TaskAreaId | null): string {
-  return TASK_AREAS.find((entry) => entry.id === area)?.label ?? '—';
+  return [...PROGRAM_AREAS.fll, ...PROGRAM_AREAS.ftc].find((entry) => entry.id === area)?.label ?? '—';
 }

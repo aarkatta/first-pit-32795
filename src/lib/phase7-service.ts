@@ -1,5 +1,6 @@
 import { call } from './callable';
 import type { TeamGoal, TrackerTask } from './domain';
+import type { AreaGroup, TeamProgram } from './programs';
 
 /**
  * The dashboard callable returns bounded slices of several collections. These
@@ -17,13 +18,15 @@ export type DashboardEvent = {
 };
 
 /**
- * One FIRST LEGO League judging area. A task counts toward an area when it
- * carries the area's id as a label, so the importer and the built-in templates
- * tag cards with these ids and a coach can tag any card by hand.
+ * One area of the team's program: an FLL judging area or an FTC award. A task
+ * counts toward an area when it carries the area's id as a label, so the seeded
+ * plan, the importer and the built-in templates tag cards with these ids and a
+ * coach can tag any card by hand. `group` is the FTC award group, if any.
  */
 export type DashboardArea = {
   id: string;
   label: string;
+  group?: AreaGroup | null;
   taskCount: number;
   completedTaskCount: number;
 };
@@ -41,7 +44,7 @@ export type DashboardNotification = {
 };
 
 export type DashboardResult = {
-  team: { id: string; name: string };
+  team: { id: string; name: string; program?: TeamProgram };
   role: string;
   tasks: DashboardTask[];
   /** Open tasks with a due date, soonest first. Overdue work leads the list. */

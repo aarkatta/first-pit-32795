@@ -103,6 +103,8 @@ export function describeAuditEvent(event: AuditEventRow, { members, invitationEm
       return `${actor} changed ${target}'s membership to ${status || 'a new status'}`;
     case 'sensitive.updated':
       if (action === 'team.details.updated') return `${actor} edited the team name or number`;
+      // Written by scripts/set-team-program.mjs, never by the app.
+      if (action === 'team.program.ftc' || action === 'team.program.fll') return `${actor} switched the team to ${action.slice('team.program.'.length).toUpperCase()}`;
       if (action === 'policy.updated') return `${actor} changed the team settings`;
       if (action === 'privacy.updated') return `${actor} updated their privacy settings`;
       if (action === 'account-deletion.requested') return `${actor} asked to delete their account`;

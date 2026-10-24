@@ -9,7 +9,7 @@ import {
   updateProjectColumn,
   MAX_CATEGORIES_PER_PROJECT
 } from '@/lib/kanban-service';
-import { TASK_AREAS } from '@/lib/task-import';
+import { PROGRAM_AREAS, type TeamProgram } from '@/lib/programs';
 import { createOperationId as operationId } from '@/lib/ids';
 import type { KanbanProject, ProjectColumn, TeamGoal } from '@/lib/domain';
 
@@ -18,13 +18,15 @@ import type { KanbanProject, ProjectColumn, TeamGoal } from '@/lib/domain';
  * kept off the board's own screen so the page a team works in every day shows
  * work rather than configuration.
  */
-export function BoardSetup({ teamId, project, goals, busy, onRun }: {
+export function BoardSetup({ teamId, project, goals, busy, onRun, program = 'fll' }: {
   teamId: string;
   project: KanbanProject;
   /** Milestones a category can roll up into. */
   goals: TeamGoal[];
   busy: boolean;
   onRun: (action: () => Promise<unknown>, refreshProjects?: boolean) => Promise<boolean>;
+  /** The team's program, whose areas a category can be tied to. */
+  program?: TeamProgram;
 }) {
   const [columnName, setColumnName] = useState('');
   const [categoryName, setCategoryName] = useState('');
@@ -117,7 +119,9 @@ export function BoardSetup({ teamId, project, goals, busy, onRun }: {
               </select>
               <select name="area" aria-label={`Judging area for ${category.name}`} defaultValue={category.areaId ?? ''}>
                 <option value="">No judging area</option>
-                {TASK_AREAS.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}
+                {PROGRAM_AREAS[program].map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}
+                {/* A board seeded before its team changed program keeps its old area until a coach picks a new one. */}
+                {category.areaId && !PROGRAM_AREAS[program].some((area) => area.id === category.areaId) ? <option value={category.areaId}>{category.areaId}</option> : null}
               </select>
               <button type="button" aria-label={`Move ${category.name} up`} disabled={busy || index === 0} onClick={() => shiftCategory(index, -1)}>↑</button>
               <button type="button" aria-label={`Move ${category.name} down`} disabled={busy || index === project.categories.length - 1} onClick={() => shiftCategory(index, 1)}>↓</button>

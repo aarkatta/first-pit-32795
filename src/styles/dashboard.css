@@ -43,6 +43,14 @@
 .area-list__head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .area-list__head strong { font-variant-numeric: tabular-nums; }
 .area-list small { color: var(--muted); font-size: 11px; }
+/* FTC: Think on its own, then the two award groups of three (MCI, TA). */
+.area-board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); align-items: center; gap: 18px; }
+.area-list--standalone { grid-template-columns: 1fr; }
+.area-groups { display: grid; gap: 16px; }
+.area-group { display: grid; gap: 10px; min-width: 0; }
+.area-group h3 { margin: 0; color: var(--ink); font-size: 12px; font-weight: 800; }
+.area-list--group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.area-list__icon { flex: none; margin-right: 6px; vertical-align: -3px; color: var(--muted); }
 .meter { height: 8px; overflow: hidden; border-radius: 999px; background: #dfe5fd; }
 .meter > span { display: block; width: calc(clamp(0, var(--value, 0), 100) * 1%); height: 100%; border-radius: 999px; background: var(--blue); }
 
@@ -71,6 +79,9 @@
   .dash-card--highlights,
   .dash-card--upcoming { grid-column: span 6; grid-row: auto; }
   .area-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .area-board { grid-template-columns: 1fr; }
+  .area-list--standalone { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .area-list--group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -80,5 +91,7 @@
 }
 
 @media (max-width: 420px) {
-  .area-list { grid-template-columns: 1fr; }
+  .area-list,
+  .area-list--standalone,
+  .area-list--group { grid-template-columns: 1fr; }
 }

@@ -6,6 +6,7 @@ import { NotificationBell } from './NotificationBell';
 import { useAuth } from '@/lib/auth-context';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useTeamContext } from '@/lib/team-context';
+import { applyProgramTheme, teamProgram } from '@/lib/programs';
 import { isCoachOrLeader, nameInitials } from '@/lib/domain';
 import { getFirebaseServices } from '@/lib/firebase';
 import { isNativeShell } from '@/lib/native-shell';
@@ -101,6 +102,13 @@ export function AppShell({ children, online, appName, appTagline }: AppShellProp
   useEffect(() => {
     document.title = `${currentPageLabel} | ${appName}`;
   }, [appName, currentPageLabel]);
+
+  // An FTC team's workspace is Google blue; signed out, or on an FLL team, the default look.
+  const program = authStatus === 'authenticated' ? teamProgram(activeTeam?.team) : 'fll';
+  useEffect(() => {
+    applyProgramTheme(program);
+  }, [program]);
+  useEffect(() => () => applyProgramTheme('fll'), []);
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !user) {

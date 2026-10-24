@@ -450,6 +450,18 @@ if (seededCategories.length !== 4 || seededBoardDoc.fields.migrationVersion?.int
 const reopened = await call('ensureDefaultProject', student.idToken, { teamId: migrationTeam.teamId });
 if (reopened.created || reopened.seededTaskCount) throw new Error('Opening an existing board seeded it again.');
 
+// A team the backend made FTC before its board existed starts from the FTC
+// plan instead, and is offered none of the FLL board presets.
+const ftcTeam = await call('createTeam', coach.idToken, { name: `FTC seed ${suffix}`, teamNumber: '3003' });
+await patchAsOwner(`teams/${ftcTeam.teamId}`, { program: { stringValue: 'ftc' } });
+const ftcBoard = await call('ensureDefaultProject', coach.idToken, { teamId: ftcTeam.teamId });
+if (!ftcBoard.created || ftcBoard.seededTaskCount !== 43) throw new Error(`An FTC team's board was not seeded from the FTC plan (${ftcBoard.seededTaskCount}).`);
+const ftcBoardDoc = await readDocument(`projects/${ftcBoard.projectId}`, coach.idToken);
+const ftcCategories = (ftcBoardDoc.fields.categories?.arrayValue?.values ?? []).map((value) => value.mapValue.fields.areaId?.stringValue ?? null);
+if (ftcCategories.join(',') !== 'think,control,design,innovate,connect,sustain,reach,') throw new Error(`The FTC board's categories are not tied to the FTC awards (${ftcCategories.join(',')}).`);
+const ftcCatalogue = await call('listProjectTemplates', coach.idToken, { teamId: ftcTeam.teamId });
+if (ftcCatalogue.builtIn?.length !== 0) throw new Error('An FTC team was offered the FLL board presets.');
+
 if (process.env.STORAGE_EMULATOR_HOST) {
   const { deleteApp, initializeApp } = await import('firebase/app');
   const { connectAuthEmulator, getAuth, signInWithEmailAndPassword } = await import('firebase/auth');

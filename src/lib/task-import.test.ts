@@ -64,6 +64,26 @@ describe('cell parsers', () => {
     expect(areaLabel(null)).toBe('—');
   });
 
+  it("recognizes an FTC team's awards, and only those", () => {
+    expect(parseArea('Think', 'ftc')).toBe('think');
+    expect(parseArea('Outreach', 'ftc')).toBe('reach');
+    expect(parseArea('sustain', 'ftc')).toBe('sustain');
+    expect(parseArea('Robot Game', 'ftc')).toBeUndefined();
+    expect(parseArea('Think')).toBeUndefined();
+    expect(areaLabel('innovate')).toBe('Innovate');
+  });
+
+  it('reads the FTC plan by its categories alone', () => {
+    const preview = buildImportPreview([
+      ['Task ID', 'Week', 'Category', 'Task Description', 'Assignee', 'Status', 'Notes'],
+      ['FTC-CTL-01', 1, 'Control', 'Initialize season GitHub repository for team code', '', 'Not Started', ''],
+      ['FTC-SUS-01', 1, 'Sustain', 'Draft initial season budget', '', 'Not Started', ''],
+      ['FTC-GEN-01', 1, 'General', 'Review Game Manual 1', '', 'Not Started', '']
+    ], { ...context, program: 'ftc' });
+    expect(preview.rows.map((row) => row.area)).toEqual(['control', 'sustain', null]);
+    expect(preview.rows.every((row) => row.warnings.length === 0)).toBe(true);
+  });
+
   it('recognizes priorities', () => {
     expect(parsePriority('Critical')).toBe('urgent');
     expect(parsePriority('med')).toBe('medium');

@@ -34,17 +34,25 @@ describe('team data access', () => {
       return () => undefined;
     });
     mocks.getDocs.mockResolvedValue({
-      docs: [{ id: 'team-1', data: () => ({ name: 'Robotics', normalizedName: 'robotics', createdBy: 'coach-1' }) }]
+      docs: [
+        { id: 'team-1', data: () => ({ name: 'Robotics', normalizedName: 'robotics', createdBy: 'coach-1' }) },
+        { id: 'team-2', data: () => ({ name: 'Apex', normalizedName: 'apex', createdBy: 'coach-1', program: 'ftc' }) }
+      ]
     });
     const onChange = vi.fn();
     const onError = vi.fn();
     subscribeToUserTeams({} as never, 'coach-1', onChange, onError);
     await nextSnapshot?.({
-      docs: [{ id: 'team-1_coach-1', data: () => ({ teamId: 'team-1', userId: 'coach-1', role: 'coach', status: 'active' }) }]
+      docs: [
+        { id: 'team-1_coach-1', data: () => ({ teamId: 'team-1', userId: 'coach-1', role: 'coach', status: 'active' }) },
+        { id: 'team-2_coach-1', data: () => ({ teamId: 'team-2', userId: 'coach-1', role: 'coach', status: 'active' }) }
+      ]
     });
     expect(onError).not.toHaveBeenCalled();
+    // A team written before programs existed reads as FLL.
     expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ teamId: 'team-1', team: expect.objectContaining({ name: 'Robotics' }) })
+      expect.objectContaining({ teamId: 'team-1', team: expect.objectContaining({ name: 'Robotics', program: 'fll' }) }),
+      expect.objectContaining({ teamId: 'team-2', team: expect.objectContaining({ name: 'Apex', program: 'ftc' }) })
     ]);
   });
 

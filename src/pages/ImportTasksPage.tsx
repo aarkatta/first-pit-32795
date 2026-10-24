@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { isCoachOrLeader } from '@/lib/domain';
 import { listTeamMembers, memberMap, type TeamMember } from '@/lib/directory';
 import { useTeamBoard } from '@/lib/use-team-board';
+import { teamProgram } from '@/lib/programs';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { createOperationId } from '@/lib/ids';
 
@@ -71,6 +72,7 @@ export function ImportTasksPage() {
         directory={directory}
         onRun={run}
         newOperationId={createOperationId}
+        program={teamProgram(activeTeam?.team)}
       />
     </TrackerTabs>
   );

@@ -17,16 +17,20 @@ import {
 } from '@/lib/task-import';
 import { nameOf, type TeamMember } from '@/lib/directory';
 import { formatDateLabel } from '@/lib/dates';
+import { PROGRAM_AREAS, PROGRAM_TEMPLATE_HREF, type TeamProgram } from '@/lib/programs';
 import { readSpreadsheet } from './spreadsheet-reader';
 import '@/styles/task-import.css';
 
 /**
- * The standard template is a fixed file in `public/`, authored by
- * `npm run template:build` from the team's own 12-week plan. Serving it
- * statically means every team starts from the same sheet and no spreadsheet
- * library ships to the browser.
+ * The standard templates are fixed files in `public/`, one per program
+ * (`PROGRAM_TEMPLATE_HREF`), authored by `npm run template:build` from the
+ * season plans. Serving them statically means every team starts from the same
+ * sheet and no spreadsheet library ships to the browser.
  */
-const TEMPLATE_HREF = '/first-pit-task-template.xlsx';
+const TEMPLATE_DESCRIPTIONS: Record<TeamProgram, string> = {
+  fll: 'The template is the standard 12-week FLL plan: 48 tasks across Project Mgmt & Core Values, Innovation Project, Robot Design and Robot Game.',
+  ftc: 'The template is the standard 8-week FTC plan: 43 tasks across Think, Control, Design, Innovate, Connect, Sustain, Reach and General.'
+};
 
 const STARTER_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(IMPORT_TEMPLATE_CSV)}`;
 
@@ -36,7 +40,7 @@ const STARTER_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(IMPORT_TE
  * which validates them again. One operation id is minted per chosen file, so a
  * retried import of the same preview replays instead of doubling the cards.
  */
-export function TaskImportPanel({ teamId, project, busy, online, directory, onRun, newOperationId }: {
+export function TaskImportPanel({ teamId, project, busy, online, directory, onRun, newOperationId, program = 'fll' }: {
   teamId: string;
   project: KanbanProject;
   busy: boolean;
@@ -45,6 +49,8 @@ export function TaskImportPanel({ teamId, project, busy, online, directory, onRu
   directory: Map<string, TeamMember>;
   onRun: (action: () => Promise<unknown>, refreshProjects?: boolean) => Promise<boolean>;
   newOperationId: () => string;
+  /** The team's program: which areas rows may name, and which template to offer. */
+  program?: TeamProgram;
 }) {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [fileName, setFileName] = useState('');
@@ -83,7 +89,7 @@ export function TaskImportPanel({ teamId, project, busy, online, directory, onRu
     setPreview(null);
     setFileName(file.name);
     try {
-      const parsed = buildImportPreview(await readSpreadsheet(file), { columns: project.columns, categories: project.categories });
+      const parsed = buildImportPreview(await readSpreadsheet(file), { columns: project.columns, categories: project.categories, program });
       setOperation(newOperationId());
       const lookups = assigneeLookups(parsed);
       if (!lookups.length || !online) {
@@ -131,15 +137,14 @@ export function TaskImportPanel({ teamId, project, busy, online, directory, onRu
       <p className="template-note">
         Upload a .xlsx or .csv file with a header row. Recognised columns: {IMPORT_FIELDS.map((field) => `${field.label}${field.required ? ' (required)' : ''}`).join(', ')}.
         A row with Type “Subtask” becomes a step of the task above it. Category is your own grouping and is created if this board does not have it;
-        Area is one of the four judging areas. Dates can be yyyy-mm-dd or month/day/year.
+        Area is one of the {PROGRAM_AREAS[program].length} {program === 'ftc' ? 'judged awards' : 'judging areas'}. Dates can be yyyy-mm-dd or month/day/year.
       </p>
       <p className="task-import__template-actions">
-        <a className="button secondary" href={TEMPLATE_HREF} download>Download Excel template</a>
+        <a className="button secondary" href={PROGRAM_TEMPLATE_HREF[program]} download>Download Excel template</a>
         <a href={STARTER_HREF} download="first-pit-task-import.csv">or a plain CSV starter file</a>
       </p>
       <p className="template-note">
-        The template is the standard 12-week FLL plan: 48 tasks across Project Mgmt &amp; Core Values, Innovation Project,
-        Robot Design and Robot Game. Edit it for your team — delete what you will not do, add what you will — then upload it here.
+        {TEMPLATE_DESCRIPTIONS[program]} Edit it for your team — delete what you will not do, add what you will — then upload it here.
       </p>
       <label className="task-import__file">
         Spreadsheet

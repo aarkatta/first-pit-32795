@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Flag } from 'lucide-react';
+import { DraftingCompass, Flag, Gamepad2, Hand, Lightbulb, Link2, Recycle, Sparkles, type LucideIcon } from 'lucide-react';
 import { StatePanel } from '@/components/StatePanel';
 import { LandingPage } from '@/features/landing/landing-page';
 import { useAuth } from '@/lib/auth-context';
-import { areaRows, dashboardHighlights, percentOf } from '@/lib/dashboard-view';
+import { areaRows, dashboardHighlights, groupAreas, percentOf, type AreaRow } from '@/lib/dashboard-view';
 import { getRequestState, type RequestState } from '@/lib/request-state';
 import { useOnlineStatus } from '@/lib/use-online-status';
 import { useTeamContext } from '@/lib/team-context';
@@ -22,6 +22,41 @@ function roleEmptyCopy(role: string | undefined) {
   if (role === 'student') return { title: 'Nothing is assigned yet', message: 'Your coach or team leader has not assigned work yet. You can still browse team knowledge.', action: '/knowledge', label: 'Open knowledge' };
   if (role === 'parent') return { title: 'Follow the team safely', message: 'Visibility follows the team policy set by the coach.', action: '/team', label: 'Open your team' };
   return { title: 'Support the next milestone', message: 'Follow authorized work and team knowledge.', action: '/team', label: 'Open your team' };
+}
+
+/** FTC award icons, after the team's dashboard mock-up (docs/ftc/FTC_Dashboard.jpeg). FLL areas have none. */
+const AREA_ICONS: Record<string, LucideIcon> = {
+  think: Lightbulb,
+  control: Gamepad2,
+  design: DraftingCompass,
+  innovate: Sparkles,
+  connect: Link2,
+  sustain: Recycle,
+  reach: Hand
+};
+
+function AreaMeter({ area }: { area: AreaRow }) {
+  const Icon = AREA_ICONS[area.id];
+  return (
+    <li>
+      <div className="area-list__head">
+        <span>{Icon ? <Icon className="area-list__icon" size={16} aria-hidden="true" /> : null}{area.label}</span>
+        <strong>{area.taskCount ? `${area.percent}%` : '—'}</strong>
+      </div>
+      <div
+        className="meter"
+        role="progressbar"
+        aria-label={`${area.label} tasks complete`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={area.percent}
+        aria-valuetext={area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks complete` : 'No tasks labelled yet'}
+      >
+        <span style={{ '--value': String(area.percent) } as CSSProperties} />
+      </div>
+      <small>{area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks` : 'No tasks yet'}</small>
+    </li>
+  );
 }
 
 function taskStatus(status: unknown) {
@@ -131,6 +166,9 @@ export function HomePage() {
   const openTaskCount = Math.max(0, summary.taskCount - summary.completedTaskCount);
   const completedGoalCount = summary.completedGoalCount ?? 0;
   const areas = areaRows(dashboard.areas);
+  const areaSections = groupAreas(areas);
+  // The scorer is FIRST LEGO League's official scoresheet.
+  const isFtc = dashboard.team.program === 'ftc';
   const taggedAreaCount = areas.filter((area) => area.taskCount > 0).length;
   const highlights = dashboardHighlights(dashboard);
   const upcomingTasks = dashboard.upcomingTasks ?? [];
@@ -154,7 +192,7 @@ export function HomePage() {
           <p>{roleLabel(dashboard.role)} view · {summary.taskCount} task{summary.taskCount === 1 ? '' : 's'} · {summary.goalCount} milestone{summary.goalCount === 1 ? '' : 's'}</p>
         </div>
         <div className="dashboard-header__actions">
-          <Link className="button button--ghost" to="/scorer">Open scorer</Link>
+          {isFtc ? null : <Link className="button button--ghost" to="/scorer">Open scorer</Link>}
           <Link className="button" to="/coordination">Open project board</Link>
         </div>
       </header>
@@ -176,25 +214,27 @@ export function HomePage() {
 
         <article className="dash-card dash-card--areas" aria-labelledby="dash-areas-title">
           <h2 id="dash-areas-title">Progress by area</h2>
-          <ul className="area-list">
-            {areas.map((area) => (
-              <li key={area.id}>
-                <div className="area-list__head"><span>{area.label}</span><strong>{area.taskCount ? `${area.percent}%` : '—'}</strong></div>
-                <div
-                  className="meter"
-                  role="progressbar"
-                  aria-label={`${area.label} tasks complete`}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={area.percent}
-                  aria-valuetext={area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks complete` : 'No tasks labelled yet'}
-                >
-                  <span style={{ '--value': String(area.percent) } as CSSProperties} />
-                </div>
-                <small>{area.taskCount ? `${area.completedTaskCount} of ${area.taskCount} tasks` : 'No tasks yet'}</small>
-              </li>
-            ))}
-          </ul>
+          {areaSections.groups.length ? (
+            <div className="area-board">
+              <ul className="area-list area-list--standalone">
+                {areaSections.standalone.map((area) => <AreaMeter key={area.id} area={area} />)}
+              </ul>
+              <div className="area-groups">
+                {areaSections.groups.map((section) => (
+                  <section key={section.group} className="area-group" aria-labelledby={`dash-area-group-${section.group}`}>
+                    <h3 id={`dash-area-group-${section.group}`}>{section.heading}</h3>
+                    <ul className="area-list area-list--group">
+                      {section.areas.map((area) => <AreaMeter key={area.id} area={area} />)}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <ul className="area-list">
+              {areas.map((area) => <AreaMeter key={area.id} area={area} />)}
+            </ul>
+          )}
           {taggedAreaCount === 0 ? (
             <p className="dash-note">
               Add an area label to a task to track it here: {areas.map((area, index) => <span key={area.id}>{index ? ', ' : ''}<code>{area.id}</code></span>)}.

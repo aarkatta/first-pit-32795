@@ -97,6 +97,18 @@ await call('createQuestion', outsider.idToken, { teamId: otherTeam.teamId, quest
 const scopedSearch = await call('globalSearch', student.idToken, { query: 'private other team' });
 if (scopedSearch.results.some((entry) => entry.recordId === `phase7-private-${suffix}`)) throw new Error('Global search leaked a record from a team without an active membership.');
 
+// Every new team is FLL; FTC is set from the backend (scripts/set-team-program.mjs),
+// and the dashboard then tracks the seven FTC awards, grouped as the app draws them.
+const createdTeam = await readDocument(`teams/${teamId}`, coach.idToken);
+if (createdTeam.fields?.program?.stringValue !== 'fll' || dashboard.team?.program !== 'fll') throw new Error('A new team must be stored, and reported by the dashboard, as FLL.');
+if (dashboard.areas.some((area) => area.group !== null)) throw new Error('FLL areas carry no award group.');
+await patchPrivacyAsOwner(`teams/${otherTeam.teamId}`, { program: { stringValue: 'ftc' } });
+await call('createTask', outsider.idToken, { teamId: otherTeam.teamId, taskId: `phase7-ftc-task-${suffix}`, operationId: `ftc-area-${suffix}`, title: 'Portfolio outline', labels: ['think'], status: 'completed' });
+const ftcDashboard = await call('getDashboard', outsider.idToken, { teamId: otherTeam.teamId });
+const thinkArea = ftcDashboard.areas?.find((area) => area.id === 'think');
+if (ftcDashboard.team?.program !== 'ftc' || ftcDashboard.areas?.length !== 7 || thinkArea?.taskCount !== 1 || thinkArea?.completedTaskCount !== 1) throw new Error('An FTC dashboard must count its seven awards.');
+if (ftcDashboard.areas.map((area) => area.group ?? '-').join(',') !== '-,mci,mci,mci,ta,ta,ta') throw new Error('FTC awards must come back in their award groups.');
+
 // A value an earlier version stored is scrubbed on the next save, and an older
 // client that still sends the retired `isMinor` field is ignored, not refused.
 await patchPrivacyAsOwner(`privacySettings/${student.localId}`, { isMinor: { booleanValue: true } });

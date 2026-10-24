@@ -19,7 +19,7 @@ import {
   type ProjectColumn
 } from './kanban.js';
 import { MAX_SUBTASKS_PER_TASK, validateSubtasks, type Subtask } from './phase3.js';
-import { DASHBOARD_AREAS } from './phase7.js';
+import { ALL_AREA_IDS } from './programs.js';
 
 type ImportRequest = CallableRequest<Record<string, unknown>>;
 
@@ -41,7 +41,6 @@ export const MAX_IMPORT_ROWS = 200;
 const MAX_EXTRA_LABELS = 10;
 const MAX_TASK_LABELS = 20;
 const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
-const AREA_IDS: readonly string[] = DASHBOARD_AREAS.map((area) => area.id);
 const IMPORT_OPERATION_KIND = 'kanban-task.import';
 
 export type ImportedTaskRow = {
@@ -92,7 +91,7 @@ export function normalizeImportRows(value: unknown): ImportedTaskRow[] {
     if (!isBlank(record.priority) && !TASK_PRIORITIES.includes(record.priority as typeof TASK_PRIORITIES[number])) {
       throw new HttpsError('invalid-argument', `${row} priority must be low, medium, high, or urgent.`);
     }
-    if (!isBlank(record.area) && !AREA_IDS.includes(String(record.area))) {
+    if (!isBlank(record.area) && !ALL_AREA_IDS.includes(String(record.area))) {
       throw new HttpsError('invalid-argument', `${row} area is not a known judging area.`);
     }
     if (record.labels !== undefined && (!Array.isArray(record.labels) || record.labels.length > MAX_EXTRA_LABELS)) {

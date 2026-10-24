@@ -1,0 +1,360 @@
+{
+  "source": "FTC_Project_Plan_TaskList.xlsx, supplied by the team 2026-10-23 (docs/ftc/)",
+  "sheetName": "FTC Project Plan",
+  "categories": [
+    "Think",
+    "Control",
+    "Design",
+    "Innovate",
+    "Connect",
+    "Sustain",
+    "Reach",
+    "General"
+  ],
+  "rows": [
+    {
+      "taskId": "FTC-CTL-01",
+      "week": 1,
+      "category": "Control",
+      "title": "Initialize season GitHub repository for team code",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-02",
+      "week": 1,
+      "category": "Control",
+      "title": "Update Control Hub and Driver Hub firmware/apps",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-01",
+      "week": 1,
+      "category": "Design",
+      "title": "Set up team workspace in Onshape and assign roles",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-GEN-01",
+      "week": 1,
+      "category": "General",
+      "title": "Review Game Manual 1 rules and requirements",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-GEN-02",
+      "week": 1,
+      "category": "General",
+      "title": "Review Game Manual 2 game-specific rules",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-GEN-03",
+      "week": 1,
+      "category": "General",
+      "title": "Complete team safety and tool use training",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-SUS-01",
+      "week": 1,
+      "category": "Sustain",
+      "title": "Draft initial season budget (parts, registration, travel)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-SUS-02",
+      "week": 1,
+      "category": "Sustain",
+      "title": "Create sponsorship pitch deck",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-01",
+      "week": 1,
+      "category": "Think",
+      "title": "Create Engineering Portfolio layout/template",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-02",
+      "week": 1,
+      "category": "Think",
+      "title": "Assign portfolio section owners (Design, Code, Outreach)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CNT-01",
+      "week": 2,
+      "category": "Connect",
+      "title": "Identify local STEM/engineering professionals for mentorship",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-03",
+      "week": 2,
+      "category": "Control",
+      "title": "Configure basic hardware map in Android Studio/OnBot",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-02",
+      "week": 2,
+      "category": "Design",
+      "title": "Draft primary drivetrain CAD in Onshape",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-03",
+      "week": 2,
+      "category": "Design",
+      "title": "Inventory REV/goBILDA hardware, motors, and servos",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-INN-01",
+      "week": 2,
+      "category": "Innovate",
+      "title": "Brainstorm novel scoring/intake mechanisms",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-SUS-03",
+      "week": 2,
+      "category": "Sustain",
+      "title": "Identify and list 5-10 potential local sponsors",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-03",
+      "week": 2,
+      "category": "Think",
+      "title": "Document initial brainstorming and game strategy",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CNT-02",
+      "week": 3,
+      "category": "Connect",
+      "title": "Draft and send mentor outreach emails",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-04",
+      "week": 3,
+      "category": "Control",
+      "title": "Write teleop skeleton code and basic drive functions",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-04",
+      "week": 3,
+      "category": "Design",
+      "title": "Assemble physical drive chassis",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-05",
+      "week": 3,
+      "category": "Design",
+      "title": "Mount primary drive motors and wheels",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-INN-02",
+      "week": 3,
+      "category": "Innovate",
+      "title": "Build low-fidelity cardboard/wood prototypes of intake",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-RCH-01",
+      "week": 3,
+      "category": "Reach",
+      "title": "Identify community events for robotics demonstrations",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-04",
+      "week": 3,
+      "category": "Think",
+      "title": "Document math, physics, and gear ratio calculations",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-05",
+      "week": 4,
+      "category": "Control",
+      "title": "Implement encoder-based drive or odometry navigation",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-06",
+      "week": 4,
+      "category": "Design",
+      "title": "Complete CAD for intake and lifting mechanisms",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-INN-03",
+      "week": 4,
+      "category": "Innovate",
+      "title": "Test compliance materials (e.g., surgical tubing types)",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-RCH-02",
+      "week": 4,
+      "category": "Reach",
+      "title": "Coordinate STEM demo at Wake County Public Libraries",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-SUS-04",
+      "week": 4,
+      "category": "Sustain",
+      "title": "Finalize Tech Titans team branding and order shirts",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-05",
+      "week": 4,
+      "category": "Think",
+      "title": "Record Onshape CAD iterations and design decisions",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CNT-03",
+      "week": 5,
+      "category": "Connect",
+      "title": "Conduct mid-season design review with a professional mentor",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-06",
+      "week": 5,
+      "category": "Control",
+      "title": "Integrate AprilTag vision pipeline for autonomous",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-07",
+      "week": 5,
+      "category": "Design",
+      "title": "Prepare custom part files and execute 3D printing",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-INN-04",
+      "week": 5,
+      "category": "Innovate",
+      "title": "Refine custom mechanism based on testing metrics",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-RCH-03",
+      "week": 5,
+      "category": "Reach",
+      "title": "Prepare robot and presentation materials for public interaction",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-SUS-05",
+      "week": 5,
+      "category": "Sustain",
+      "title": "Execute new member recruitment and onboarding plan",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CNT-04",
+      "week": 6,
+      "category": "Connect",
+      "title": "Host a Q&A session with an industry expert",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-CTL-07",
+      "week": 6,
+      "category": "Control",
+      "title": "Test and tune autonomous pathing and PID loops",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-DES-08",
+      "week": 6,
+      "category": "Design",
+      "title": "Mount scoring mechanisms and complete wire management",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-RCH-04",
+      "week": 7,
+      "category": "Reach",
+      "title": "Present team progress at local school STEM night",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-GEN-04",
+      "week": 8,
+      "category": "General",
+      "title": "Run practice match scrimmages and driver practice",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-GEN-05",
+      "week": 8,
+      "category": "General",
+      "title": "Complete full robot inspection checklist",
+      "status": "Not Started",
+      "notes": ""
+    },
+    {
+      "taskId": "FTC-THI-06",
+      "week": 8,
+      "category": "Think",
+      "title": "Finalize Engineering Portfolio for judging sessions",
+      "status": "Not Started",
+      "notes": ""
+    }
+  ]
+}

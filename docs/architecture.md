@@ -248,6 +248,63 @@ nullable. Clients show "Name · Team #12345" (`teamNumberSuffix` in
 once per membership change, not live, so a successful save is applied locally
 through `patchTeam` on the team context rather than waiting for a re-read.
 
+### Team program: FLL or FTC (2026-10-23)
+
+`teams/{teamId}.program` is `fll` or `ftc`. It decides exactly two things:
+
+- **the plan a team's first board is seeded with**: `buildStandardPlan(program)`
+  in `functions/src/standard-plan.ts` reads
+  `functions/src/data/fll-standard-task-list.json` (12 weeks, 48 tasks, 4
+  categories) or `ftc-standard-task-list.json` (8 weeks, 43 tasks, 8
+  categories). The FTC list comes from the team's own
+  `docs/ftc/FTC_Project_Plan_TaskList.xlsx`.
+- **the dashboard's Progress by area**: `PROGRAM_AREAS` in
+  `functions/src/programs.ts`. FLL has its four judging areas. FTC has the
+  seven judged awards: Think on its own, then Control, Design and Innovate
+  (`group: 'mci'`, the Machine, Creativity & Innovation awards) and Connect,
+  Sustain and Reach (`group: 'ta'`, the Team Attribute awards). The FTC
+  layout follows `docs/ftc/FTC_Dashboard.jpeg`. The FTC plan's "General"
+  category has no award, so it counts toward overall progress only.
+
+Everything else follows from those two, keyed by the same field. The
+importer's area words, the FTC import template
+(`public/first-pit-ftc-task-template.xlsx`) and the category area dropdown in
+Board setup all branch on it. FTC teams are offered none of the built-in board
+presets, which are FLL's (`builtInTemplatesFor`). An FTC dashboard hides "Open
+scorer", because the Scorer links to FLL's scoresheet. While the active team is FTC, the
+whole workspace is **Google blue**. `AppShell` sets `data-program="ftc"` on `<html>`
+(`applyProgramTheme`, `src/lib/programs.ts`), and `src/styles/program-ftc.css`
+recolours the tokens. The sidebar and team headers turn deep blue (`#174ea6`)
+and the acid highlight turns pale blue. Buttons and links use `#1a73e8`, and
+meters, the ring and icons use the logo blue `#4285f4`, which is too light for
+text. FLL teams, and the signed-out pages, carry no mark and keep the default
+look. Board colours a coach picked, such as a "blue" column, are
+data and are left alone. A category or imported
+row may name any program's area id (`ALL_AREA_IDS`); an id from the other
+program is simply not counted on this team's dashboard.
+
+**FTC is internal this season.**
+- `createTeam` always writes `program: 'fll'` and takes no program input.
+- The `teams` update rule's key allowlist keeps the browser from writing the
+  field, which `tests/firestore-rules-phase2.integration.mjs` asserts.
+- A team created before the field existed has none, and reads as FLL (the
+  `teamProgram` helpers on both sides), so nothing was backfilled.
+- A team becomes FTC only through
+  `scripts/set-team-program.mjs --project <id> --team "<name>" --program ftc --apply`.
+  That run writes the field and a `sensitive.updated` audit event (action
+  `team.program.ftc`, shown in Administration) in one commit, and leaves the
+  board untouched.
+- A team whose board already exists keeps its tasks. Its dashboard switches at
+  once, and a coach brings in the FTC plan with the FTC template from Tracker →
+  Import. For a new FTC team, run the script before anyone opens its Tracker,
+  so the first board seeds with the FTC plan.
+
+**To offer FTC to everyone later:**
+1. Accept a validated `program` in `createTeam`.
+2. Add an FLL/FTC picker to `CreateTeamPage`.
+3. Decide whether a coach may switch it later; if so, through a callable, not
+   the rule.
+
 ### Team settings panel
 
 Administration's **Team settings** tab shows two team settings, each as an
@@ -842,9 +899,11 @@ browser before anything is previewed.
 
 `ensureDefaultProject` is idempotent. It creates a deterministic Team Board.
 When the team has no tasks at all, that board is seeded in the same transaction
-with the **standard season plan** — the four categories (each tied to its
-judging area) and 48 tasks of `functions/src/data/fll-standard-task-list.json`,
-the same list the downloadable Excel template is built from — all in the first
+with the **standard season plan** of the team's program: for FLL, the four
+categories (each tied to its judging area) and 48 tasks of
+`functions/src/data/fll-standard-task-list.json`; for FTC, the eight categories
+and 43 tasks of `ftc-standard-task-list.json`. These are the same lists the
+downloadable Excel templates are built from — all in the first
 column, labelled with their area and week, and marked as needing no migration
 (`buildStandardPlan` in `functions/src/standard-plan.ts`). A team that already
 has tasks gets an empty board instead, and the call then maps legacy `todo`, `inProgress`, `review`, and `completed` tasks into compatible
@@ -1074,9 +1133,12 @@ stored date must convert it the same way.
 
 - **Overall season progress** — task completion percentage, tasks complete,
   goals achieved (`status == completed` count), and open tasks.
-- **Progress by area** — the four FIRST LEGO League judging areas
-  (`innovation-project`, `robot-design`, `robot-game`, `core-values`,
-  `DASHBOARD_AREAS` in `functions/src/phase7.ts`). A task belongs to an area when
+- **Progress by area** — the areas of the team's program (`PROGRAM_AREAS` in
+  `functions/src/programs.ts`; see *Team program* above): the four FIRST LEGO
+  League judging areas (`innovation-project`, `robot-design`, `robot-game`,
+  `core-values`), or for an FTC team the seven awards. The FTC awards are
+  returned with their award group and drawn as Think beside the MCI and TA
+  groups. A task belongs to an area when
   it carries the area id as a label; two count aggregations per area give total
   and completed. Labels rather than a new task field keep every existing task,
   rule, and editor unchanged; built-in templates and the spreadsheet importer

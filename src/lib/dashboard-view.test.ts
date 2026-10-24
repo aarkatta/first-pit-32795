@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaRows, dashboardHighlights, percentOf } from './dashboard-view';
+import { areaRows, dashboardHighlights, groupAreas, percentOf } from './dashboard-view';
 
 describe('percentOf', () => {
   it('rounds a bounded percentage and treats an empty total as zero', () => {
@@ -17,6 +17,24 @@ describe('areaRows', () => {
       { id: 'robot-game', label: 'Robot game', taskCount: 8, completedTaskCount: 6, percent: 75 }
     ]);
     expect(areaRows(undefined)).toEqual([]);
+  });
+});
+
+describe('groupAreas', () => {
+  const row = (id: string, group: 'mci' | 'ta' | null = null) => ({ id, label: id, group, taskCount: 0, completedTaskCount: 0, percent: 0 });
+
+  it('leaves FLL areas, which have no group, as they are', () => {
+    const rows = [row('innovation-project'), row('robot-design')];
+    expect(groupAreas(rows)).toEqual({ standalone: rows, groups: [] });
+  });
+
+  it('sets Think apart and gathers the FTC award groups in order', () => {
+    const { standalone, groups } = groupAreas([row('think'), row('control', 'mci'), row('design', 'mci'), row('connect', 'ta'), row('reach', 'ta')]);
+    expect(standalone.map((area) => area.id)).toEqual(['think']);
+    expect(groups.map((group) => [group.heading, group.areas.map((area) => area.id)])).toEqual([
+      ['Machine, Creativity & Innovation (MCI Awards)', ['control', 'design']],
+      ['Team Attribute Awards (TA)', ['connect', 'reach']]
+    ]);
   });
 });
 

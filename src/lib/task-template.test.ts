@@ -25,14 +25,14 @@ const board: ImportContext = {
  * whose sheets get reordered — or one a team adds a notes tab to — is covered
  * here rather than discovered on upload.
  */
-async function previewTemplate() {
-  const sheets = await readXlsxFile(TEMPLATE_PATH) as unknown as Array<{ sheet: string; data: unknown[][] }>;
+async function previewTemplate(path = TEMPLATE_PATH, context = board) {
+  const sheets = await readXlsxFile(path) as unknown as Array<{ sheet: string; data: unknown[][] }>;
   const chosen = pickTaskSheet(sheets.map((sheet) => ({
     name: sheet.sheet,
     rows: sheet.data.map((row) => row.map((cell) => (cell === null || cell === undefined ? '' : String(cell))))
   })));
   if (!chosen) throw new Error('The shipped template has no sheets.');
-  return { sheetName: chosen.name, preview: buildImportPreview(chosen.rows, board) };
+  return { sheetName: chosen.name, preview: buildImportPreview(chosen.rows, context) };
 }
 
 describe('the shipped task template', () => {
@@ -82,5 +82,31 @@ describe('the shipped task template', () => {
     const { preview } = await previewTemplate();
     expect(preview.rows.length).toBeLessThanOrEqual(200);
     expect(preview.truncated).toBe(false);
+  });
+});
+
+describe('the shipped FTC task template', () => {
+  const ftcTemplate = () => previewTemplate('public/first-pit-ftc-task-template.xlsx', { ...board, program: 'ftc' });
+
+  it('imports every row of the FTC plan with no blocking issue', async () => {
+    const { sheetName, preview } = await ftcTemplate();
+    expect(sheetName).toBe('FTC Project Plan');
+    expect(preview.rows).toHaveLength(43);
+    expect(importableTaskCount(preview)).toBe(43);
+    expect(preview.unmappedHeaders).toEqual([]);
+    expect(preview.newCategories).toEqual(['Control', 'Design', 'General', 'Sustain', 'Think', 'Connect', 'Innovate', 'Reach']);
+  });
+
+  it('ties every category but General to its award', async () => {
+    const rows = toImportInput(importableRows((await ftcTemplate()).preview));
+    const areaOf = (title: string) => rows.find((row) => row.title.startsWith(title))?.area;
+    expect(areaOf('Create Engineering Portfolio')).toBe('think');
+    expect(areaOf('Initialize season GitHub')).toBe('control');
+    expect(areaOf('Draft primary drivetrain CAD')).toBe('design');
+    expect(areaOf('Brainstorm novel scoring')).toBe('innovate');
+    expect(areaOf('Identify local STEM')).toBe('connect');
+    expect(areaOf('Draft initial season budget')).toBe('sustain');
+    expect(areaOf('Identify community events')).toBe('reach');
+    expect(areaOf('Review Game Manual 1')).toBeFalsy();
   });
 });

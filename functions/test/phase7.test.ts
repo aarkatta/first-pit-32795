@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { describe, expect, it } from 'vitest';
-import { DASHBOARD_AREAS, areaProgress, pickPublicFields, summarizeUnreadNotifications } from '../src/phase7.js';
+import { areaProgress, pickPublicFields, summarizeUnreadNotifications } from '../src/phase7.js';
+import { ALL_AREA_IDS, PROGRAM_AREAS, teamProgram } from '../src/programs.js';
 
 describe('Phase 7 dashboard record serialization', () => {
   it('sends Firestore timestamps as ISO strings the client can parse', () => {
@@ -33,7 +34,34 @@ describe('Phase 7 truthful bounded notification summary', () => {
 
 describe('Dashboard area progress', () => {
   it('labels every FLL judging area in a fixed order', () => {
-    expect(DASHBOARD_AREAS.map((area) => area.id)).toEqual(['innovation-project', 'robot-design', 'robot-game', 'core-values']);
+    expect(PROGRAM_AREAS.fll.map((area) => area.id)).toEqual(['innovation-project', 'robot-design', 'robot-game', 'core-values']);
+  });
+
+  it('tracks the seven FTC awards, Think on its own and the rest in their award groups', () => {
+    expect(PROGRAM_AREAS.ftc.map((area) => [area.id, area.group])).toEqual([
+      ['think', null],
+      ['control', 'mci'],
+      ['design', 'mci'],
+      ['innovate', 'mci'],
+      ['connect', 'ta'],
+      ['sustain', 'ta'],
+      ['reach', 'ta']
+    ]);
+    expect(new Set(ALL_AREA_IDS).size).toBe(ALL_AREA_IDS.length);
+  });
+
+  it('treats a team with no program, or anything but ftc, as FLL', () => {
+    expect(teamProgram(undefined)).toBe('fll');
+    expect(teamProgram({})).toBe('fll');
+    expect(teamProgram({ program: 'FTC' })).toBe('fll');
+    expect(teamProgram({ program: 'ftc' })).toBe('ftc');
+  });
+
+  it("follows the team's program", () => {
+    const areas = areaProgress([{ taskCount: 8, completedTaskCount: 2 }], 'ftc');
+    expect(areas).toHaveLength(7);
+    expect(areas[0]).toEqual({ id: 'think', label: 'Think', group: null, taskCount: 8, completedTaskCount: 2 });
+    expect(areas[6]).toMatchObject({ id: 'reach', group: 'ta', taskCount: 0 });
   });
 
   it('pairs counts with areas by position', () => {
@@ -43,7 +71,7 @@ describe('Dashboard area progress', () => {
       { taskCount: 10, completedTaskCount: 7 },
       { taskCount: 2, completedTaskCount: 2 }
     ]);
-    expect(areas[2]).toEqual({ id: 'robot-game', label: 'Robot game', taskCount: 10, completedTaskCount: 7 });
+    expect(areas[2]).toEqual({ id: 'robot-game', label: 'Robot game', group: null, taskCount: 10, completedTaskCount: 7 });
     expect(areas).toHaveLength(4);
   });
 
