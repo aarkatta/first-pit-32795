@@ -29,6 +29,7 @@ import {
   type ProjectCategory,
   type ProjectColumn
 } from './kanban.js';
+import { teamProgram, type TeamProgram } from './programs.js';
 
 type TemplateRequest = CallableRequest<Record<string, unknown>>;
 
@@ -199,6 +200,14 @@ export function isBuiltInTemplateId(templateId: string) {
   return templateId.startsWith(BUILT_IN_TEMPLATE_PREFIX);
 }
 
+/**
+ * The presets above are FLL's. An FTC team's picker offers only the templates
+ * it saved itself until FTC presets exist; the seeded board is its plan.
+ */
+export function builtInTemplatesFor(program: TeamProgram): ProjectTemplate[] {
+  return program === 'fll' ? BUILT_IN_PROJECT_TEMPLATES : [];
+}
+
 export function findBuiltInTemplate(templateId: string): ProjectTemplate | null {
   return BUILT_IN_PROJECT_TEMPLATES.find((template) => template.id === templateId) ?? null;
 }
@@ -323,7 +332,8 @@ async function readTeamTemplates(teamId: string) {
 export const listProjectTemplates = async (request: TemplateRequest) => {
   const teamId = requireTeamId(request);
   await requireTeamMember(request, teamId);
-  return { builtIn: BUILT_IN_PROJECT_TEMPLATES, team: await readTeamTemplates(teamId) };
+  const [team, teamTemplates] = await Promise.all([getFirestore().doc(`teams/${teamId}`).get(), readTeamTemplates(teamId)]);
+  return { builtIn: builtInTemplatesFor(teamProgram(team.data())), team: teamTemplates };
 };
 
 export const createProjectFromTemplate = async (request: TemplateRequest) => {

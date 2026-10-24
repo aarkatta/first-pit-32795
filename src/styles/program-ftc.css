@@ -1,0 +1,59 @@
+/* FTC teams get a Google-blue workspace. `data-program="ftc"` is set on <html>
+   only while the active team is FTC (`applyProgramTheme`, src/lib/programs.ts),
+   so FLL — every other team, the landing and sign-in pages — keeps the default
+   forest-and-acid look untouched. Loaded last, so these win over the base
+   sheets without raising specificity.
+
+   Google's logo blue (#4285f4) is too light for white text or small links, so
+   it fills meters, rings and icons; Google's darker blues carry text, buttons
+   and the sidebar. */
+
+:root[data-program='ftc'] {
+  --ftc-blue: #4285f4;
+  --ftc-blue-strong: #1a73e8;
+  --ftc-blue-deep: #174ea6;
+  --ftc-ink: #0b1f44;
+  /* The acid highlight becomes a pale blue: dark text on it stays readable. */
+  --acid: #d2e3fc;
+  --blue: var(--ftc-blue-strong);
+  --accent: var(--ftc-blue-strong);
+  --accent-strong: #1967d2;
+  --forest: var(--ftc-blue-deep);
+  --forest-soft: #185abc;
+  --edge-3d-acid: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(23, 78, 166, 0.2);
+}
+
+/* Shell: the sidebar and dark team headers turn deep Google blue. */
+[data-program='ftc'] .sidebar,
+[data-program='ftc'] .team-hero,
+[data-program='ftc'] .team-panel__hero { background: var(--ftc-blue-deep); }
+[data-program='ftc'] .sidebar-nav__link { color: #d2e3fc; }
+/* Hover is a faint light wash on the blue, so the text stays light; only the
+   current page, on the pale-blue highlight, takes dark text (and keeps it on hover). */
+[data-program='ftc'] .sidebar-nav__link:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+[data-program='ftc'] .sidebar-nav__link.active { color: var(--ftc-ink); background: var(--acid); }
+[data-program='ftc'] .brand-text small { color: #c6dafc; }
+
+/* Primary actions and highlights. */
+/* `:where` keeps this at the specificity of a plain `.button` rule, so buttons
+   that style themselves (ghost, danger, the pale header buttons) still win. */
+[data-program='ftc'] .button:where(:not(.button--ghost, .button--danger)) { background: var(--ftc-blue-strong); }
+[data-program='ftc'] .team-hero .button,
+[data-program='ftc'] .team-panel__hero .button:not(.button--ghost) { color: var(--ftc-ink); background: var(--acid); }
+[data-program='ftc'] .team-panel__hero .button:not(.button--ghost),
+[data-program='ftc'] .team-panel__hero .button:not(.button--ghost):hover:not(:disabled) { box-shadow: var(--edge-3d-acid), 0 3px 0 #8ab4f8, var(--elev-1); }
+[data-program='ftc'] .team-card--active { border-color: var(--ftc-blue); box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.28); }
+[data-program='ftc'] .team-card__badge,
+[data-program='ftc'] .chip--active { color: #fff; background: var(--ftc-blue-deep); border-color: var(--ftc-blue-deep); }
+
+/* Dashboard: the season ring and area meters in Google blue on a pale track. */
+[data-program='ftc'] .ring { background: conic-gradient(var(--ftc-blue) calc(clamp(0, var(--value, 0), 100) * 1%), #e8f0fe 0); }
+[data-program='ftc'] .meter { background: #e8f0fe; }
+[data-program='ftc'] .meter > span { background: var(--ftc-blue); }
+[data-program='ftc'] .area-list__icon { color: var(--ftc-blue); }
+
+/* Tracker (monday.css): the board's UI accent — New item, the active tab,
+   selection outlines — turns Google blue. A column or category a coach
+   coloured "blue" is data, so it keeps the board's own blue. */
+[data-program='ftc'] .monday { --mb-blue: var(--ftc-blue-strong); --mb-blue-hover: #1967d2; }
+[data-program='ftc'] .monday .mb-color-blue { --mb-fill: #0073ea; }

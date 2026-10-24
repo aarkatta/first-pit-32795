@@ -3,6 +3,7 @@ import { MAX_CARDS_PER_COLUMN_PAGE, MAX_COLUMNS_PER_PROJECT, MIN_COLUMNS_PER_PRO
 import {
   BUILT_IN_PROJECT_TEMPLATES,
   BUILT_IN_TEMPLATE_PREFIX,
+  builtInTemplatesFor,
   MAX_TEMPLATES_PER_TEAM,
   MAX_TEMPLATE_CARDS,
   findBuiltInTemplate,
@@ -21,6 +22,11 @@ const columns = [
 ];
 
 describe('Kanban project templates', () => {
+  it('offers the FLL presets to FLL teams only', () => {
+    expect(builtInTemplatesFor('fll')).toBe(BUILT_IN_PROJECT_TEMPLATES);
+    expect(builtInTemplatesFor('ftc')).toEqual([]);
+  });
+
   it('ships built-in templates that the column commands can still edit', () => {
     expect(BUILT_IN_PROJECT_TEMPLATES.length).toBeGreaterThan(0);
     for (const template of BUILT_IN_PROJECT_TEMPLATES) {

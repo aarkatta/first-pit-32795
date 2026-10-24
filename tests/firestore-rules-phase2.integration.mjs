@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 
 const projectId = 'first-pit-phase2';
@@ -50,6 +50,9 @@ try {
   await assertSucceeds(getDoc(doc(coach, 'moderationCases/case-1')));
   await assertSucceeds(getDoc(doc(coach, 'auditEvents/audit-1')));
   await assertFails(setDoc(doc(coach, `memberships/${teamId}_student-1`), { teamId, userId: 'student-1', role: 'coach', status: 'active' }));
+  // A team's program is set from the backend only; not even its coach can switch it.
+  await assertSucceeds(updateDoc(doc(coach, `teams/${teamId}`), { name: 'Phase 2 Team' }));
+  await assertFails(updateDoc(doc(coach, `teams/${teamId}`), { program: 'ftc' }));
 
   await assertFails(getDoc(doc(mentor, `memberships/${teamId}_student-1`)));
   await assertFails(getDoc(doc(parent, 'moderationCases/case-1')));

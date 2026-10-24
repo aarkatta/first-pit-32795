@@ -10,6 +10,7 @@ import './styles/reference-ui.css';
 import './styles/monday.css';
 import './styles/polish.css';
 import './styles/tailwind.css';
+import './styles/program-ftc.css';
 
 const rootElement = document.getElementById('root');
 

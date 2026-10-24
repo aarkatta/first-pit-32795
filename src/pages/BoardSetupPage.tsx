@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { isCoachOrLeader, type TeamGoal } from '@/lib/domain';
 import { listActiveTeamGoals } from '@/lib/phase3-service';
 import { useTeamBoard } from '@/lib/use-team-board';
+import { teamProgram } from '@/lib/programs';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
 /**
@@ -63,7 +64,7 @@ export function BoardSetupPage() {
     <TrackerTabs canManage={canManage}>
       {!online ? <StatePanel variant="offline" title="You are offline" message="Changes are saved once you reconnect." /> : null}
       {requestState ? <StatePanel {...requestState} actionLabel="Dismiss" onAction={() => setRequestState(null)} autoFocus /> : null}
-      <BoardSetup teamId={teamId} project={project} goals={goals} busy={busy} onRun={run} />
+      <BoardSetup teamId={teamId} project={project} goals={goals} busy={busy} onRun={run} program={teamProgram(activeTeam?.team)} />
     </TrackerTabs>
   );
 }

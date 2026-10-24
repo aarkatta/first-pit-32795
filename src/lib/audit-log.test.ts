@@ -30,6 +30,7 @@ describe('describeAuditEvent', () => {
     [event('role.changed', { targetUserId: 'ava', metadata: { previousRole: 'student', role: 'parent' } }), "Coach Kim changed Ava's role from student to parent"],
     [event('role.changed', { targetUserId: 'ava', metadata: { role: 'teamLeader', action: 'transfer-leadership' } }), 'Coach Kim made Ava team leader'],
     [event('sensitive.updated', { metadata: { action: 'team.details.updated' } }), 'Coach Kim edited the team name or number'],
+    [event('sensitive.updated', { metadata: { action: 'team.program.ftc' } }), 'Coach Kim switched the team to FTC'],
     [event('sensitive.updated', { metadata: { action: 'policy.updated' } }), 'Coach Kim changed the team settings'],
     [event('report.created', { actorUserId: 'ava', metadata: { reasonCode: 'unkind' } }), 'A safety report was filed (Unkind or bullying)'],
     [event('moderation.updated', { metadata: { caseStatus: 'resolved' } }), 'Coach Kim marked a safety report resolved'],

@@ -102,6 +102,13 @@ a team with no tasks: the four categories and 48 tasks of
 `functions/src/standard-plan.ts`). That JSON is also the source of the Excel
 template (`npm run template:build`), so edit it there, once.
 
+A team's **program** (`teams/{teamId}.program`, `fll` | `ftc`, missing = FLL)
+picks that seed plan (`ftc-standard-task-list.json` for FTC) and the
+dashboard's areas (`PROGRAM_AREAS` in `functions/src/programs.ts`, mirrored in
+`src/lib/programs.ts`). FTC is internal for now: `createTeam` always writes
+`fll`, the browser can't change it, and `scripts/set-team-program.mjs` is the
+only way to set FTC — see *Team program* in `docs/architecture.md`.
+
 ### Who may do what
 
 - **Account type** (`users/{uid}.accountType`: coach / mentor / student /

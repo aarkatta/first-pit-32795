@@ -1,6 +1,7 @@
 import { FieldValue, getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getInput, requireAuth, requireString, requireTeamMember, timestampToIso } from './phase2.js';
+import { PROGRAM_AREAS, teamProgram, type TeamProgram } from './programs.js';
 
 export type Phase7Request = CallableRequest<Record<string, unknown>>;
 
@@ -86,25 +87,13 @@ async function recentTeamRecords(teamId: string, searchTokens: string[]) {
   return records;
 }
 
-/**
- * The four FIRST LEGO League judging areas. A task belongs to an area when it
- * carries the area id as a label — the built-in templates and the task importer
- * apply these, and a coach can add one to any card. Labels rather than a new
- * task field keep every existing task, rule, and editor unchanged.
- */
-export const DASHBOARD_AREAS = [
-  { id: 'innovation-project', label: 'Innovation project' },
-  { id: 'robot-design', label: 'Robot design' },
-  { id: 'robot-game', label: 'Robot game' },
-  { id: 'core-values', label: 'Core values' }
-] as const;
-
 const OPEN_TASK_STATUSES = ['todo', 'inProgress', 'review'];
 
-export function areaProgress(counts: Array<{ taskCount: number; completedTaskCount: number }>) {
-  return DASHBOARD_AREAS.map((area, index) => {
+/** One row per area of the team's program, in the program's order; counts pair with areas by position. */
+export function areaProgress(counts: Array<{ taskCount: number; completedTaskCount: number }>, program: TeamProgram = 'fll') {
+  return PROGRAM_AREAS[program].map((area, index) => {
     const taskCount = Math.max(0, counts[index]?.taskCount ?? 0);
-    return { id: area.id, label: area.label, taskCount, completedTaskCount: Math.min(taskCount, Math.max(0, counts[index]?.completedTaskCount ?? 0)) };
+    return { id: area.id, label: area.label, group: area.group, taskCount, completedTaskCount: Math.min(taskCount, Math.max(0, counts[index]?.completedTaskCount ?? 0)) };
   });
 }
 
@@ -116,13 +105,15 @@ export const getDashboard = async (request: Phase7Request) => {
   const taskQuery = db.collection('tasks').where('teamId', '==', teamId);
   const goalQuery = db.collection('goals').where('teamId', '==', teamId);
   const unreadNotificationQuery = db.collection('notifications').where('recipientUserId', '==', auth.uid).where('teamId', '==', teamId).where('readAt', '==', null);
+  const teamPromise = db.doc(`teams/${teamId}`).get();
+  // The areas are the team's program's, so their counts wait on the team read.
   // Count aggregations cost one read per 1,000 matches, so per-area progress
   // stays bounded however many tasks a team accumulates.
-  const areaCountsPromise = Promise.all(DASHBOARD_AREAS.map(async (area) => {
+  const areaCountsPromise = teamPromise.then((snapshot) => Promise.all(PROGRAM_AREAS[teamProgram(snapshot.data())].map(async (area) => {
     const areaQuery = taskQuery.where('labels', 'array-contains', area.id);
     const [total, completed] = await Promise.all([areaQuery.count().get(), areaQuery.where('status', '==', 'completed').count().get()]);
     return { taskCount: total.data().count, completedTaskCount: completed.data().count };
-  }));
+  })));
   const [team, tasks, upcomingTasks, goals, completedGoals, notifications, unreadNotificationsSnapshot, taskCount, completedTaskCount, goalCount, completedGoalCount, unreadNotificationCount, areaCounts] = await Promise.all([
     db.doc(`teams/${teamId}`).get(),
     taskQuery.orderBy('updatedAt', 'desc').limit(5).get(),
@@ -148,14 +139,15 @@ export const getDashboard = async (request: Phase7Request) => {
   const notificationRecords = notifications.docs.map((snapshot) => publicRecord(snapshot, ['teamId', 'title', 'body', 'type', 'deepLink', 'mandatory', 'readAt', 'createdAt']));
   const unreadNotifications = unreadNotificationsSnapshot.docs.map((snapshot) => snapshot.data());
   const unreadSummary = summarizeUnreadNotifications(unreadNotifications);
+  const program = teamProgram(team.data());
   return {
-    team: { id: team.id, name: String(team.data()?.name ?? 'Your team') },
+    team: { id: team.id, name: String(team.data()?.name ?? 'Your team'), program },
     role: actor.role ?? 'member',
     tasks: taskRecords,
     upcomingTasks: upcomingTasks.docs.map((snapshot) => publicRecord(snapshot, taskFields)),
     goals: goalRecords,
     completedGoals: completedGoals.docs.map((snapshot) => publicRecord(snapshot, goalFields)),
-    areas: areaProgress(areaCounts),
+    areas: areaProgress(areaCounts, program),
     notifications: notificationRecords,
     summary: {
       taskCount: taskCount.data().count,

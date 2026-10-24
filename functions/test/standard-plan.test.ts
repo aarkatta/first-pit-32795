@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COLUMN_COLORS, MAX_CARDS_PER_COLUMN_PAGE, MAX_CATEGORIES_PER_PROJECT } from '../src/kanban.js';
-import { DASHBOARD_AREAS } from '../src/phase7.js';
+import { PROGRAM_AREAS } from '../src/programs.js';
 import { buildStandardPlan, standardWeekLabel } from '../src/standard-plan.js';
 
 describe('standard season plan seed', () => {
@@ -13,7 +13,7 @@ describe('standard season plan seed', () => {
       ['Robot Design', 'robot-design'],
       ['Robot Game', 'robot-game']
     ]);
-    const areaIds: string[] = DASHBOARD_AREAS.map((area) => area.id);
+    const areaIds: string[] = PROGRAM_AREAS.fll.map((area) => area.id);
     for (const category of plan.categories) {
       expect(areaIds).toContain(category.areaId);
       expect(COLUMN_COLORS).toContain(category.color);
@@ -42,7 +42,7 @@ describe('standard season plan seed', () => {
   });
 
   it('still seeds a category the list adds later, without inventing an area', () => {
-    const custom = buildStandardPlan([
+    const custom = buildStandardPlan('fll', [
       { taskId: 'X-1', week: 3, category: 'Outreach', title: 'Visit the library', status: 'Not Started', notes: 'Bring the robot' },
       { taskId: 'X-2', week: 0, category: '', title: 'Uncategorised', status: 'Not Started' }
     ]);
@@ -51,6 +51,38 @@ describe('standard season plan seed', () => {
       { title: 'Visit the library', description: 'Bring the robot', categoryId: 'standard-outreach', labels: ['week-03'] },
       { title: 'Uncategorised', description: '', categoryId: null, labels: [] }
     ]);
+  });
+
+  it('seeds an FTC team from the FTC plan, one category per judged award plus General', () => {
+    const ftc = buildStandardPlan('ftc');
+    expect(ftc.categories.map((category) => [category.name, category.areaId])).toEqual([
+      ['Think', 'think'],
+      ['Control', 'control'],
+      ['Design', 'design'],
+      ['Innovate', 'innovate'],
+      ['Connect', 'connect'],
+      ['Sustain', 'sustain'],
+      ['Reach', 'reach'],
+      ['General', null]
+    ]);
+    expect(ftc.cards).toHaveLength(43);
+    expect(ftc.cards.length).toBeLessThanOrEqual(MAX_CARDS_PER_COLUMN_PAGE);
+    expect(ftc.categories.length).toBeLessThanOrEqual(MAX_CATEGORIES_PER_PROJECT);
+    const areaIds: string[] = PROGRAM_AREAS.ftc.map((area) => area.id);
+    for (const category of ftc.categories) {
+      expect(COLUMN_COLORS).toContain(category.color);
+      if (category.areaId !== null) expect(areaIds).toContain(category.areaId);
+    }
+    expect(ftc.cards[0]).toEqual({
+      title: 'Initialize season GitHub repository for team code',
+      description: '',
+      categoryId: 'standard-ftc-control',
+      labels: ['control', 'week-01']
+    });
+    // General work counts toward the season, not toward an award.
+    expect(ftc.cards.find((card) => card.categoryId === 'standard-ftc-general')?.labels).toEqual(['week-01']);
+    // Every award has work to show on the dashboard.
+    for (const areaId of areaIds) expect(ftc.cards.some((card) => card.labels[0] === areaId)).toBe(true);
   });
 
   it('writes weeks the way the spreadsheet importer does', () => {

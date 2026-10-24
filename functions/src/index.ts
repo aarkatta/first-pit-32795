@@ -183,6 +183,9 @@ export const createTeam = onCall(async (request: CallableRequest<{ name?: unknow
       name,
       normalizedName: normalizedTeamName(name),
       teamNumber,
+      // Every team starts as FLL; FTC is set from the backend for now
+      // (scripts/set-team-program.mjs), so the browser never chooses it.
+      program: 'fll',
       createdBy: uid,
       createdAt: now,
       updatedAt: now

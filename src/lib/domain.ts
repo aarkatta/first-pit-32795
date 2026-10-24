@@ -22,8 +22,10 @@ export type Team = {
   id: string;
   name: string;
   normalizedName: string;
-  /** FIRST LEGO League team number: 1–8 digits, or null until assigned. */
+  /** FIRST team number: 1–8 digits, or null until assigned. */
   teamNumber?: string | null;
+  /** `fll` unless the backend made the team FTC; see `src/lib/programs.ts`. */
+  program?: 'fll' | 'ftc';
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
