@@ -1390,8 +1390,11 @@ the web. The plugin is loaded with a dynamic `import()` so the web bundle does
 not carry it. `completeGoogleRedirect` returns `null` in the shell (its Auth has
 no redirect resolver), a dismissed Google sheet counts as a dismissal rather
 than an error, and `signOutCurrentUser` also ends the native Google session so
-the next sign-in shows the account picker. Sign in with Apple is deliberately
-out of scope; see `docs/ios-app-plan.md` for the App Store review risk.
+the next sign-in shows the account picker. That path is currently unreachable:
+App Review rejected the first build under guideline 4.8, so `AuthPage` offers
+Google only where `offersGoogleSignIn()` is true — the web, never the shell —
+and the iOS app signs in with email and password alone. Sign in with Apple is
+deliberately out of scope; see `docs/ios-app-plan.md`.
 
 ### Session persistence
 

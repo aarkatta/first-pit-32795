@@ -46,6 +46,7 @@ import {
   configureAuthPersistence,
   isDismissedPopup,
   isNativeShell,
+  offersGoogleSignIn,
   resendVerificationEmail,
   sendPasswordRecovery,
   signInWithEmail,
@@ -174,6 +175,13 @@ describe('auth service helpers', () => {
     mocks.getRedirectResult.mockResolvedValue(null);
     await expect(completeGoogleRedirect(auth)).resolves.toBeNull();
     expect(mocks.getRedirectResult).toHaveBeenCalledWith(auth);
+  });
+
+  it('offers Google on the web but not in the iOS shell', () => {
+    // App Store guideline 4.8: the shell signs in with its own accounts only.
+    expect(offersGoogleSignIn()).toBe(true);
+    mocks.isNativePlatform.mockReturnValue(true);
+    expect(offersGoogleSignIn()).toBe(false);
   });
 
   it('reports a non-native environment when Capacitor throws', () => {
