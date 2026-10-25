@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { copyToClipboard } from '@/lib/clipboard';
-import { credentialsMessage, credentialsSubject } from '@/lib/member-credentials';
+import { credentialsGmailHref, credentialsMessage, credentialsSubject } from '@/lib/member-credentials';
+import { shareText } from '@/lib/native-links';
+import { isNativeShell } from '@/lib/native-shell';
 import { publicWebOrigin } from '@/lib/public-origin';
 import type { ProvisionedMember } from '@/lib/team-members';
 
@@ -41,14 +43,16 @@ export function CredentialsCard({ member, kind = 'added', teamName, teamNumber, 
     );
   }
 
-  const message = credentialsMessage({
+  const credentials = {
     displayName: member.displayName,
     email: member.email,
     temporaryPassword: member.temporaryPassword,
     teamName,
     teamNumber,
     coachName
-  });
+  };
+  const message = credentialsMessage(credentials);
+  const nativeShell = isNativeShell();
 
   async function runCopy(kind: 'message' | 'password', text: string) {
     const ok = await copyToClipboard(text);
@@ -66,7 +70,7 @@ export function CredentialsCard({ member, kind = 'added', teamName, teamNumber, 
         <strong>{new URL(publicWebOrigin()).host}</strong>. They will be required to change it upon their {kind === 'reset' ? 'next' : 'first'} login.
       </p>
       <p>
-        First Pit does not email them — pass these details on yourself, and ask them to sign in soon.
+        First Pit does not email them for you — send these details with the button below, and ask them to sign in soon.
       </p>
 
       <dl className="credentials-card__fields">
@@ -77,7 +81,14 @@ export function CredentialsCard({ member, kind = 'added', teamName, teamNumber, 
       </dl>
 
       <div className="form-actions">
-        <button className="button" type="button" onClick={() => void runCopy('message', `${credentialsSubject({ teamName, teamNumber })}\n\n${message}`)}>
+        {nativeShell ? (
+          <button className="button" type="button" onClick={() => void shareText({ title: credentialsSubject(credentials), text: message }).catch(() => { /* share sheet dismissed or unavailable; copy buttons remain */ })}>
+            Send details
+          </button>
+        ) : (
+          <a className="button" href={credentialsGmailHref(credentials)} target="_blank" rel="noopener noreferrer">Email details with Gmail</a>
+        )}
+        <button className="button button--ghost" type="button" onClick={() => void runCopy('message', `${credentialsSubject(credentials)}\n\n${message}`)}>
           Copy the whole message
         </button>
         <button className="button button--ghost" type="button" onClick={() => void runCopy('password', member.temporaryPassword ?? '')}>

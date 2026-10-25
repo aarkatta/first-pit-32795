@@ -441,9 +441,14 @@ path that needs no mailbox.
   means nobody can keep it as their own. It is still never written to the
   `phase2Operations` receipt, the profile or a log line. A replay of the same
   `operationId` changes nothing and returns `temporaryPassword: null`.
-  `CredentialsCard` copies to the clipboard and deliberately builds no URL: `invite-email.ts` can hand Gmail a pre-written compose screen
-  because an invitation link is safe in a query string, and a live password is
-  not — it would land in the coach's browser history.
+  `CredentialsCard` offers **Email details with Gmail** (`credentialsGmailHref`,
+  mirroring `invite-email.ts`) alongside **Copy the whole message** / **Copy just
+  the password**, and **Send details** (the native share sheet) in the iOS shell.
+  The Gmail link does carry the starter password in the URL query string, so it
+  lands in the coach's browser history and whatever syncs it — an accepted
+  trade-off, since the password is temporary and the forced change invalidates it
+  on first sign-in. The copy path stays for coaches who would rather not put it in
+  a URL, and works with Outlook and Apple Mail too.
 - *An address that already has an account is refused* (`already-exists`, with a
   message pointing at invitations). Attaching someone's existing personal
   account to a team without them acting is what the invitation flow prevents,
