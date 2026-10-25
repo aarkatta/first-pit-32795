@@ -201,9 +201,10 @@ password (`DEFAULT_MEMBER_PASSWORD`, `FLL2026` — the same for every team, and
 what **Reset password** goes back to), the coach passes it on from their own
 mailbox, and `PasswordSetupGate` forces the member to replace it before they
 reach any team data. Rules that module exists to hold: an account on the starter
-password always has `mustSetPassword` set; the password is never logged, written
-to a receipt or put in a URL (`CredentialsCard` copies, it does not build a
-Gmail link); an
+password always has `mustSetPassword` set; the password is never logged or
+written to a receipt (it may appear in a Gmail compose URL — `CredentialsCard`
+offers **Email details with Gmail** alongside copy, an accepted trade-off since
+the forced change invalidates it on first sign-in); an
 address that already has an account is refused so consent stays with the
 invitation flow; `resetTeamMemberPassword` only reaches accounts where
 `users/{uid}.provisionedByTeamId` is this team; and `emailVerified` stays false

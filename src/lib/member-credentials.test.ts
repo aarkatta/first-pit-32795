@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { credentialsMessage, credentialsSubject } from './member-credentials';
+import { credentialsGmailHref, credentialsMessage, credentialsSubject } from './member-credentials';
 
 const base = {
   displayName: 'Ada Lovelace',
@@ -42,5 +42,21 @@ describe('credentialsMessage', () => {
   it('titles the message after the team', () => {
     expect(credentialsSubject({ teamName: 'Robotics', teamNumber: '12345' })).toBe('Your First Pit account for Robotics · Team #12345');
     expect(credentialsSubject({ teamName: 'Robotics', teamNumber: null })).toBe('Your First Pit account for Robotics');
+  });
+});
+
+describe('credentialsGmailHref', () => {
+  it('opens Gmail compose with the recipient, subject and the full message as body', () => {
+    const url = new URL(credentialsGmailHref(base));
+    expect(url.origin + url.pathname).toBe('https://mail.google.com/mail/');
+    expect(url.searchParams.get('view')).toBe('cm');
+    expect(url.searchParams.get('to')).toBe('ada@example.com');
+    expect(url.searchParams.get('su')).toBe(credentialsSubject(base));
+    expect(url.searchParams.get('body')).toBe(credentialsMessage(base));
+  });
+
+  it('carries the starter password in the body (accepted URL trade-off)', () => {
+    const url = new URL(credentialsGmailHref(base));
+    expect(url.searchParams.get('body')).toContain('FLL2026');
   });
 });
